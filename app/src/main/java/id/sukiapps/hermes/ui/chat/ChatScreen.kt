@@ -9,12 +9,18 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -23,6 +29,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -45,8 +52,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -60,12 +70,19 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/** Maksimal karakter hasil web yang ditampilkan/dimasukkan ke input. */
+private const val PREVIEW_CHARS = 4000
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
     onOpenSettings: () -> Unit,
+    onOpenAktivitas: () -> Unit,
+    onOpenMintaFitur: () -> Unit,
+    onOpenAudit: () -> Unit,
     chatVm: ChatViewModel = hiltViewModel(),
-    historyVm: HistoryViewModel = hiltViewModel()
+    historyVm: HistoryViewModel = hiltViewModel(),
+    webVm: WebFetchViewModel = hiltViewModel()
 ) {
     val ctx = LocalContext.current
     val state by chatVm.state.collectAsStateWithLifecycle()
@@ -76,6 +93,7 @@ fun ChatScreen(
     var input by remember { mutableStateOf("") }
     var editingMsg by remember { mutableStateOf<UiMessage?>(null) }
     var editText by remember { mutableStateOf("") }
+    var showWebInput by remember { mutableStateOf(false) }
 
     // TTS per pesan (TtsReader legacy, lazy init).
     val tts = remember { TtsReader() }
@@ -168,6 +186,18 @@ fun ChatScreen(
                 onNewChat = {
                     chatVm.newConversation()
                     scope.launch { drawerState.close() }
+                },
+                onOpenAktivitas = {
+                    scope.launch { drawerState.close() }
+                    onOpenAktivitas()
+                },
+                onOpenMintaFitur = {
+                    scope.launch { drawerState.close() }
+                    onOpenMintaFitur()
+                },
+                onOpenAudit = {
+                    scope.launch { drawerState.close() }
+                    onOpenAudit()
                 }
             )
         }
@@ -225,6 +255,7 @@ fun ChatScreen(
                     onPickImage = { pickImages.launch("image/*") },
                     onTakePhoto = { launchCamera() },
                     onPickDocument = { pickDocs.launch("*/*") },
+                    onWebFetch = { webVm.reset(); showWebInput = true },
                     modifier = Modifier.imePadding()
                 )
             }
@@ -313,6 +344,116 @@ fun ChatScreen(
             },
             dismissButton = {
                 TextButton(onClick = { editingMsg = null }) { Text("Batal") }
+            }
+        )
+    }
+
+    // ---- "Ambil dari web" (v9.2): dialog input URL → preview → masukkan ke input.
+    if (showWebInput) {
+        AlertDialog(
+            onDismissRequest = { showWebInput = false },
+            title = { Text("Ambil dari web") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextField(
+                        value = webVm.urlText,
+                        onValueChange = webVm::setUrl,
+                        label = { Text("URL (http/https)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        "Isi halaman diambil sebagai teks — aksi manual, " +
+                            "bukan browsing otomatis.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showWebInput = false
+                        webVm.fetch()
+                    },
+                    enabled = !webVm.loading
+                ) { Text("Ambil") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWebInput = false }) { Text("Batal") }
+            }
+        )
+    }
+
+    // Preview hasil / loading / error.
+    val webBusy = webVm.loading
+    val webText = webVm.result
+    val webErr = webVm.error
+    if (webBusy || webText != null || webErr != null) {
+        val clipboard = LocalClipboardManager.current
+        AlertDialog(
+            onDismissRequest = { webVm.reset() },
+            title = { Text("Hasil ambil web") },
+            text = {
+                when {
+                    webBusy -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            CircularProgressIndicator()
+                            Text("Mengambil halaman…")
+                        }
+                    }
+                    webErr != null -> Text(webErr)
+                    else -> {
+                        val full = webText.orEmpty()
+                        val shown = full.take(PREVIEW_CHARS)
+                        Column {
+                            Text(
+                                shown,
+                                modifier = Modifier
+                                    .heightIn(max = 400.dp)
+                                    .verticalScroll(rememberScrollState()),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            if (full.length > PREVIEW_CHARS) {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    "…(dipotong, total ${full.length} karakter)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                if (webText != null) {
+                    TextButton(onClick = {
+                        clipboard.setText(AnnotatedString(webText))
+                        Toast.makeText(ctx, "Disalin.", Toast.LENGTH_SHORT).show()
+                    }) { Text("Salin") }
+                }
+            },
+            dismissButton = {
+                Row {
+                    if (webText != null) {
+                        TextButton(onClick = {
+                            val insert = webText.take(PREVIEW_CHARS)
+                            input = if (input.isBlank()) insert
+                            else "$input\n\n$insert"
+                            webVm.reset()
+                            Toast.makeText(
+                                ctx,
+                                "Dimasukkan ke input — review dulu sebelum kirim.",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }) { Text("Masukkan ke input chat") }
+                    }
+                    TextButton(onClick = { webVm.reset() }) { Text("Tutup") }
+                }
             }
         )
     }

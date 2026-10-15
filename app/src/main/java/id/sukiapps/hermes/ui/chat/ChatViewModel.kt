@@ -6,6 +6,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import id.sukiapps.hermes.data.agent.MemoryWriter
+import id.sukiapps.hermes.data.agent.SoulPrompt
 import id.sukiapps.hermes.data.local.AppPrefs
 import id.sukiapps.hermes.data.local.ChatRepository
 import id.sukiapps.hermes.domain.AIProvider
@@ -62,7 +64,8 @@ class ChatViewModel @Inject constructor(
     @ApplicationContext private val appCtx: Context,
     private val repo: ChatRepository,
     private val prefs: AppPrefs,
-    private val ai: AIProvider
+    private val ai: AIProvider,
+    private val memoryWriter: MemoryWriter
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ChatUiState())
@@ -74,6 +77,11 @@ class ChatViewModel @Inject constructor(
 
     private var streamJob: Job? = null
     private var collectJob: Job? = null
+
+    // Jiwa Hermes: cache prompt rakitan per conversation + hitung pesan user
+    // untuk pemicu write-back yang murah.
+    private var soulCache: Pair<Long, String>? = null
+    private var userMsgCount = 0
 
     init {
         _state.update {
@@ -122,6 +130,16 @@ class ChatViewModel @Inject constructor(
     }
 
     fun newConversation() {
+        // Chat lama "ditutup" → coba tulis ingatan dari 10 pesan terakhir.
+        val oldId = _state.value.convId
+        if (oldId > 0) {
+            viewModelScope.launch(Dispatchers.IO) {
+                val snapshot = repo.lastMessages(oldId, 10)
+                    .map { ChatMessage(it.role, it.content) }
+                memoryWriter.maybeWriteBack(snapshot)
+            }
+        }
+        soulCache = null
         clearAttachments()
         openConversation(-1L)
     }
@@ -249,7 +267,24 @@ class ChatViewModel @Inject constructor(
         withContext(Dispatchers.IO) {
             repo.addMessage(convId, "user", fullPrompt, attSummary)
         }
+        // Tiap 10 pesan user → coba tulis ingatan (murah, fire-and-forget).
+        userMsgCount++
+        if (userMsgCount % 10 == 0) {
+            viewModelScope.launch(Dispatchers.IO) {
+                val snapshot = repo.lastMessages(convId, 10)
+                    .map { ChatMessage(it.role, it.content) }
+                memoryWriter.maybeWriteBack(snapshot)
+            }
+        }
         streamReply(convId, fullPrompt, imageB64s)
+    }
+
+    /** Rakit system prompt jiwa SEKALI per conversation (cache per convId). */
+    private suspend fun getSoulPrompt(convId: Long, firstPrompt: String): String {
+        soulCache?.let { if (it.first == convId) return it.second }
+        val built = SoulPrompt.build(appCtx, firstPrompt)
+        soulCache = convId to built
+        return built
     }
 
     /** Streaming jawaban asisten untuk prompt yang SUDAH tersimpan di DB. */
@@ -274,9 +309,13 @@ class ChatViewModel @Inject constructor(
             }
             withoutCurrent.takeLast(20).map { ChatMessage(it.role, it.content) }
         }
+        // Jiwa Hermes: system prompt dirakit SEKALI per conversation dimulai.
+        val soulPrompt = getSoulPrompt(convId, prompt)
+        val personaText = prefs.persona.ifBlank { "Kamu adalah asisten AI yang membantu." }
         val req = ChatRequest(
             model = model,
-            systemPrompt = prefs.persona.ifBlank { "Kamu adalah asisten AI yang membantu." },
+            systemPrompt = if (soulPrompt.isBlank()) personaText
+            else "$soulPrompt\n\n$personaText",
             history = history,
             prompt = prompt,
             imageBase64s = imageB64s,

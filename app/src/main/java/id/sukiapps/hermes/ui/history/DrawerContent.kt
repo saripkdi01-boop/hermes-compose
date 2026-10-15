@@ -17,8 +17,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Unarchive
@@ -31,6 +34,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -61,6 +65,9 @@ import java.util.Locale
 fun DrawerContent(
     onSelect: (Long) -> Unit,
     onNewChat: () -> Unit,
+    onOpenAktivitas: () -> Unit,
+    onOpenMintaFitur: () -> Unit,
+    onOpenAudit: () -> Unit,
     vm: HistoryViewModel = hiltViewModel()
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -93,6 +100,34 @@ fun DrawerContent(
                 Spacer(Modifier.width(8.dp))
                 Text("Chat baru")
             }
+            Spacer(Modifier.height(8.dp))
+            NavigationDrawerItem(
+                label = { Text("Aktivitas") },
+                selected = false,
+                onClick = onOpenAktivitas,
+                icon = {
+                    Icon(Icons.Filled.Checklist, contentDescription = null)
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+            NavigationDrawerItem(
+                label = { Text("Minta Fitur") },
+                selected = false,
+                onClick = onOpenMintaFitur,
+                icon = {
+                    Icon(Icons.Filled.Build, contentDescription = null)
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+            NavigationDrawerItem(
+                label = { Text("Riwayat Izin") },
+                selected = false,
+                onClick = onOpenAudit,
+                icon = {
+                    Icon(Icons.Filled.History, contentDescription = null)
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = state.query,

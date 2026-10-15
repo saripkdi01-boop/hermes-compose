@@ -1,7 +1,40 @@
-# Hermes Chat — Compose Rewrite (v9.0)
+# Hermes — Aplikasi Chat AI Android (Open Source)
 
-Rewrite penuh Hermes Chat (`id.sukiapps.hermes`) dari View-programmatic (Java)
-ke **Jetpack Compose + Kotlin**, mengikuti pola aplikasi chat AI modern.
+![Build](https://github.com/saripkdi01-boop/hermes-compose/actions/workflows/build.yml/badge.svg)
+![License](https://img.shields.io/badge/license-MIT-green)
+
+Hermes adalah aplikasi chat AI native Android (Kotlin + Jetpack Compose +
+Material 3) yang terhubung ke backend OpenAI-compatible. Punya **Agent Soul**:
+persona tetap, ingatan jangka panjang, daftar tugas, konektor (GitHub,
+Telegram, Termux, web fetch), permission gate dengan riwayat audit, dan
+fitur **Minta Fitur** (upgrade aplikasi via prompt → patch → push → auto-build).
+
+## Fitur utama
+
+- Chat multi-percakapan: streaming SSE + Stop, markdown, retry/regenerate/edit,
+  pin/arsip/cari
+- Ganti model AI dari server (`/models`), atur temperature & top_p
+- Lampiran: kamera, galeri multi-pilih, dokumen (PDF vision, DOCX, ZIP/APK info)
+- TTS Bahasa Indonesia (tekan lama pesan → Bacakan)
+- Persona, tema terang/gelap, backup ZIP / restore, export MD/JSON/TXT
+- **Jiwa Hermes**: `soul.md`, `memory.md` (otomatis), `todo.md`, `agents.md`,
+  `features.md` → disusun jadi system prompt tiap chat
+- **Aktivitas**: daftar tugas sedang dikerjakan vs selesai
+- **Konektor** (aksi manual): GitHub, Telegram, Termux, web fetch
+- **Izin & Riwayat**: semua aksi sensitif lewat popup izin + tercatat di audit
+
+## Mulai cepat (kontributor)
+
+**Tanpa Android Studio:** fork repo → push ke branch → GitHub Actions
+otomatis build → download artifact `hermes-compose-unsigned` di tab Actions.
+
+**Lokal:** butuh JDK 17 + Android SDK (compileSdk 34):
+```bash
+gradle :app:assembleRelease --no-daemon
+```
+
+Mau ikut mengembangkan? Baca [CONTRIBUTING.md](CONTRIBUTING.md) dulu —
+PR kecil dan fokus paling cepat di-review.
 
 ## Tech stack
 
@@ -21,16 +54,12 @@ ke **Jetpack Compose + Kotlin**, mengikuti pola aplikasi chat AI modern.
 - `ApkShareProvider` — verbatim (+ shim `ChatStore` minimal untuk helper direktori).
 - `TtsReader` — TTS Indonesia, verbatim.
 - Skema Room identik legacy, **dengan satu deviasi yang disengaja**:
-  version naik 4 → 5 dengan `Migration(4, 5)` eksplisit (bukan "tanpa
-  migration"). Alasan: skema SQL legacy memang identik secara teks, tetapi
-  Room memvalidasi TableInfo logis saat open — legacy memakai
+  version naik 4 → 5 dengan `Migration(4, 5)` eksplisit. Alasan: legacy memakai
   `id INTEGER PRIMARY KEY AUTOINCREMENT` (PRAGMA melaporkan notnull=0,
   diverifikasi via sqlite3) sementara Room mengekspektasikan notNull=true
   untuk PK non-null. Tanpa migration, user upgrade dari v8.0 berisiko crash
-  "Room cannot verify the data integrity" saat aplikasi dibuka. Migration
-  me-recreate kedua tabel dengan DDL kanonis Room + menyalin seluruh data
-  (SQL-nya sudah diverifikasi via sqlite3: data utuh, PK jadi NOT NULL).
-  Deterministik dan tanpa kehilangan data.
+  "Room cannot verify the data integrity". Migration me-recreate kedua tabel
+  dengan DDL kanonis Room + menyalin seluruh data (data utuh, PK jadi NOT NULL).
 - SharedPreferences file `hermes_chat` + semua key (`model`, `persona`,
   `temperature`, `top_p`, `max_tokens`, `theme`, `persona_presets`, `base_url`).
 - Format backup ZIP (`hermes_chat.db` + `prefs.json` + `backup_info.json`);
@@ -45,45 +74,42 @@ app/src/main/java/id/sukiapps/hermes/
 ├── MainActivity.kt            # single Activity (@AndroidEntryPoint)
 ├── HermesApp.kt               # (di/) @HiltAndroidApp
 ├── KeyVault.java / KeyCipher.java / ApkShareProvider.java / TtsReader.java
-├── ChatStore.java             # shim direktori untuk provider (verbatim-safe)
+├── ChatStore.java             # shim direktori untuk provider
 ├── di/                        # AppModule, NetworkModule (+AuthInterceptor)
 ├── domain/                    # AIProvider, ChatRequest, Persona (JSON n/t), Prefs
 ├── data/local/                # Room entities/DAO/Database, ChatRepository, AppPrefs
 ├── data/remote/               # JerouterApi (Retrofit), SseClient (OkHttp SSE Flow),
 │                              #   SseDecoder (unit-testable), ChatRemoteRepository
+├── data/agent/                # AgentFiles, SoulPrompt, MemoryWriter (Jiwa Hermes)
+├── data/connectors/           # GitHub, Telegram, Termux, WebFetch
+├── data/audit/                # PermissionGate, AuditLog (Izin & Riwayat)
 ├── util/                      # Markdown (AnnotatedString), BackupManager, FileUtil
-├── ui/theme/                  # Color (teal/coral), Type, HermesTheme (dark-default)
-├── ui/chat/                   # ChatScreen, ChatViewModel, MessageBubble,
-│                              #   MarkdownText, CodeBlock, InputBar, TypingIndicator
+├── ui/theme/                  # Color (teal/coral), Type, HermesTheme
+├── ui/chat/                   # ChatScreen, ChatViewModel, MessageBubble, ...
 ├── ui/history/                # DrawerContent + HistoryViewModel
 ├── ui/settings/               # SettingsScreen + SettingsViewModel
 ├── ui/keysetup/               # KeySetupScreen + KeySetupViewModel
-├── ui/onboarding/             # OnboardingScreen (pager + ilustrasi Canvas)
-└── navigation/Nav.kt           # route: onboarding/keysetup/chat/settings
+├── ui/onboarding/             # OnboardingScreen
+├── ui/agent/                  # SoulScreen, AktivitasScreen (+ViewModel)
+├── ui/audit/                  # AuditScreen (Riwayat Izin)
+├── ui/featreq/                # FeatureRequestScreen (Minta Fitur)
+└── navigation/Nav.kt          # route aplikasi
 ```
+
+Detail arsitektur: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Alur signing APK
 
 CI (`build.yml`) menghasilkan **APK unsigned**
 (`app-release-unsigned.apk`) — disengaja: keystore rilis tidak disimpan
-di repo/CI.
+di repo/CI. Build rilis resmi di-sign maintainer dengan keystore resmi
+(cert identik seluruh rilis Hermes) agar update in-place tetap bisa.
+Kontributor cukup pakai build unsigned.
 
-1. Download artifact `hermes-compose-unsigned` dari GitHub Actions.
-2. Kirim APK ke maintainer (Upin).
-3. Maintainer sign dengan keystore resmi (`keystore-v2.jks`, cert identik
-   seluruh rilis Hermes) via `apksigner`, verifikasi, lalu bagikan link.
+## Keamanan
 
-## Build lokal (butuh Android SDK + JDK 17)
+Jangan pernah commit token/API key/keystore. Lihat [SECURITY.md](SECURITY.md).
 
-```bash
-gradle :app:assembleRelease --no-daemon
-# hasil: app/build/outputs/apk/release/app-release-unsigned.apk
-gradle :app:testReleaseUnitTest --no-daemon
-```
+## Lisensi
 
-## Status verifikasi
-
-Ditulis lengkap tanpa placeholder, TETAPI **belum dikompilasi** — Gradle
-tidak dapat berjalan di VM ini (loopback TCP di-mangle proxy; sudah
-diverifikasi). Verifikasi pertama terjadi di GitHub Actions. Lihat
-`REMOVED.md` untuk daftar penyederhanaan & risiko yang belum terverifikasi.
+[MIT](LICENSE) — bebas dipakai, diubah, dan didistribusikan.

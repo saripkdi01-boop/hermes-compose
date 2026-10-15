@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
@@ -59,6 +60,7 @@ fun InputBar(
     onPickImage: () -> Unit,
     onTakePhoto: () -> Unit,
     onPickDocument: () -> Unit,
+    onWebFetch: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -146,6 +148,13 @@ fun InputBar(
                             Icon(Icons.Filled.Description, contentDescription = null)
                         },
                         onClick = { menuOpen = false; onPickDocument() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Ambil dari web") },
+                        leadingIcon = {
+                            Icon(Icons.Filled.Language, contentDescription = null)
+                        },
+                        onClick = { menuOpen = false; onWebFetch() }
                     )
                 }
                 OutlinedTextField(

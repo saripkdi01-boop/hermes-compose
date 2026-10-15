@@ -14,11 +14,18 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
+import id.sukiapps.hermes.data.audit.PermissionGate
 import id.sukiapps.hermes.domain.Prefs
 import id.sukiapps.hermes.navigation.Nav
+import id.sukiapps.hermes.ui.audit.AuditScreen
+import id.sukiapps.hermes.ui.audit.PermissionGateDialog
+import id.sukiapps.hermes.ui.featreq.FeatureRequestScreen
 import id.sukiapps.hermes.ui.chat.ChatScreen
 import id.sukiapps.hermes.ui.keysetup.KeySetupScreen
 import id.sukiapps.hermes.ui.onboarding.OnboardingScreen
+import id.sukiapps.hermes.ui.agent.SoulScreen
+import id.sukiapps.hermes.ui.agent.AktivitasScreen
 import id.sukiapps.hermes.ui.settings.SettingsScreen
 import id.sukiapps.hermes.ui.theme.HermesTheme
 
@@ -29,6 +36,11 @@ import id.sukiapps.hermes.ui.theme.HermesTheme
  */
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    // Gate izin: dialog-nya dirender sekali di setContent (PermissionGateDialog)
+    // agar selalu ada selama app hidup — chokepoint UI semua aksi sensitif.
+    @Inject
+    lateinit var gate: PermissionGate
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,6 +65,9 @@ class MainActivity : ComponentActivity() {
                 )
             }
             HermesTheme(darkTheme = darkTheme) {
+                // Dialog izin global — di atas NavHost agar selalu bisa muncul
+                // dari layar mana pun.
+                PermissionGateDialog(gate)
                 NavHost(
                     navController = nav,
                     startDestination = startDestination
@@ -83,7 +98,10 @@ class MainActivity : ComponentActivity() {
                     }
                     composable(Nav.CHAT) {
                         ChatScreen(
-                            onOpenSettings = { nav.navigate(Nav.SETTINGS) }
+                            onOpenSettings = { nav.navigate(Nav.SETTINGS) },
+                            onOpenAktivitas = { nav.navigate(Nav.AKTIVITAS) },
+                            onOpenMintaFitur = { nav.navigate(Nav.MINTA_FITUR) },
+                            onOpenAudit = { nav.navigate(Nav.AUDIT) }
                         )
                     }
                     composable(Nav.SETTINGS) {
@@ -93,7 +111,24 @@ class MainActivity : ComponentActivity() {
                                 nav.navigate(Nav.KEYSETUP) {
                                     popUpTo(Nav.CHAT) { inclusive = false }
                                 }
-                            }
+                            },
+                            onOpenSoul = { nav.navigate(Nav.SOUL) },
+                            onOpenAudit = { nav.navigate(Nav.AUDIT) }
+                        )
+                    }
+                    composable(Nav.MINTA_FITUR) {
+                        FeatureRequestScreen(onBack = { nav.popBackStack() })
+                    }
+                    composable(Nav.AUDIT) {
+                        AuditScreen(onBack = { nav.popBackStack() })
+                    }
+                    composable(Nav.SOUL) {
+                        SoulScreen(onBack = { nav.popBackStack() })
+                    }
+                    composable(Nav.AKTIVITAS) {
+                        AktivitasScreen(
+                            onBack = { nav.popBackStack() },
+                            onOpenSoul = { nav.navigate(Nav.SOUL) }
                         )
                     }
                 }

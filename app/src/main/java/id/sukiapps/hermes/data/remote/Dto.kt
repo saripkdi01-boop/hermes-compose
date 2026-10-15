@@ -27,3 +27,19 @@ data class ChatChunk(
         )
     }
 }
+
+/** POST /chat/completions non-streaming (dipakai MemoryWriter write-back). */
+@Serializable
+data class ChatCompletionResponse(
+    val choices: List<CompletionChoice> = emptyList()
+) {
+    @Serializable
+    data class CompletionChoice(
+        val message: CompletionMessage = CompletionMessage()
+    ) {
+        @Serializable
+        data class CompletionMessage(
+            val content: String = ""
+        )
+    }
+}

@@ -24,6 +24,9 @@ object Prefs {
     const val KEY_MODELS_CACHE = "models_cache"
     const val KEY_MODELS_CACHE_AT = "models_cache_at"
 
+    // v9.2: direktori project Telegram Serverless di Termux (bukan secret).
+    const val KEY_SERVERLESS_DIR = "serverless_dir"
+
     const val DEFAULT_BASE = "https://je.jerouter.web.id/v1"
     const val DEFAULT_TEMPERATURE = 1.0f
     const val DEFAULT_TOP_P = 1.0f

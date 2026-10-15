@@ -20,6 +20,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
@@ -38,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -54,6 +56,8 @@ fun KeySetupScreen(
     val state by vm.state.collectAsStateWithLifecycle()
     var showKey by remember { mutableStateOf(false) }
     var modelMenu by remember { mutableStateOf(false) }
+    // v9.1: klik ditangani Box pembungkus (bukan TextField) agar tidak dicuri fokus.
+    val ddInteraction = remember { MutableInteractionSource() }
 
     Column(
         modifier = Modifier
@@ -149,7 +153,14 @@ fun KeySetupScreen(
         if (state.models.isNotEmpty()) {
             // Material3 1.3.x menghapus ExposedDropdownMenu*; pola pengganti:
             // Box + OutlinedTextField read-only + DropdownMenu biasa.
-            Box(modifier = Modifier.fillMaxWidth()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        interactionSource = ddInteraction,
+                        indication = null
+                    ) { modelMenu = true }
+            ) {
                 OutlinedTextField(
                     value = state.model.ifBlank { "Pilih model…" },
                     onValueChange = {},
@@ -163,7 +174,7 @@ fun KeySetupScreen(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { modelMenu = true }
+                        .focusProperties { canFocus = false }
                 )
                 DropdownMenu(
                     expanded = modelMenu,

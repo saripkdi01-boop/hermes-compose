@@ -158,13 +158,61 @@ public class KeyVault {
         invalidateCache(); // v7.1
     }
 
+    // ---------- v9.1: rahasia generik (token konektor) ----------
+
+    /**
+     * Simpan string rahasia (mis. PAT GitHub, bot token Telegram) terenkripsi
+     * AES-256 dengan alias Keystore per nama. JANGAN simpan token di
+     * SharedPreferences plaintext biasa.
+     */
+    public static void putSecret(Context ctx, String name, String plain) throws Exception {
+        String safe = safeName(name);
+        SecretKey key = getOrCreateKey("hermes_secret_" + safe);
+        byte[] blob = KeyCipher.encrypt(key,
+                plain == null ? new byte[0] : plain.getBytes("UTF-8"));
+        Ui.prefs(ctx).edit()
+                .putString("secret_enc_" + safe,
+                        Base64.encodeToString(blob, Base64.NO_WRAP))
+                .apply();
+    }
+
+    /** Ambil rahasia; "" bila belum ada atau gagal didekripsi. */
+    public static String getSecret(Context ctx, String name) {
+        try {
+            String safe = safeName(name);
+            String enc = Ui.prefs(ctx).getString("secret_enc_" + safe, null);
+            if (enc == null || enc.isEmpty()) return "";
+            byte[] blob = Base64.decode(enc, Base64.DEFAULT);
+            SecretKey key = getOrCreateKey("hermes_secret_" + safe);
+            return new String(KeyCipher.decrypt(key, blob), "UTF-8");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /** Hapus satu rahasia. */
+    public static void clearSecret(Context ctx, String name) {
+        try {
+            Ui.prefs(ctx).edit().remove("secret_enc_" + safeName(name)).apply();
+        } catch (Exception ignored) {}
+    }
+
+    private static String safeName(String name) {
+        if (name != null && name.matches("[a-z0-9_]{1,32}")) return name;
+        throw new IllegalArgumentException("bad secret name");
+    }
+
     private static SecretKey getOrCreateKey() throws Exception {
+        return getOrCreateKey(ALIAS);
+    }
+
+    private static SecretKey getOrCreateKey(String alias) throws Exception {
         KeyStore ks = KeyStore.getInstance(ANDROID_KS);
         ks.load(null);
-        if (!ks.containsAlias(ALIAS)) {
+        if (!ks.containsAlias(alias)) {
             KeyGenerator kg = KeyGenerator.getInstance(
                     KeyProperties.KEY_ALGORITHM_AES, ANDROID_KS);
-            kg.init(new KeyGenParameterSpec.Builder(ALIAS,
+            kg.init(new KeyGenParameterSpec.Builder(alias,
                     KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
                     .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                     .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
@@ -172,6 +220,6 @@ public class KeyVault {
                     .build());
             kg.generateKey();
         }
-        return (SecretKey) ks.getKey(ALIAS, null);
+        return (SecretKey) ks.getKey(alias, null);
     }
 }

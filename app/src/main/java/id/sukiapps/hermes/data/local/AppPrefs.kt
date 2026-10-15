@@ -58,6 +58,11 @@ class AppPrefs @Inject constructor(
         get() = prefs.getBoolean(Prefs.KEY_ONBOARDED, false)
         set(v) = prefs.edit().putBoolean(Prefs.KEY_ONBOARDED, v).apply()
 
+    /** v9.2: direktori project Telegram Serverless (prefs biasa, bukan secret). */
+    var serverlessDir: String
+        get() = prefs.getString(Prefs.KEY_SERVERLESS_DIR, "") ?: ""
+        set(v) = prefs.edit().putString(Prefs.KEY_SERVERLESS_DIR, v).apply()
+
     var currentConvId: Long
         get() = prefs.getLong(Prefs.KEY_CURRENT_CONV, -1L)
         set(v) = prefs.edit().putLong(Prefs.KEY_CURRENT_CONV, v).apply()
