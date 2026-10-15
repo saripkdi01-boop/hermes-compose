@@ -107,7 +107,7 @@ class MemoryWriter @Inject constructor(
             if (content.contains("TIDAK ADA", ignoreCase = true)) return emptyList()
             return content.lineSequence()
                 .map { it.trim().removePrefix("-").removePrefix("*").trim() }
-                .map { it.removePrefix(Regex("^\\d+[.)]\\s*")) }
+                .map { it.replaceFirst(Regex("^\\d+[.)]\\s*"), "") }
                 .filter { it.length >= 8 }
                 .take(3)
                 .toList()
