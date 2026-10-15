@@ -19,14 +19,15 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenu
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -146,25 +147,28 @@ fun KeySetupScreen(
         }
 
         if (state.models.isNotEmpty()) {
-            ExposedDropdownMenuBox(
-                expanded = modelMenu,
-                onExpandedChange = { modelMenu = it }
-            ) {
+            // Material3 1.3.x menghapus ExposedDropdownMenu*; pola pengganti:
+            // Box + OutlinedTextField read-only + DropdownMenu biasa.
+            Box(modifier = Modifier.fillMaxWidth()) {
                 OutlinedTextField(
                     value = state.model.ifBlank { "Pilih model…" },
                     onValueChange = {},
                     readOnly = true,
                     label = { Text("Model") },
                     trailingIcon = {
-                        ExposedDropdownMenuDefaults.TrailingIcon(modelMenu)
+                        Icon(
+                            if (modelMenu) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
+                            contentDescription = null
+                        )
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                        .clickable { modelMenu = true }
                 )
-                ExposedDropdownMenu(
+                DropdownMenu(
                     expanded = modelMenu,
-                    onDismissRequest = { modelMenu = false }
+                    onDismissRequest = { modelMenu = false },
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     state.models.forEach { m ->
                         DropdownMenuItem(
