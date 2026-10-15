@@ -16,7 +16,7 @@ import androidx.compose.ui.unit.sp
  * panjang teks dan tanpa cache global (aman untuk recomposition).
  *
  * Mendukung: heading (#), bold (**), italic (*), inline code (`),
- * code block (```), list (-/* / 1.), quote (>), link [t](url) → t.
+ * code block (```), list (-, *, 1.), quote (>), link [t](url) → t.
  */
 object Markdown {
 
