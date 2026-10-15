@@ -18,13 +18,8 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.ArrowDropUp
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -39,13 +34,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import id.sukiapps.hermes.ui.settings.ModelPickerDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,9 +50,7 @@ fun KeySetupScreen(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     var showKey by remember { mutableStateOf(false) }
-    var modelMenu by remember { mutableStateOf(false) }
-    // v9.1: klik ditangani Box pembungkus (bukan TextField) agar tidak dicuri fokus.
-    val ddInteraction = remember { MutableInteractionSource() }
+    var showModelPicker by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -151,46 +144,37 @@ fun KeySetupScreen(
         }
 
         if (state.models.isNotEmpty()) {
-            // Material3 1.3.x menghapus ExposedDropdownMenu*; pola pengganti:
-            // Box + OutlinedTextField read-only + DropdownMenu biasa.
-            Box(
+            // v9.3: dialog picker — pola popup dropdown rapuh di device.
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(
-                        interactionSource = ddInteraction,
-                        indication = null
-                    ) { modelMenu = true }
+                    .clickable { showModelPicker = true }
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedTextField(
-                    value = state.model.ifBlank { "Pilih model…" },
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Model") },
-                    trailingIcon = {
-                        Icon(
-                            if (modelMenu) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
-                            contentDescription = null
-                        )
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusProperties { canFocus = false }
-                )
-                DropdownMenu(
-                    expanded = modelMenu,
-                    onDismissRequest = { modelMenu = false },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    state.models.forEach { m ->
-                        DropdownMenuItem(
-                            text = { Text(m) },
-                            onClick = {
-                                vm.setModel(m)
-                                modelMenu = false
-                            }
-                        )
-                    }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Model",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        state.model.ifBlank { "Pilih model…" },
+                        style = MaterialTheme.typography.bodyLarge
+                    )
                 }
+                Icon(Icons.Filled.ArrowDropDown, contentDescription = "Pilih model")
+            }
+            if (showModelPicker) {
+                ModelPickerDialog(
+                    models = state.models,
+                    current = state.model,
+                    onPick = { m ->
+                        showModelPicker = false
+                        vm.setModel(m)
+                    },
+                    onDismiss = { showModelPicker = false }
+                )
             }
         }
 

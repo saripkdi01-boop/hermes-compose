@@ -7,8 +7,18 @@ import kotlinx.coroutines.flow.Flow
  * Implementasi: ChatRemoteRepository (Jerouter, OpenAI-compatible).
  */
 interface AIProvider {
-    /** Daftar id model dari GET {base}/models. */
-    suspend fun models(): List<String>
+    /**
+     * Daftar id model dari GET {base}/models.
+     * @param force true = lewati cache 24 jam, selalu hit network.
+     */
+    suspend fun models(force: Boolean = false): List<String>
+
+    /**
+     * Validasi live: model bisa dipakai API key saat ini.
+     * Implementasi: POST /chat/completions minimal (ping, max_tokens=1).
+     * @throws AIHttpException dengan pesan Indonesia bila gagal.
+     */
+    suspend fun validateModel(model: String)
 
     /**
      * Chat streaming. Mengalirkan token incremental; selesai saat [DONE].

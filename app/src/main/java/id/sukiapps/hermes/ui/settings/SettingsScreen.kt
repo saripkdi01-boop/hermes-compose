@@ -19,13 +19,8 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.ArrowDropUp
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,7 +44,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -73,9 +67,7 @@ fun SettingsScreen(
     val ctx = LocalContext.current
     val snack = remember { SnackbarHostState() }
 
-    var modelMenu by remember { mutableStateOf(false) }
-    // v9.1: klik ditangani Box pembungkus (bukan TextField) agar tidak dicuri fokus.
-    val ddInteraction = remember { MutableInteractionSource() }
+    var showModelPicker by remember { mutableStateOf(false) }
     var baseUrlEdit by remember { mutableStateOf(state.baseUrl) }
     var presetName by remember { mutableStateOf("") }
     var presetText by remember { mutableStateOf("") }
@@ -140,53 +132,39 @@ fun SettingsScreen(
             }
 
             // ---- Grup: Model ----
-            // Material3 1.3.x menghapus ExposedDropdownMenu*; pola pengganti:
-            // Box + OutlinedTextField read-only + DropdownMenu biasa.
+            // v9.3: dropdown (Box+Popup) diganti dialog picker — pola popup
+            // terbukti rapuh di device (tidak bisa switch model).
             SettingsGroup("Model AI") {
-                Box(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(
-                            interactionSource = ddInteraction,
-                            indication = null
-                        ) { modelMenu = true }
+                        .clickable { showModelPicker = true }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    OutlinedTextField(
-                        value = state.model.ifBlank { "Pilih model…" },
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Model") },
-                        trailingIcon = {
-                            Icon(
-                                if (modelMenu) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
-                                contentDescription = null
-                            )
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .focusProperties { canFocus = false }
-                    )
-                    DropdownMenu(
-                        expanded = modelMenu,
-                        onDismissRequest = { modelMenu = false },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        state.models.forEach { m ->
-                            DropdownMenuItem(
-                                text = { Text(m) },
-                                onClick = {
-                                    vm.setModel(m)
-                                    modelMenu = false
-                                }
-                            )
-                        }
-                        if (state.models.isEmpty()) {
-                            DropdownMenuItem(
-                                text = { Text("Belum ada daftar — muat dulu.") },
-                                onClick = { modelMenu = false }
-                            )
-                        }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Model aktif",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            state.model.ifBlank { "Belum dipilih" },
+                            style = MaterialTheme.typography.bodyLarge
+                        )
                     }
+                    Icon(Icons.Filled.ArrowDropDown, contentDescription = "Pilih model")
+                }
+                if (showModelPicker) {
+                    ModelPickerDialog(
+                        models = state.models,
+                        current = state.model,
+                        onPick = { m ->
+                            showModelPicker = false
+                            vm.selectModel(m)
+                        },
+                        onDismiss = { showModelPicker = false }
+                    )
                 }
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(
@@ -198,6 +176,14 @@ fun SettingsScreen(
                     Spacer(Modifier.width(8.dp))
                     Text(
                         if (state.modelsLoading) "Memuat…" else "Muat ulang daftar model"
+                    )
+                }
+                if (state.modelsRefreshedAt.isNotBlank()) {
+                    Text(
+                        "Diperbarui: ${state.modelsRefreshedAt}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp)
                     )
                 }
             }

@@ -23,12 +23,15 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 data class SettingsUiState(
     val model: String = "",
     val models: List<String> = emptyList(),
     val modelsLoading: Boolean = false,
+    val modelsRefreshedAt: String = "",
     val temperature: Float = 1.0f,
     val topP: Float = 1.0f,
     val maxTokens: Int = 0,
@@ -99,12 +102,15 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(modelsLoading = true, busyMessage = "Mengambil daftar model…") }
             try {
-                val ids = withContext(Dispatchers.IO) { ai.models() }
+                // v9.3: force=true — lewati cache 24 jam, tombol ini harus live.
+                val ids = withContext(Dispatchers.IO) { ai.models(force = true) }
+                val now = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
                 _state.update {
                     it.copy(
                         models = ids,
                         modelsLoading = false,
                         busyMessage = null,
+                        modelsRefreshedAt = now,
                         snack = "Ditemukan ${ids.size} model."
                     )
                 }
@@ -123,6 +129,31 @@ class SettingsViewModel @Inject constructor(
     fun setModel(m: String) {
         prefs.model = m
         _state.update { it.copy(model = m) }
+    }
+
+    /**
+     * v9.3: pilih model + validasi LIVE bahwa API key user bisa memakainya
+     * (POST /chat/completions minimal). Model tetap tersimpan walau
+     * validasi gagal — user diberi pesan error yang jelas, tanpa crash.
+     */
+    fun selectModel(m: String) {
+        prefs.model = m
+        _state.update { it.copy(model = m, busyMessage = "Memvalidasi model…") }
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { ai.validateModel(m) }
+                _state.update {
+                    it.copy(busyMessage = null, snack = "Model $m aktif ✓")
+                }
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        busyMessage = null,
+                        snack = (e.message ?: "Model gagal divalidasi.").take(200)
+                    )
+                }
+            }
+        }
     }
 
     fun setTemperature(v: Float) {
