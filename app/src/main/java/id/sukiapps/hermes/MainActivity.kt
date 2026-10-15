@@ -45,7 +45,7 @@ class MainActivity : ComponentActivity() {
             val nav = rememberNavController()
             // Baca ulang tema setiap kali destinasi berubah (mis. kembali
             // dari Settings setelah ganti tema).
-            val backStack by androidx.navigation.compose.currentBackStackEntryAsState()
+            val backStack by nav.currentBackStackEntryAsState()
             var darkTheme by remember(backStack?.destination?.route) {
                 mutableStateOf(
                     getSharedPreferences(Prefs.FILE, Context.MODE_PRIVATE)
