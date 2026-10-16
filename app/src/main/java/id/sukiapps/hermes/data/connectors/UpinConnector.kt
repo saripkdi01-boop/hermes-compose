@@ -16,6 +16,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
+import java.net.Proxy
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -45,6 +46,13 @@ class UpinConnector @Inject constructor(
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
+        // v9.4.2: konektor Upin SELALU ke loopback HP (127.0.0.1) via SSH
+        // forward Termux — JANGAN lewat proxy/VPN sistem. OkHttp default ikut
+        // ProxySelector sistem; di HP dengan VPN/proxy itu membuat 127.0.0.1
+        // tidak terjangkau (curl Termux tidak pakai proxy → selalu tembus,
+        // app selalu "Tidak terhubung"). NO_PROXY = direct selalu benar
+        // untuk loopback.
+        .proxy(Proxy.NO_PROXY)
         .build()
     private val mediaType = "application/json; charset=utf-8".toMediaType()
 
