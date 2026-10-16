@@ -419,10 +419,13 @@ class ChatViewModel @Inject constructor(
         // Jiwa Hermes: system prompt dirakit SEKALI per conversation dimulai.
         val soulPrompt = getSoulPrompt(convId, prompt)
         val personaText = prefs.persona.ifBlank { "Kamu adalah asisten AI yang membantu." }
+        // v9.5: model wajib tahu fitur aplikasi yang menjalankannya.
+        val capsBlock = id.sukiapps.hermes.domain.AppCapabilities.promptBlock()
+        val basePrompt = if (soulPrompt.isBlank()) personaText
+        else "$soulPrompt\n\n$personaText"
         val req = ChatRequest(
             model = model,
-            systemPrompt = if (soulPrompt.isBlank()) personaText
-            else "$soulPrompt\n\n$personaText",
+            systemPrompt = "$basePrompt\n\n$capsBlock",
             history = history,
             prompt = prompt,
             imageBase64s = imageB64s,

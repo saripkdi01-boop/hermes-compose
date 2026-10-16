@@ -44,10 +44,42 @@ system prompt ──► /chat/completions
 ## Konektor (aksi MANUAL)
 
 `data/connectors/`: GitHub (REST + PAT), Telegram (Bot API),
-Termux (`RUN_COMMAND` intent), WebFetch (HTTP GET → teks).
+Termux (`RUN_COMMAND` intent), WebFetch (HTTP GET → teks),
+**Upin** (`UpinConnector.kt`, v9.4+) — lihat bawah.
 
 Prinsip: konektor hanya dipicu user lewat tombol. AI tidak bisa
 memanggilnya sendiri dari chat (butuh function-calling model — belum ada).
+
+## Konektor Upin — dua AI: Hermes + Upin (v9.4+)
+
+```
+HP Termux: ssh -L 8766:127.0.0.1:8766 muse-vm -N
+   → 127.0.0.1:8766 di HP diteruskan ke bridge Upin di VM
+   → UpinConnector: POST /upin/chat → job_id
+   →                GET /upin/reply/<id> → jawaban (polling)
+```
+
+- Secret khusus (`upin_secret`) di KeyVault, BUKAN API key Jerouter.
+- OkHttp WAJIB `Proxy.NO_PROXY` (v9.4.2): jangan lewat proxy/VPN sistem HP.
+- Tombol "Tanya Upin" di menu + InputBar → PermissionGate MEDIUM.
+- Latensi jujur ~1-2 menit (worker 1-menit di sisi VM).
+- Setup: Pengaturan → Konektor Upin (URL default `http://127.0.0.1:8766`).
+
+## AppCapabilities — model tahu fitur app (v9.5+)
+
+`domain/AppCapabilities.kt`: blok teks deskripsi SEMUA fitur Hermes
+(Upin, web fetch, lampiran, TTS, model/persona, Termux) yang disuntik
+ke system prompt setiap chat dimulai (`ChatViewModel`). Tujuannya:
+model AI yang diajak chat paham aplikasi apa yang menjalankannya dan
+bisa memandu user memakai fitur yang tepat. Bukan function-calling —
+model tetap tidak bisa eksekusi aksi, hanya tahu.
+
+## Tema Warm Muse (v9.5+)
+
+`ui/theme/Color.kt`: palet cream hangat + coral (80% nuansa Muse AI).
+- Assistant: flat tanpa bubble (`MessageBubble.kt`) + ikon sparkle.
+- User: bubble `surfaceVariant` hangat, rata kanan.
+- InputBar: container tunggal border halus, tanpa elevasi.
 
 ## PermissionGate & audit (anti-bypass)
 

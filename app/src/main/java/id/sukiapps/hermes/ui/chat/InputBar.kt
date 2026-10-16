@@ -110,8 +110,13 @@ fun InputBar(
             }
         }
         Surface(
-            tonalElevation = 2.dp,
+            // v9.5: container tunggal ala Muse — border halus, tanpa elevasi.
+            tonalElevation = 0.dp,
             shape = RoundedCornerShape(28.dp),
+            border = androidx.compose.foundation.BorderStroke(
+                1.dp, MaterialTheme.colorScheme.outlineVariant
+            ),
+            color = MaterialTheme.colorScheme.surface,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 8.dp)
@@ -178,8 +183,11 @@ fun InputBar(
                     maxLines = 6,
                     shape = RoundedCornerShape(24.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                        // v9.5: tanpa border ganda — container luar sudah punya border.
+                        focusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
+                        unfocusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
+                        disabledBorderColor = androidx.compose.ui.graphics.Color.Transparent,
+                        errorBorderColor = androidx.compose.ui.graphics.Color.Transparent
                     )
                 )
                 Spacer(Modifier.width(4.dp))

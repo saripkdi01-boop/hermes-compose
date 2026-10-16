@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
@@ -40,8 +41,9 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 
 /**
- * Bubble chat: user = terisi warna aksen; assistant = surface + border.
- * Tekan lama → menu aksi (salin/edit/regenerate).
+ * v9.5 — Bubble ala Muse: pesan assistant FLAT (tanpa bubble, teks langsung
+ * di atas background + ikon sparkle kecil), pesan user dalam bubble hangat
+ * membulat. Tekan lama → menu aksi (salin/edit/regenerate).
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -60,138 +62,153 @@ fun MessageBubble(
     var menuOpen by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
 
-    val shape = if (isUser) {
-        RoundedCornerShape(18.dp, 4.dp, 18.dp, 18.dp)
-    } else {
-        RoundedCornerShape(4.dp, 18.dp, 18.dp, 18.dp)
-    }
-
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
-    ) {
-        Surface(
-            shape = shape,
-            color = if (isUser) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.surface,
-            border = if (isUser) null else androidx.compose.foundation.BorderStroke(
-                1.dp,
-                MaterialTheme.colorScheme.outlineVariant
-            ),
-            modifier = Modifier
-                .padding(horizontal = 12.dp)
-                .combinedClickable(
-                    onClick = {},
-                    onLongClick = { menuOpen = true }
-                )
-                .clip(shape)
+    if (isUser) {
+        // ---- Pesan user: bubble hangat rata kanan ----
+        Column(
+            modifier = modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.End
         ) {
-            Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                if (message.attachmentSummary != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Filled.Description,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = if (isUser) MaterialTheme.colorScheme.onPrimary
-                            else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = message.attachmentSummary,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (isUser) MaterialTheme.colorScheme.onPrimary
-                            else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Spacer(Modifier.height(6.dp))
-                }
-                if (isUser) {
+            Surface(
+                shape = RoundedCornerShape(20.dp, 6.dp, 20.dp, 20.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier
+                    .padding(horizontal = 12.dp)
+                    .combinedClickable(onClick = {}, onLongClick = { menuOpen = true })
+                    .clip(RoundedCornerShape(20.dp, 6.dp, 20.dp, 20.dp))
+            ) {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                    AttachmentSummary(message)
                     Text(
                         text = message.content,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onPrimary
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                } else {
-                    MarkdownText(
-                        text = message.content,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                if (!isUser) {
-                    Spacer(Modifier.height(4.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(
-                            onClick = { if (isSpeaking) onStopSpeak() else onSpeak() },
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (isSpeaking) Icons.Filled.VolumeOff
-                                else Icons.Filled.VolumeUp,
-                                contentDescription = if (isSpeaking) "Hentikan bacaan"
-                                else "Bacakan pesan",
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        if (isLastAssistant) {
-                            IconButton(
-                                onClick = onRegenerate,
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Refresh,
-                                    contentDescription = "Buat ulang jawaban",
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                    }
                 }
             }
         }
-
-        DropdownMenu(
-            expanded = menuOpen,
-            onDismissRequest = { menuOpen = false }
+    } else {
+        // ---- Pesan assistant: flat ala Muse, tanpa bubble ----
+        Column(
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp)
+                .combinedClickable(onClick = {}, onLongClick = { menuOpen = true })
         ) {
-            DropdownMenuItem(
-                text = { Text("Salin") },
-                leadingIcon = {
-                    Icon(Icons.Filled.ContentCopy, contentDescription = null)
-                },
-                onClick = {
-                    menuOpen = false
-                    clipboard.setText(AnnotatedString(message.content))
-                    onCopy()
-                }
-            )
-            if (isUser) {
-                DropdownMenuItem(
-                    text = { Text("Edit & kirim ulang") },
-                    leadingIcon = {
-                        Icon(Icons.Filled.Edit, contentDescription = null)
-                    },
-                    onClick = {
-                        menuOpen = false
-                        onEdit()
-                    }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.AutoAwesome,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = "Hermes",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
-            if (!isUser && isLastAssistant) {
-                DropdownMenuItem(
-                    text = { Text("Buat ulang jawaban") },
-                    leadingIcon = {
-                        Icon(Icons.Filled.Refresh, contentDescription = null)
-                    },
+            Spacer(Modifier.height(4.dp))
+            AttachmentSummary(message)
+            MarkdownText(
+                text = message.content,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(6.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = { if (isSpeaking) onStopSpeak() else onSpeak() },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isSpeaking) Icons.Filled.VolumeOff
+                        else Icons.Filled.VolumeUp,
+                        contentDescription = if (isSpeaking) "Hentikan bacaan"
+                        else "Bacakan pesan",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                IconButton(
                     onClick = {
-                        menuOpen = false
-                        onRegenerate()
+                        clipboard.setText(AnnotatedString(message.content))
+                        onCopy()
+                    },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.ContentCopy,
+                        contentDescription = "Salin jawaban",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (isLastAssistant) {
+                    IconButton(
+                        onClick = onRegenerate,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Refresh,
+                            contentDescription = "Buat ulang jawaban",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                )
+                }
             }
         }
     }
+
+    DropdownMenu(
+        expanded = menuOpen,
+        onDismissRequest = { menuOpen = false }
+    ) {
+        DropdownMenuItem(
+            text = { Text("Salin") },
+            leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
+            onClick = {
+                menuOpen = false
+                clipboard.setText(AnnotatedString(message.content))
+                onCopy()
+            }
+        )
+        if (isUser) {
+            DropdownMenuItem(
+                text = { Text("Edit & kirim ulang") },
+                leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                onClick = { menuOpen = false; onEdit() }
+            )
+        }
+        if (!isUser && isLastAssistant) {
+            DropdownMenuItem(
+                text = { Text("Buat ulang jawaban") },
+                leadingIcon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
+                onClick = { menuOpen = false; onRegenerate() }
+            )
+        }
+    }
+}
+
+@Composable
+private fun AttachmentSummary(message: UiMessage) {
+    if (message.attachmentSummary == null) return
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            imageVector = Icons.Filled.Description,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = message.attachmentSummary,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+    Spacer(Modifier.height(6.dp))
 }
