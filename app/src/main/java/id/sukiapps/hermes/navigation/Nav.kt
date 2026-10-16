@@ -14,4 +14,6 @@ object Nav {
     const val TOOLS = "tools"
     const val BRIEF = "brief"
     const val REFLECTION = "reflection"
+    const val ACTIVITY = "activity"
+    const val WAREHOUSE = "warehouse"
 }

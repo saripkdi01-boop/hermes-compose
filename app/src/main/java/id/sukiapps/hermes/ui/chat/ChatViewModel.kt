@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import id.sukiapps.hermes.data.store.ExecutionLog
 import id.sukiapps.hermes.data.agent.MemoryWriter
 import id.sukiapps.hermes.data.agent.SoulPrompt
 import id.sukiapps.hermes.data.audit.DangerLevel
@@ -291,10 +292,12 @@ class ChatViewModel @Inject constructor(
                     repo.addMessage(convId, "user", q, null)
                 }
                 _state.update { it.copy(upinBusy = true, error = null) }
+                ExecutionLog.log("tool", "Tanya Upin", q.take(200), "start")
                 val jobId = withContext(Dispatchers.IO) { upin.sendMessage(q) }
                 val answer = pollUpinAnswer(jobId)
                 withContext(Dispatchers.IO) {
                     repo.addMessage(convId, "assistant", answer, null)
+                    ExecutionLog.log("tool", "Upin menjawab", "${answer.length} karakter", "ok")
                 }
             } catch (e: CancellationException) {
                 throw e // batal wajar (kirim lain / keluar layar) — tanpa pesan error
@@ -436,6 +439,7 @@ class ChatViewModel @Inject constructor(
 
         _state.update { it.copy(isStreaming = true, streamingText = "", error = null) }
         val acc = StringBuilder()
+        ExecutionLog.log("prompt", "Prompt → $model", prompt.take(500), "start")
         streamJob = viewModelScope.launch(Dispatchers.IO) {
             try {
                 ai.chatStream(req)
@@ -443,6 +447,7 @@ class ChatViewModel @Inject constructor(
                         withContext(Dispatchers.Main) {
                             val msg = (e.message ?: "Gagal terhubung.").take(200)
                             _state.update { it.copy(error = msg) }
+                            ExecutionLog.log("error", "LLM gagal", msg, "fail")
                         }
                     }
                     .collect { token ->
@@ -459,6 +464,7 @@ class ChatViewModel @Inject constructor(
                     if (finalText.isNotBlank()) {
                         repo.addMessage(convId, "assistant", finalText, null)
                     }
+                    ExecutionLog.log("prompt", "Respons selesai", "${finalText.length} karakter", "ok")
                     withContext(Dispatchers.Main) {
                         _state.update {
                             it.copy(isStreaming = false, streamingText = "")

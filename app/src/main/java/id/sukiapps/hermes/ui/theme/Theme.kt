@@ -13,7 +13,7 @@ fun HermesTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+    val colorScheme = if (darkTheme) MuseDark.ColorScheme else LightColorScheme
     MaterialTheme(
         colorScheme = colorScheme,
         typography = HermesTypography,

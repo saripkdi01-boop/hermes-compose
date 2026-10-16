@@ -19,11 +19,13 @@ import javax.inject.Inject
 import id.sukiapps.hermes.data.audit.PermissionGate
 import id.sukiapps.hermes.domain.Prefs
 import id.sukiapps.hermes.navigation.Nav
+import id.sukiapps.hermes.ui.v12.ActivityScreen
 import id.sukiapps.hermes.ui.v12.ApprovalScreen
 import id.sukiapps.hermes.ui.v12.BriefScreen
 import id.sukiapps.hermes.ui.v12.ToolCatalogScreen
 import id.sukiapps.hermes.ui.v12.ReflectionScreen
 import id.sukiapps.hermes.ui.v12.V12HubScreen
+import id.sukiapps.hermes.ui.v12.WarehouseScreen
 import id.sukiapps.hermes.ui.audit.AuditScreen
 import id.sukiapps.hermes.ui.audit.PermissionGateDialog
 import id.sukiapps.hermes.ui.featreq.FeatureRequestScreen
@@ -64,7 +66,7 @@ class MainActivity : ComponentActivity() {
             // v12: deep-link dari notifikasi approval (cold start).
             val pendingRoute = remember { intent.getStringExtra("nav_route") }
             LaunchedEffect(pendingRoute) {
-                if (pendingRoute != null) nav.navigate(pendingRoute)
+                if (pendingRoute != null) runCatching { nav.navigate(pendingRoute) }
             }
             // Baca ulang tema setiap kali destinasi berubah (mis. kembali
             // dari Settings setelah ganti tema).
@@ -143,7 +145,9 @@ class MainActivity : ComponentActivity() {
                         onApproval = { nav.navigate(Nav.APPROVAL) },
                         onTools = { nav.navigate(Nav.TOOLS) },
                         onBrief = { nav.navigate(Nav.BRIEF) },
-                        onReflection = { nav.navigate(Nav.REFLECTION) }
+                        onReflection = { nav.navigate(Nav.REFLECTION) },
+                        onActivity = { nav.navigate(Nav.ACTIVITY) },
+                        onWarehouse = { nav.navigate(Nav.WAREHOUSE) }
                     )
                 }
                 composable(Nav.APPROVAL) {
@@ -157,6 +161,18 @@ class MainActivity : ComponentActivity() {
                         filesDir = this@MainActivity.filesDir,
                         onBack = { nav.popBackStack() }
                     )
+                }
+                composable(Nav.REFLECTION) {
+                    ReflectionScreen(
+                        filesDir = this@MainActivity.filesDir,
+                        onBack = { nav.popBackStack() }
+                    )
+                }
+                composable(Nav.ACTIVITY) {
+                    ActivityScreen(onBack = { nav.popBackStack() })
+                }
+                composable(Nav.WAREHOUSE) {
+                    WarehouseScreen(onBack = { nav.popBackStack() })
                 }
                     composable(Nav.AKTIVITAS) {
                         AktivitasScreen(

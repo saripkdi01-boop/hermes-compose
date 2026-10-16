@@ -17,7 +17,9 @@ fun V12HubScreen(
     onApproval: () -> Unit,
     onTools: () -> Unit,
     onBrief: () -> Unit,
-    onReflection: () -> Unit
+    onReflection: () -> Unit,
+    onActivity: () -> Unit,
+    onWarehouse: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -63,6 +65,20 @@ fun V12HubScreen(
                 Column(Modifier.padding(16.dp)) {
                     Text("Reflection", style = MaterialTheme.typography.titleSmall)
                     Text("Refleksi mingguan otomatis",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            ElevatedCard(onClick = onActivity, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("Aktivitas Live", style = MaterialTheme.typography.titleSmall)
+                    Text("Review eksekusi real-time",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            ElevatedCard(onClick = onWarehouse, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("Gudang File", style = MaterialTheme.typography.titleSmall)
+                    Text("UI, database, backend, API, podcast, skill",
                         style = MaterialTheme.typography.bodySmall)
                 }
             }
