@@ -85,9 +85,6 @@ class ChatRemoteRepository @Inject constructor(
         }
     }
 
-    override fun chatStream(request: ChatRequest): Flow<String> =
-        sse.stream(prefs.baseUrl, request).flowOn(Dispatchers.IO)
-
     private fun mapValidateError(code: Int, model: String): String = when (code) {
         401 -> "API key salah atau kedaluwarsa (401)."
         403 -> "Akses ditolak (403) — key ini tidak boleh memakai model \"$model\"."
