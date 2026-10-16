@@ -139,9 +139,9 @@ class MainActivity : ComponentActivity() {
                 composable(Nav.V12_HUB) {
                     V12HubScreen(
                         onBack = { nav.popBackStack() },
-                        onOpenApproval = { nav.navigate(Nav.APPROVAL) },
-                        onOpenTools = { nav.navigate(Nav.TOOLS) },
-                        onOpenBrief = { nav.navigate(Nav.BRIEF) }
+                        onApproval = { nav.navigate(Nav.APPROVAL) },
+                        onTools = { nav.navigate(Nav.TOOLS) },
+                        onBrief = { nav.navigate(Nav.BRIEF) }
                     )
                 }
                 composable(Nav.APPROVAL) {
