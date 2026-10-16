@@ -42,7 +42,8 @@ object ApprovalNotifier {
 
         // Intent dibuka saat notifikasi diketuk — aman bila activity belum ada.
         val intent = Intent().apply {
-            setClassName(context.packageName, "id.sukiapps.hermes.ui.approval.ApprovalActivity")
+            setClassName(context.packageName, "id.sukiapps.hermes.MainActivity")
+            putExtra("nav_route", "approval")
             putExtra("approval_id", id)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }

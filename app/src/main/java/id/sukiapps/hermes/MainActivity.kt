@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -18,6 +19,10 @@ import javax.inject.Inject
 import id.sukiapps.hermes.data.audit.PermissionGate
 import id.sukiapps.hermes.domain.Prefs
 import id.sukiapps.hermes.navigation.Nav
+import id.sukiapps.hermes.ui.v12.ApprovalScreen
+import id.sukiapps.hermes.ui.v12.BriefScreen
+import id.sukiapps.hermes.ui.v12.ToolCatalogScreen
+import id.sukiapps.hermes.ui.v12.V12HubScreen
 import id.sukiapps.hermes.ui.audit.AuditScreen
 import id.sukiapps.hermes.ui.audit.PermissionGateDialog
 import id.sukiapps.hermes.ui.featreq.FeatureRequestScreen
@@ -55,6 +60,11 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val nav = rememberNavController()
+            // v12: deep-link dari notifikasi approval (cold start).
+            val pendingRoute = remember { intent.getStringExtra("nav_route") }
+            LaunchedEffect(pendingRoute) {
+                if (pendingRoute != null) nav.navigate(pendingRoute)
+            }
             // Baca ulang tema setiap kali destinasi berubah (mis. kembali
             // dari Settings setelah ganti tema).
             val backStack by nav.currentBackStackEntryAsState()
@@ -101,7 +111,8 @@ class MainActivity : ComponentActivity() {
                             onOpenSettings = { nav.navigate(Nav.SETTINGS) },
                             onOpenAktivitas = { nav.navigate(Nav.AKTIVITAS) },
                             onOpenMintaFitur = { nav.navigate(Nav.MINTA_FITUR) },
-                            onOpenAudit = { nav.navigate(Nav.AUDIT) }
+                            onOpenAudit = { nav.navigate(Nav.AUDIT) },
+                    onOpenV12Hub = { nav.navigate(Nav.V12_HUB) }
                         )
                     }
                     composable(Nav.SETTINGS) {
@@ -125,6 +136,26 @@ class MainActivity : ComponentActivity() {
                     composable(Nav.SOUL) {
                         SoulScreen(onBack = { nav.popBackStack() })
                     }
+                composable(Nav.V12_HUB) {
+                    V12HubScreen(
+                        onBack = { nav.popBackStack() },
+                        onOpenApproval = { nav.navigate(Nav.APPROVAL) },
+                        onOpenTools = { nav.navigate(Nav.TOOLS) },
+                        onOpenBrief = { nav.navigate(Nav.BRIEF) }
+                    )
+                }
+                composable(Nav.APPROVAL) {
+                    ApprovalScreen(onBack = { nav.popBackStack() })
+                }
+                composable(Nav.TOOLS) {
+                    ToolCatalogScreen(onBack = { nav.popBackStack() })
+                }
+                composable(Nav.BRIEF) {
+                    BriefScreen(
+                        filesDir = this@MainActivity.filesDir,
+                        onBack = { nav.popBackStack() }
+                    )
+                }
                     composable(Nav.AKTIVITAS) {
                         AktivitasScreen(
                             onBack = { nav.popBackStack() },

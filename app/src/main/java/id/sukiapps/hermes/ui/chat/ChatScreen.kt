@@ -78,6 +78,7 @@ private const val PREVIEW_CHARS = 4000
 @Composable
 fun ChatScreen(
     onOpenSettings: () -> Unit,
+    onOpenV12Hub: () -> Unit,
     onOpenAktivitas: () -> Unit,
     onOpenMintaFitur: () -> Unit,
     onOpenAudit: () -> Unit,
@@ -242,6 +243,9 @@ fun ChatScreen(
                         IconButton(onClick = onOpenSettings) {
                             Icon(Icons.Filled.Settings, contentDescription = "Pengaturan")
                         }
+                    IconButton(onClick = onOpenV12Hub) {
+                        Icon(Icons.Filled.Apps, contentDescription = "Fitur v12")
+                    }
                     }
                 )
             },
