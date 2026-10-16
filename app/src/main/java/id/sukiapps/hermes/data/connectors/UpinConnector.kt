@@ -113,8 +113,10 @@ class UpinConnector @Inject constructor(
             } catch (e: AIHttpException) {
                 throw e
             } catch (e: IOException) {
+                // v9.5.1: tampilkan error ASLI untuk diagnosis (bukan pesan generik).
+                val detail = "${e.javaClass.simpleName}: ${e.message}"
                 throw AIHttpException(
-                    "Tidak terhubung ke Upin. Pastikan di Termux: $SSH_HINT"
+                    "Koneksi gagal [$detail] @ ${base()}. $SSH_HINT"
                 )
             }
         }
