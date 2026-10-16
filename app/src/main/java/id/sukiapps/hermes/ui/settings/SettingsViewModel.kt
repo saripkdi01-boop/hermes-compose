@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import id.sukiapps.hermes.KeyVault
+import id.sukiapps.hermes.data.audit.DangerLevel
 import id.sukiapps.hermes.data.audit.PermissionGate
 import id.sukiapps.hermes.data.connectors.GitHubConnector
 import id.sukiapps.hermes.data.connectors.ServerlessConnector
