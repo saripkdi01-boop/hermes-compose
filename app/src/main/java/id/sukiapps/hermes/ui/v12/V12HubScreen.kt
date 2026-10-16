@@ -16,7 +16,8 @@ fun V12HubScreen(
     onBack: () -> Unit,
     onApproval: () -> Unit,
     onTools: () -> Unit,
-    onBrief: () -> Unit
+    onBrief: () -> Unit,
+    onReflection: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -55,6 +56,13 @@ fun V12HubScreen(
                 Column(Modifier.padding(16.dp)) {
                     Text("Morning Brief", style = MaterialTheme.typography.titleSmall)
                     Text("Ringkasan harian otomatis",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            ElevatedCard(onClick = onReflection, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("Reflection", style = MaterialTheme.typography.titleSmall)
+                    Text("Refleksi mingguan otomatis",
                         style = MaterialTheme.typography.bodySmall)
                 }
             }

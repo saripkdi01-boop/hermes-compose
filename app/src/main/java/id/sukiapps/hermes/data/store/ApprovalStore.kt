@@ -18,6 +18,12 @@ object ApprovalStore {
     private const val STORE = "approval_queue"
     const val TRUST_DURATION_MS = 3600_000L // "Izin 1 jam"
 
+    /**
+     * Hook notifikasi — dipasang sekali di Application.onCreate (punya Context).
+     * Dipanggil setiap ada approval pending baru.
+     */
+    var onPendingApproval: ((ApprovalItem) -> Unit)? = null
+
     data class ApprovalItem(
         val id: String,
         val type: String,
@@ -72,7 +78,8 @@ object ApprovalStore {
         return trust.optLong(type, 0) > System.currentTimeMillis()
     }
 
-    /** Minta persetujuan baru. Callback di main thread dengan id. */
+    /** Minta persetujuan baru. Callback di main thread dengan id.
+     *  Pending → hook onPendingApproval (notifikasi). Trusted → aksi langsung dilanjutkan. */
     fun request(
         type: String,
         title: String,
@@ -80,35 +87,37 @@ object ApprovalStore {
         payload: JSONObject = JSONObject(),
         onDone: ((String) -> Unit)? = null
     ) {
-        // Auto-allow bila masih dalam masa trust.
-        if (isTrusted(type)) {
-            val id = "a${System.currentTimeMillis()}"
-            JsonStore.mutate(STORE, { json ->
-                val items = json.optJSONArray("items") ?: JSONArray().also { json.put("items", it) }
-                items.put(toJson(ApprovalItem(
-                    id = id, type = type, title = title, detail = detail,
-                    payload = payload, status = "allowed",
-                    createdAt = System.currentTimeMillis(), decidedAt = System.currentTimeMillis(),
-                    trustUntil = 0
-                )))
-            }, { onDone?.invoke(id) })
-            return
-        }
         val id = "a${System.currentTimeMillis()}"
+        val trusted = isTrusted(type)
+        val status = if (trusted) "allowed" else "pending"
+        val now = System.currentTimeMillis()
         JsonStore.mutate(STORE, { json ->
             val items = json.optJSONArray("items") ?: JSONArray().also { json.put("items", it) }
             items.put(toJson(ApprovalItem(
                 id = id, type = type, title = title, detail = detail,
-                payload = payload, status = "pending",
-                createdAt = System.currentTimeMillis(), decidedAt = 0, trustUntil = 0
+                payload = payload, status = status,
+                createdAt = now, decidedAt = if (trusted) now else 0,
+                trustUntil = 0
             )))
-        }, { onDone?.invoke(id) })
+        }, {
+            val item = ApprovalItem(
+                id = id, type = type, title = title, detail = detail,
+                payload = payload, status = status,
+                createdAt = now, decidedAt = if (trusted) now else 0,
+                trustUntil = 0
+            )
+            if (trusted) ApprovalActions.resume(item)
+            else onPendingApproval?.invoke(item)
+            onDone?.invoke(id)
+        })
     }
 
-    /** Putuskan: allowed/denied. trustOneHour=true → trust[type] = now+1 jam. */
+    /** Putuskan: allowed/denied. trustOneHour=true → trust[type] = now+1 jam.
+     *  Bila diizinkan, aksi tertunda otomatis dilanjutkan via ApprovalActions. */
     fun decide(id: String, allowed: Boolean, trustOneHour: Boolean = false, onDone: (() -> Unit)? = null) {
         JsonStore.mutate(STORE, { json ->
             val items = json.optJSONArray("items") ?: JSONArray()
+            var decided: ApprovalItem? = null
             for (i in 0 until items.length()) {
                 val o = items.getJSONObject(i)
                 if (o.optString("id") == id) {
@@ -118,9 +127,14 @@ object ApprovalStore {
                         val trust = json.optJSONObject("trust") ?: JSONObject().also { json.put("trust", it) }
                         trust.put(o.optString("type"), System.currentTimeMillis() + TRUST_DURATION_MS)
                     }
+                    decided = fromJson(o)
                     break
                 }
             }
-        }, { onDone?.invoke() })
+            decided
+        }, { item ->
+            if (item?.status == "allowed") ApprovalActions.resume(item)
+            onDone?.invoke()
+        })
     }
 }

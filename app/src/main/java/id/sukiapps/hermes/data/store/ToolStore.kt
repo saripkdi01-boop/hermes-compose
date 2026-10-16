@@ -87,26 +87,68 @@ object ToolStore {
         }, { onDone?.invoke(id) })
     }
 
-    /** Publish draft menjadi tool (pindah drafts → items). */
-    fun publishDraft(draftId: String, path: String, onDone: ((Boolean) -> Unit)? = null) {
+    /** Publish draft menjadi tool: tulis payload ke filesDir/tools/<nama>.py (atomik),
+     *  lalu pindah drafts → items. Gagal tulis = tidak publish. */
+    fun publishDraft(draftId: String, onDone: ((Boolean) -> Unit)? = null) {
         JsonStore.mutate(STORE, { json ->
             val drafts = json.optJSONArray("drafts") ?: return@mutate false
+            val idx = (0 until drafts.length())
+                .firstOrNull { drafts.getJSONObject(it).optString("id") == draftId }
+                ?: return@mutate false
+            val draft = draftFromJson(drafts.getJSONObject(idx))
+            if (draft.payload.isBlank()) return@mutate false
+
+            // Tulis file tool dulu — gagal tulis berarti publish dibatalkan.
+            val toolFile = writeToolFile(draft) ?: return@mutate false
+
             val items = json.optJSONArray("items") ?: JSONArray().also { json.put("items", it) }
-            for (i in 0 until drafts.length()) {
-                val d = drafts.getJSONObject(i)
-                if (d.optString("id") == draftId) {
-                    val draft = draftFromJson(d)
-                    items.put(toolToJson(ToolItem(
-                        name = draft.name, description = "",
-                        path = path, createdAt = System.currentTimeMillis(),
-                        sellable = false, priceIdr = 0
-                    )))
-                    drafts.remove(i)
-                    return@mutate true
-                }
-            }
-            false
+            items.put(toolToJson(ToolItem(
+                name = draft.name,
+                description = deriveDescription(draft),
+                path = toolFile.absolutePath,
+                createdAt = System.currentTimeMillis(),
+                sellable = false, priceIdr = 0
+            )))
+            drafts.remove(idx)
+            true
         }, { onDone?.invoke(it) })
+    }
+
+    /** Nama file aman: hanya [A-Za-z0-9_-], maks 48 char + suffix id. */
+    private fun safeFileName(name: String, id: String): String {
+        val base = name.replace(Regex("[^A-Za-z0-9_-]"), "_").trim('_').take(48)
+        return "${base.ifBlank { "tool" }}_${id.takeLast(6)}.py"
+    }
+
+    /** Tulis payload ke filesDir/tools/ secara atomik (.tmp → rename). */
+    private fun writeToolFile(draft: ToolDraft): java.io.File? {
+        return try {
+            val toolsDir = java.io.File(JsonStore.appFilesDir(), "tools").apply { mkdirs() }
+            val target = java.io.File(toolsDir, safeFileName(draft.name, draft.id))
+            val tmp = java.io.File(toolsDir, target.name + ".tmp")
+            tmp.writeText(draft.payload)
+            if (!tmp.renameTo(target)) {
+                target.delete()
+                tmp.renameTo(target)
+            }
+            target
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** Deskripsi: baris berarti pertama dari payload (komentar/docstring), maks 140 char. */
+    private fun deriveDescription(draft: ToolDraft): String {
+        val line = draft.payload.lineSequence()
+            .map {
+                it.trim()
+                    .removePrefix("#").removePrefix("\"\"\"").removeSuffix("\"\"\"")
+                    .trim()
+            }
+            .firstOrNull {
+                it.isNotBlank() && !it.startsWith("import ") && !it.startsWith("from ")
+            }
+        return line?.take(140) ?: "Tool: ${draft.name}"
     }
 
     /** Tandai tool sebagai sellable dengan harga. */

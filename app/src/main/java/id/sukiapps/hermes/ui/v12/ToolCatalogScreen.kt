@@ -8,10 +8,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import id.sukiapps.hermes.data.store.ApprovalStore
 import id.sukiapps.hermes.data.store.ToolStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 /**
  * v12 UI — Layar katalog tools (published + draft).
@@ -106,13 +108,21 @@ fun ToolCatalogScreen(onBack: () -> Unit) {
                                             scope.launch {
                                                 busy = true
                                                 withContext(Dispatchers.IO) {
-                                                    // Path default: filesDir/tools/<name>.py
-                                                    ToolStore.publishDraft(draft.id, "tools/${draft.name}.py")
+                                                    // v12: publish lewat persetujuan —
+                                                    // file .py ditulis setelah pengguna mengetuk Izinkan.
+                                                    ApprovalStore.request(
+                                                        type = "tool_create",
+                                                        title = "Publish tool: ${draft.name}",
+                                                        detail = "Menulis '${draft.name}' ke katalog tool.",
+                                                        payload = JSONObject()
+                                                            .put("action", "publish_tool")
+                                                            .put("draft_id", draft.id)
+                                                    )
                                                 }
                                                 busy = false
                                                 refresh()
                                             }
-                                        }) { Text("Publish") }
+                                        }) { Text("Ajukan Publish") }
                                     }
                                 }
                             }

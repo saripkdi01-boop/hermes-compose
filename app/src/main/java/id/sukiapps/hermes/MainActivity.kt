@@ -22,6 +22,7 @@ import id.sukiapps.hermes.navigation.Nav
 import id.sukiapps.hermes.ui.v12.ApprovalScreen
 import id.sukiapps.hermes.ui.v12.BriefScreen
 import id.sukiapps.hermes.ui.v12.ToolCatalogScreen
+import id.sukiapps.hermes.ui.v12.ReflectionScreen
 import id.sukiapps.hermes.ui.v12.V12HubScreen
 import id.sukiapps.hermes.ui.audit.AuditScreen
 import id.sukiapps.hermes.ui.audit.PermissionGateDialog
@@ -141,7 +142,8 @@ class MainActivity : ComponentActivity() {
                         onBack = { nav.popBackStack() },
                         onApproval = { nav.navigate(Nav.APPROVAL) },
                         onTools = { nav.navigate(Nav.TOOLS) },
-                        onBrief = { nav.navigate(Nav.BRIEF) }
+                        onBrief = { nav.navigate(Nav.BRIEF) },
+                        onReflection = { nav.navigate(Nav.REFLECTION) }
                     )
                 }
                 composable(Nav.APPROVAL) {

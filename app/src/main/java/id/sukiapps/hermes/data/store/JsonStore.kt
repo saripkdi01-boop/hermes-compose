@@ -27,6 +27,12 @@ object JsonStore {
         dir = File(context.filesDir, "stores").apply { mkdirs() }
     }
 
+    /** filesDir aplikasi (induk folder stores/) — untuk file tool, brief, dsb. */
+    fun appFilesDir(): File {
+        check(::dir.isInitialized) { "JsonStore.init belum dipanggil" }
+        return dir.parentFile ?: dir
+    }
+
     private fun file(name: String) = File(dir, "$name.json")
 
     private fun emptyStore(): JSONObject =
