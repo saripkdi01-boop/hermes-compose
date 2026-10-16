@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Image
@@ -61,6 +62,7 @@ fun InputBar(
     onTakePhoto: () -> Unit,
     onPickDocument: () -> Unit,
     onWebFetch: () -> Unit,
+    onAskUpin: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -155,6 +157,15 @@ fun InputBar(
                             Icon(Icons.Filled.Language, contentDescription = null)
                         },
                         onClick = { menuOpen = false; onWebFetch() }
+                    )
+                    // v9.4: Tanya Upin — sejajar "Ambil dari web".
+                    DropdownMenuItem(
+                        text = { Text("Tanya Upin") },
+                        leadingIcon = {
+                            Icon(Icons.Filled.Chat, contentDescription = null)
+                        },
+                        enabled = value.isNotBlank(),
+                        onClick = { menuOpen = false; onAskUpin() }
                     )
                 }
                 OutlinedTextField(

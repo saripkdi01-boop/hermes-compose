@@ -102,6 +102,10 @@ fun ChatScreen(
     DisposableEffect(Unit) {
         onDispose { tts.shutdown() }
     }
+    // v9.4: keluar layar chat → batalkan polling Upin.
+    DisposableEffect(Unit) {
+        onDispose { chatVm.cancelUpin() }
+    }
     fun speak(msg: UiMessage) {
         tts.ensure(ctx) { ok ->
             if (ok) {
@@ -257,6 +261,12 @@ fun ChatScreen(
                     onTakePhoto = { launchCamera() },
                     onPickDocument = { pickDocs.launch("*/*") },
                     onWebFetch = { webVm.reset(); showWebInput = true },
+                    // v9.4: ambil teks input → gate di VM → input dikosongkan
+                    // setelah izin diberikan.
+                    onAskUpin = {
+                        val t = input
+                        chatVm.askUpin(t) { input = "" }
+                    },
                     modifier = Modifier.imePadding()
                 )
             }
@@ -264,7 +274,7 @@ fun ChatScreen(
             val listState = rememberLazyListState()
             val all = state.messages
             // Auto-scroll ke bawah saat pesan/stream bertambah.
-            LaunchedEffect(all.size, state.streamingText.length) {
+            LaunchedEffect(all.size, state.streamingText.length, state.upinBusy) {
                 if (all.isNotEmpty() || state.streamingText.isNotEmpty()) {
                     val target = if (state.streamingText.isNotEmpty()) all.size else all.size - 1
                     if (target >= 0) listState.animateScrollToItem(target)
@@ -317,6 +327,14 @@ fun ChatScreen(
                                 onStopSpeak = {},
                                 modifier = Modifier.padding(vertical = 4.dp)
                             )
+                        }
+                    }
+                }
+                // v9.4: indikator sementara saat menunggu jawaban Upin.
+                if (state.upinBusy) {
+                    item(key = "upin_typing") {
+                        Box(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                            TypingIndicator(status = "Upin sedang mengetik…")
                         }
                     }
                 }

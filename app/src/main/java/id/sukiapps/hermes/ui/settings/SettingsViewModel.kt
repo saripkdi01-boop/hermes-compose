@@ -11,6 +11,7 @@ import id.sukiapps.hermes.data.connectors.GitHubConnector
 import id.sukiapps.hermes.data.connectors.ServerlessConnector
 import id.sukiapps.hermes.data.connectors.TelegramConnector
 import id.sukiapps.hermes.data.connectors.TermuxConnector
+import id.sukiapps.hermes.data.connectors.UpinConnector
 import id.sukiapps.hermes.data.local.AppPrefs
 import id.sukiapps.hermes.domain.AIProvider
 import id.sukiapps.hermes.domain.PersonaPreset
@@ -47,7 +48,11 @@ data class SettingsUiState(
     val tgBotToken: String = "",
     val tgChatId: String = "",
     // v9.2: direktori project Serverless (prefs biasa, bukan secret)
-    val serverlessDir: String = ""
+    val serverlessDir: String = "",
+    // v9.4: konektor Upin (URL prefs biasa, secret via KeyVault)
+    val upinUrl: String = "",
+    val upinSecret: String = "",
+    val upinStatus: String? = null
 )
 
 @HiltViewModel
@@ -59,6 +64,7 @@ class SettingsViewModel @Inject constructor(
     private val github: GitHubConnector,
     private val telegram: TelegramConnector,
     private val serverless: ServerlessConnector,
+    private val upin: UpinConnector,
     private val gate: PermissionGate
 ) : ViewModel() {
 
@@ -78,7 +84,8 @@ class SettingsViewModel @Inject constructor(
                 darkTheme = prefs.themeDark,
                 baseUrl = prefs.baseUrl,
                 keyBroken = KeyVault.broken,
-                serverlessDir = prefs.serverlessDir
+                serverlessDir = prefs.serverlessDir,
+                upinUrl = prefs.upinUrl
             )
         }
         // Token konektor via Keystore (IPC) — baca di IO.
@@ -86,8 +93,14 @@ class SettingsViewModel @Inject constructor(
             val pat = KeyVault.getSecret(appCtx, "github_pat")
             val tgToken = KeyVault.getSecret(appCtx, "tg_bot_token")
             val chatId = KeyVault.getSecret(appCtx, "tg_chat_id")
+            val upinSecret = KeyVault.getSecret(appCtx, UpinConnector.SECRET_KEY)
             _state.update {
-                it.copy(githubPat = pat, tgBotToken = tgToken, tgChatId = chatId)
+                it.copy(
+                    githubPat = pat,
+                    tgBotToken = tgToken,
+                    tgChatId = chatId,
+                    upinSecret = upinSecret
+                )
             }
         }
     }
@@ -350,6 +363,63 @@ class SettingsViewModel @Inject constructor(
                 it.copy(
                     snack = if (ok) "${action.label}: perintah dikirim ke Termux."
                     else "Aksi ditolak & dicatat di Riwayat Izin."
+                )
+            }
+        }
+    }
+
+    // ---------- v9.4: Konektor Upin ----------
+
+    /** Simpan URL (prefs biasa) + secret (terenkripsi via KeyVault). */
+    fun saveUpinSettings(url: String, secret: String) {
+        val u = url.trim().trimEnd('/')
+        viewModelScope.launch(Dispatchers.IO) {
+            val r = runCatching {
+                prefs.upinUrl = u
+                KeyVault.putSecret(appCtx, UpinConnector.SECRET_KEY, secret.trim())
+            }
+            _state.update {
+                it.copy(
+                    upinUrl = u,
+                    upinSecret = secret.trim(),
+                    snack = if (r.isSuccess) "Pengaturan Upin tersimpan."
+                    else "Gagal menyimpan: ${r.exceptionOrNull()?.message}".take(200)
+                )
+            }
+        }
+    }
+
+    /**
+     * Tes koneksi Upin — lewat PermissionGate (MEDIUM, boleh diingat).
+     * Hasil ditampilkan di status grup, bukan snackbar.
+     */
+    fun testUpin() {
+        viewModelScope.launch {
+            val url = _state.value.upinUrl.ifBlank { UpinConnector.DEFAULT_URL }
+            val granted = gate.request(
+                "Upin",
+                "Tes koneksi ke Upin ($url).",
+                DangerLevel.MEDIUM
+            )
+            if (!granted) {
+                _state.update {
+                    it.copy(upinStatus = "Ditolak — dicatat di Riwayat Izin.")
+                }
+                return@launch
+            }
+            _state.update {
+                it.copy(busyMessage = "Menghubungi Upin…", upinStatus = null)
+            }
+            val r = runCatching {
+                withContext(Dispatchers.IO) { upin.testConnection() }
+            }
+            _state.update {
+                it.copy(
+                    busyMessage = null,
+                    upinStatus = r.fold(
+                        onSuccess = { "Terhubung ✓" },
+                        onFailure = { (it.message ?: "Gagal.").take(200) }
+                    )
                 )
             }
         }

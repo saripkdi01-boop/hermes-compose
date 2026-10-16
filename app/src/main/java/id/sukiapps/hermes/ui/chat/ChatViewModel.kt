@@ -8,16 +8,22 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import id.sukiapps.hermes.data.agent.MemoryWriter
 import id.sukiapps.hermes.data.agent.SoulPrompt
+import id.sukiapps.hermes.data.audit.DangerLevel
+import id.sukiapps.hermes.data.audit.PermissionGate
+import id.sukiapps.hermes.data.connectors.UpinConnector
 import id.sukiapps.hermes.data.local.AppPrefs
 import id.sukiapps.hermes.data.local.ChatRepository
 import id.sukiapps.hermes.domain.AIProvider
+import id.sukiapps.hermes.domain.AIHttpException
 import id.sukiapps.hermes.domain.ChatMessage
 import id.sukiapps.hermes.domain.ChatRequest
 import id.sukiapps.hermes.util.FileUtil
 import id.sukiapps.hermes.util.Markdown
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -56,7 +62,9 @@ data class ChatUiState(
     val isStreaming: Boolean = false,
     val streamingText: String = "",
     val error: String? = null,
-    val tokenEstimate: Int = 0
+    val tokenEstimate: Int = 0,
+    // v9.4: Upin sedang ditanya (polling jawaban)
+    val upinBusy: Boolean = false
 )
 
 @HiltViewModel
@@ -65,7 +73,9 @@ class ChatViewModel @Inject constructor(
     private val repo: ChatRepository,
     private val prefs: AppPrefs,
     private val ai: AIProvider,
-    private val memoryWriter: MemoryWriter
+    private val memoryWriter: MemoryWriter,
+    private val upin: UpinConnector,
+    private val gate: PermissionGate
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ChatUiState())
@@ -77,6 +87,8 @@ class ChatViewModel @Inject constructor(
 
     private var streamJob: Job? = null
     private var collectJob: Job? = null
+    // v9.4: job polling jawaban Upin (dibatalkan saat kirim lain/keluar layar)
+    private var upinJob: Job? = null
 
     // Jiwa Hermes: cache prompt rakitan per conversation + hitung pesan user
     // untuk pemicu write-back yang murah.
@@ -131,6 +143,7 @@ class ChatViewModel @Inject constructor(
 
     fun newConversation() {
         // Chat lama "ditutup" → coba tulis ingatan dari 10 pesan terakhir.
+        cancelUpin()
         val oldId = _state.value.convId
         if (oldId > 0) {
             viewModelScope.launch(Dispatchers.IO) {
@@ -190,6 +203,7 @@ class ChatViewModel @Inject constructor(
         val prompt = text.trim()
         if (prompt.isEmpty() && attachments.isEmpty()) return
         if (_state.value.isStreaming) return
+        cancelUpin() // kirim pesan lain → hentikan polling Upin
         val atts = attachments.toList()
         clearAttachments()
         viewModelScope.launch {
@@ -225,6 +239,99 @@ class ChatViewModel @Inject constructor(
         streamJob = null
         if (_state.value.isStreaming) {
             _state.update { it.copy(isStreaming = false) }
+        }
+    }
+
+    // ---------- v9.4: Tanya Upin ----------
+
+    /** Batalkan polling Upin (dipanggil saat kirim pesan lain / keluar layar). */
+    fun cancelUpin() {
+        upinJob?.cancel()
+        upinJob = null
+        if (_state.value.upinBusy) {
+            _state.update { it.copy(upinBusy = false) }
+        }
+    }
+
+    /**
+     * Tanya Upin: gate MEDIUM (boleh ingat) → kosongkan input (via
+     * [onConsumed]) → indikator "mengetik" → kirim + polling tiap 5 detik
+     * (maks 3 menit) → jawaban masuk Room sebagai pesan assistant.
+     * Error (401/timeout) tampil sebagai pesan di chat, tanpa crash.
+     */
+    fun askUpin(question: String, onConsumed: () -> Unit = {}) {
+        val q = question.trim()
+        if (q.isEmpty() || upinJob != null) return
+        upinJob = viewModelScope.launch {
+            try {
+                val granted = gate.request(
+                    "Upin",
+                    "Kirim ke Upin:\n${q.take(200)}",
+                    DangerLevel.MEDIUM
+                )
+                if (!granted) {
+                    _state.update {
+                        it.copy(error = "Ditolak — dicatat di Riwayat Izin.")
+                    }
+                    return@launch
+                }
+                onConsumed()
+                var convId = _state.value.convId
+                if (convId <= 0) {
+                    convId = withContext(Dispatchers.IO) {
+                        repo.newConversation(
+                            repo.makeTitle(q),
+                            prefs.persona
+                        )
+                    }
+                    prefs.currentConvId = convId
+                    openConversation(convId)
+                }
+                withContext(Dispatchers.IO) {
+                    repo.addMessage(convId, "user", q, null)
+                }
+                _state.update { it.copy(upinBusy = true, error = null) }
+                val jobId = withContext(Dispatchers.IO) { upin.sendMessage(q) }
+                val answer = pollUpinAnswer(jobId)
+                withContext(Dispatchers.IO) {
+                    repo.addMessage(convId, "assistant", answer, null)
+                }
+            } catch (e: CancellationException) {
+                throw e // batal wajar (kirim lain / keluar layar) — tanpa pesan error
+            } catch (e: Exception) {
+                val msg = "⚠️ Upin: ${(e.message ?: "Gagal.").take(200)}"
+                withContext(NonCancellable + Dispatchers.IO) {
+                    val cid = _state.value.convId
+                    if (cid > 0) repo.addMessage(cid, "assistant", msg, null)
+                    else _state.update { it.copy(error = msg) }
+                }
+            } finally {
+                withContext(NonCancellable) {
+                    _state.update { it.copy(upinBusy = false) }
+                }
+                upinJob = null
+            }
+        }
+    }
+
+    /** Polling /upin/reply tiap 5 detik sampai "done" atau 3 menit. */
+    private suspend fun pollUpinAnswer(jobId: String): String {
+        val deadline = System.currentTimeMillis() + 3 * 60 * 1000L
+        while (true) {
+            val (status, answer) = withContext(Dispatchers.IO) {
+                upin.pollReply(jobId)
+            }
+            if (status == "done") {
+                return answer?.trim()?.ifBlank { "(jawaban kosong)" }
+                    ?: "(jawaban kosong)"
+            }
+            if (status == "unknown") {
+                throw AIHttpException("Upin: job tidak dikenal server. Coba kirim ulang.")
+            }
+            if (System.currentTimeMillis() >= deadline) {
+                throw AIHttpException("Upin tidak menjawab dalam 3 menit.")
+            }
+            delay(5000)
         }
     }
 

@@ -51,6 +51,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import id.sukiapps.hermes.data.connectors.ServerlessConnector
 import id.sukiapps.hermes.data.connectors.TermuxConnector
+import id.sukiapps.hermes.data.connectors.UpinConnector
 import id.sukiapps.hermes.domain.PersonaPreset
 import java.io.File
 
@@ -91,6 +92,13 @@ fun SettingsScreen(
     var tmuxWorkdir by remember { mutableStateOf("/data/data/com.termux/files/home") }
     var tmuxBg by remember { mutableStateOf(false) }
     var tmuxInstalled by remember { mutableStateOf<Boolean?>(null) }
+    // v9.4: field konektor Upin
+    var upinUrlEdit by remember(state.upinUrl, state.upinSecret) {
+        mutableStateOf(state.upinUrl)
+    }
+    var upinSecretEdit by remember(state.upinUrl, state.upinSecret) {
+        mutableStateOf(state.upinSecret)
+    }
 
     LaunchedEffect(state.snack) {
         state.snack?.let {
@@ -528,6 +536,64 @@ fun SettingsScreen(
                         modifier = Modifier.weight(1f)
                     ) { Text("Migrate") }
                 }
+            }
+
+            // ---- Grup: Konektor Upin (v9.4) ----
+            SettingsGroup("Konektor Upin") {
+                Text(
+                    "Tanya-jawab dengan agent Upin di VM via SSH forward. " +
+                        "Secret tersimpan terenkripsi di Keystore.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = upinUrlEdit,
+                    onValueChange = { upinUrlEdit = it },
+                    label = { Text("URL Upin") },
+                    placeholder = { Text(UpinConnector.DEFAULT_URL) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = upinSecretEdit,
+                    onValueChange = { upinSecretEdit = it },
+                    label = { Text("Secret Upin") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = { vm.saveUpinSettings(upinUrlEdit, upinSecretEdit) },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Simpan") }
+                    OutlinedButton(
+                        onClick = { vm.testUpin() },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Test koneksi") }
+                }
+                if (state.upinStatus != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        state.upinStatus!!,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (state.upinStatus == "Terhubung ✓")
+                            MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.error
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Di Termux jalankan:\nssh -L 8766:127.0.0.1:8766 muse-vm -N",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
             // ---- Grup: Izin & Riwayat (v9.2) ----

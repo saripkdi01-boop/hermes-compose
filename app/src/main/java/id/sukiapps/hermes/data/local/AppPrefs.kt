@@ -63,6 +63,11 @@ class AppPrefs @Inject constructor(
         get() = prefs.getString(Prefs.KEY_SERVERLESS_DIR, "") ?: ""
         set(v) = prefs.edit().putString(Prefs.KEY_SERVERLESS_DIR, v).apply()
 
+    /** v9.4: base URL konektor Upin (prefs biasa, bukan secret). */
+    var upinUrl: String
+        get() = prefs.getString(Prefs.KEY_UPIN_URL, "") ?: ""
+        set(v) = prefs.edit().putString(Prefs.KEY_UPIN_URL, v).apply()
+
     var currentConvId: Long
         get() = prefs.getLong(Prefs.KEY_CURRENT_CONV, -1L)
         set(v) = prefs.edit().putLong(Prefs.KEY_CURRENT_CONV, v).apply()

@@ -27,6 +27,9 @@ object Prefs {
     // v9.2: direktori project Telegram Serverless di Termux (bukan secret).
     const val KEY_SERVERLESS_DIR = "serverless_dir"
 
+    // v9.4: base URL konektor Upin (bukan secret; default loopback SSH forward).
+    const val KEY_UPIN_URL = "upin_url"
+
     const val DEFAULT_BASE = "https://je.jerouter.web.id/v1"
     const val DEFAULT_TEMPERATURE = 1.0f
     const val DEFAULT_TOP_P = 1.0f

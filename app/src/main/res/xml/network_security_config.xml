@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v9.4: cleartext HANYA untuk loopback (konektor Upin via SSH forward
+     Termux → 127.0.0.1:8766). Selain itu cleartext tetap dilarang. -->
+<network-security-config>
+    <domain-config cleartextPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
+    <base-config cleartextPermitted="false" />
+</network-security-config>
