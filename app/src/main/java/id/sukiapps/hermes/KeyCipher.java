@@ -1,6 +1,5 @@
 package id.sukiapps.hermes;
 
-import java.security.SecureRandom;
 import java.util.Arrays;
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
@@ -18,10 +17,18 @@ public class KeyCipher {
     private static final int TAG_BITS = 128;
 
     public static byte[] encrypt(SecretKey key, byte[] plain) throws Exception {
-        byte[] iv = new byte[IV_LEN];
-        new SecureRandom().nextBytes(iv);
         Cipher c = Cipher.getInstance(TRANS);
-        c.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(TAG_BITS, iv));
+        // v9.4.1: JANGAN suplai IV sendiri — Android Keystore melarang
+        // caller-provided IV ("Caller-provided IV not permitted") bila kunci
+        // dibuat dengan setRandomizedEncryptionRequired(true). Biarkan cipher
+        // yang generate IV, lalu ambil via getIV(). Pola ini juga valid untuk
+        // kunci software JCE (unit test JVM). Format blob tidak berubah:
+        // IV 12 byte || ciphertext+tag — decrypt() tak perlu diubah.
+        c.init(Cipher.ENCRYPT_MODE, key);
+        byte[] iv = c.getIV();
+        if (iv == null || iv.length != IV_LEN) {
+            throw new IllegalStateException("IV tak valid");
+        }
         byte[] ct = c.doFinal(plain);
         byte[] out = new byte[IV_LEN + ct.length];
         System.arraycopy(iv, 0, out, 0, IV_LEN);
