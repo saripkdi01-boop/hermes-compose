@@ -49,6 +49,7 @@ data class AttachmentItem(
 
 data class UiMessage(
     val id: Long,
+    val timestamp: Long = 0L,
     val role: String, // "user" | "assistant"
     val content: String,
     val attachmentSummary: String? = null
@@ -129,6 +130,7 @@ class ChatViewModel @Inject constructor(
                         messages = list.map { m ->
                             UiMessage(
                                 id = m.id,
+                        timestamp = m.createdAt,
                                 role = m.role,
                                 content = m.content,
                                 attachmentSummary = m.attachmentPath
