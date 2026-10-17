@@ -1,5 +1,6 @@
 package id.sukiapps.hermes
 
+import id.sukiapps.hermes.diagnostics.HealthScreen
 import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -180,6 +181,8 @@ class MainActivity : ComponentActivity() {
                             onOpenSoul = { nav.navigate(Nav.SOUL) }
                         )
                     }
+        composable("health") { HealthScreen(onBack = { navController.popBackStack() }) }
+    
                 }
             }
         }
