@@ -42,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.AnnotatedString
 import id.sukiapps.hermes.R
 import id.sukiapps.hermes.ui.theme.HermesColors
@@ -57,7 +58,7 @@ import kotlinx.coroutines.launch
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(
+fun HermesChatScreen(
     chatId: String,
     chatName: String,
     chatSubtitle: String,

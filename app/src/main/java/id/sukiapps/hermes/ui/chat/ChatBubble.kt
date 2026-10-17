@@ -97,7 +97,7 @@ fun ChatBubble(
             .background(bg)
             .padding(
                 horizontal = ThemeTokens.Dimen.screenPadding,
-                vertical = if (grouped) ThemeTokens.Dimen.grid2 else ThemeTokens.Dimen.grid4
+                vertical = if (grouped) 2.dp else ThemeTokens.Dimen.grid4
             ),
         contentAlignment = if (isMine) Alignment.CenterEnd else Alignment.CenterStart
     ) {
