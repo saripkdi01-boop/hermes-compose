@@ -13,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.core.view.WindowCompat
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import id.sukiapps.hermes.ui.chatv3.V3PreviewScreen
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
@@ -181,7 +182,8 @@ class MainActivity : ComponentActivity() {
                             onOpenSoul = { nav.navigate(Nav.SOUL) }
                         )
                     }
-        composable("health") { HealthScreen(onBack = { nav.popBackStack() }) }
+        composable("chatv3preview") { V3PreviewScreen(onBack = { nav.popBackStack() }) }
+            composable("health") { HealthScreen(onBack = { nav.popBackStack() }) }
     
                 }
             }
