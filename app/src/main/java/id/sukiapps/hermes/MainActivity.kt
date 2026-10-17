@@ -30,7 +30,7 @@ import id.sukiapps.hermes.ui.v12.WarehouseScreen
 import id.sukiapps.hermes.ui.audit.AuditScreen
 import id.sukiapps.hermes.ui.audit.PermissionGateDialog
 import id.sukiapps.hermes.ui.featreq.FeatureRequestScreen
-import id.sukiapps.hermes.ui.chat.HermesChatScreen
+import id.sukiapps.hermes.ui.chat.ChatScreen
 import id.sukiapps.hermes.ui.keysetup.KeySetupScreen
 import id.sukiapps.hermes.ui.onboarding.OnboardingScreen
 import id.sukiapps.hermes.ui.agent.SoulScreen
@@ -111,7 +111,7 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     composable(Nav.CHAT) {
-                        HermesChatScreen(
+                        ChatScreen(
                             onOpenSettings = { nav.navigate(Nav.SETTINGS) },
                             onOpenAktivitas = { nav.navigate(Nav.AKTIVITAS) },
                             onOpenMintaFitur = { nav.navigate(Nav.MINTA_FITUR) },

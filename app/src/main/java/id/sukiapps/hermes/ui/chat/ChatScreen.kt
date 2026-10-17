@@ -1,303 +1,486 @@
 package id.sukiapps.hermes.ui.chat
 
+import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.provider.MediaStore
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Forward
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.Reply
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Star
-import androidx.compose.material.icons.outlined.VolumeUp
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
-import id.sukiapps.hermes.R
-import id.sukiapps.hermes.ui.theme.HermesColors
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import id.sukiapps.hermes.ApkShareProvider
+import id.sukiapps.hermes.TtsReader
+import id.sukiapps.hermes.ui.history.DrawerContent
+import id.sukiapps.hermes.ui.history.HistoryViewModel
 import kotlinx.coroutines.launch
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
-/**
- * Layar chat (Tahap 3): daftar pesan + bubble + menu aksi.
- *
- * Catatan integrasi:
- * - [messages] dari ViewModel existing (ChatViewModel).
- * - Aksi onCopy/onReply/dst. diteruskan ke handler existing.
- * - Composer & streaming = Tahap 4 (belum di file ini).
- */
+/** Maksimal karakter hasil web yang ditampilkan/dimasukkan ke input. */
+private const val PREVIEW_CHARS = 4000
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HermesChatScreen(
-    chatId: String,
-    chatName: String,
-    chatSubtitle: String,
-    messages: List<ChatMessage>,
-    onBack: () -> Unit,
-    onCopy: (ChatMessage) -> Unit,
-    onReply: (ChatMessage) -> Unit,
-    onForward: (ChatMessage) -> Unit,
-    onToggleStar: (ChatMessage) -> Unit,
-    onSpeak: (ChatMessage) -> Unit,
-    onEdit: (ChatMessage) -> Unit,
-    onDeleteForMe: (ChatMessage) -> Unit,
-    onDeleteForAll: (ChatMessage) -> Unit,
-    onReaction: (ChatMessage, String) -> Unit,
-    onOpenSearch: () -> Unit,
-    onOpenInfo: () -> Unit,
-    onScrollToMessage: (String) -> Unit,
-    modifier: Modifier = Modifier
+fun ChatScreen(
+    onOpenSettings: () -> Unit,
+    onOpenV12Hub: () -> Unit,
+    onOpenAktivitas: () -> Unit,
+    onOpenMintaFitur: () -> Unit,
+    onOpenAudit: () -> Unit,
+    chatVm: ChatViewModel = hiltViewModel(),
+    historyVm: HistoryViewModel = hiltViewModel(),
+    webVm: WebFetchViewModel = hiltViewModel()
 ) {
-    val rows = remember(messages) { buildRows(messages) }
-    val listState = rememberLazyListState()
+    val ctx = LocalContext.current
+    val state by chatVm.state.collectAsStateWithLifecycle()
+    val attachments by chatVm.attachmentsFlow.collectAsStateWithLifecycle()
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    val clipboard = LocalClipboardManager.current
+    val snack = remember { SnackbarHostState() }
+    var input by remember { mutableStateOf("") }
+    var editingMsg by remember { mutableStateOf<UiMessage?>(null) }
+    var editText by remember { mutableStateOf("") }
+    var showWebInput by remember { mutableStateOf(false) }
 
-    var menuOpen by remember { mutableStateOf(false) }
-    var menuMessage by remember { mutableStateOf<ChatMessage?>(null) }
-    var reactionPickerFor by remember { mutableStateOf<ChatMessage?>(null) }
-    val selectedIds = remember { mutableStateListOf<String>() }
-    val selectionMode = selectedIds.isNotEmpty()
-
-    // Scroll ke bawah saat buka (tanpa animasi).
-    LaunchedEffect(rows.size) {
-        if (rows.isNotEmpty()) listState.scrollToItem(rows.size - 1)
+    // TTS per pesan (TtsReader legacy, lazy init).
+    val tts = remember { TtsReader() }
+    var speakingId by remember { mutableStateOf<Long?>(null) }
+    DisposableEffect(Unit) {
+        onDispose { tts.shutdown() }
+    }
+    // v9.4: keluar layar chat → batalkan polling Upin.
+    DisposableEffect(Unit) {
+        onDispose { chatVm.cancelUpin() }
+    }
+    fun speak(msg: UiMessage) {
+        tts.ensure(ctx) { ok ->
+            if (ok) {
+                speakingId = msg.id
+                tts.speak(msg.content)
+            } else {
+                Toast.makeText(
+                    ctx,
+                    "Paket suara Indonesia belum tersedia di HP ini.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
     }
 
-    // Pesan untuk lookup grouping & reply target.
-    val byId = remember(messages) { messages.associateBy { it.id } }
-
-    Scaffold(
-        modifier = modifier,
-        containerColor = HermesColors.chatBackground(),
-        topBar = {
-            if (selectionMode) {
-                TopAppBar(
-                    title = { Text("${selectedIds.size}") },
-                    navigationIcon = {
-                        IconButton(onClick = { selectedIds.clear() }) {
-                            Icon(Icons.Outlined.Close, stringResource(R.string.hermes_cd_back))
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = {
-                            selectedIds.mapNotNull { byId[it] }.forEach { onToggleStar(it) }
-                            selectedIds.clear()
-                        }) { Icon(Icons.Outlined.Star, stringResource(R.string.hermes_action_star)) }
-                        IconButton(onClick = {
-                            selectedIds.mapNotNull { byId[it] }.forEach { onDeleteForMe(it) }
-                            selectedIds.clear()
-                        }) { Icon(Icons.Outlined.Delete, stringResource(R.string.hermes_action_delete)) }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = HermesColors.appBar())
+    // Launcher lampiran.
+    val pickImages = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris: List<Uri> ->
+        uris.forEach { chatVm.addAttachment(it) }
+    }
+    val pickDocs = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetMultipleContents()
+    ) { uris: List<Uri> ->
+        uris.forEach { chatVm.addAttachment(it) }
+    }
+    var pendingPhotoFile by remember { mutableStateOf<File?>(null) }
+    val takePhoto = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { res ->
+        val f = pendingPhotoFile
+        if (res.resultCode == Activity.RESULT_OK && f != null && f.exists()) {
+            chatVm.addAttachment(Uri.fromFile(f))
+        }
+        pendingPhotoFile = null
+    }
+    fun launchCamera() {
+        try {
+            val dir = ApkShareProvider.cameraDir(ctx)
+            val name = "cam_" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US)
+                .format(Date()) + ".jpg"
+            val file = File(dir, name)
+            val uri = ApkShareProvider.camUriFor(ctx, file)
+            val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+                .putExtra(MediaStore.EXTRA_OUTPUT, uri)
+                .addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            // Beri izin tulis eksplisit ke semua app kamera kandidat.
+            val ris = ctx.packageManager.queryIntentActivities(intent, 0)
+            for (ri in ris) {
+                ctx.grantUriPermission(
+                    ri.activityInfo.packageName,
+                    uri,
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 )
-            } else {
+            }
+            pendingPhotoFile = file
+            takePhoto.launch(intent)
+        } catch (e: Exception) {
+            Toast.makeText(ctx, "Kamera tidak tersedia.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    LaunchedEffect(state.error) {
+        state.error?.let { snack.showSnackbar(it) }
+    }
+    // Tandai percakapan aktif di drawer.
+    LaunchedEffect(state.convId) {
+        historyVm.setActive(state.convId)
+    }
+
+    BackHandler(drawerState.isOpen) {
+        scope.launch { drawerState.close() }
+    }
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            DrawerContent(
+                onSelect = { id ->
+                    chatVm.openConversation(id)
+                    scope.launch { drawerState.close() }
+                },
+                onNewChat = {
+                    chatVm.newConversation()
+                    scope.launch { drawerState.close() }
+                },
+                onOpenAktivitas = {
+                    scope.launch { drawerState.close() }
+                    onOpenAktivitas()
+                },
+                onOpenMintaFitur = {
+                    scope.launch { drawerState.close() }
+                    onOpenMintaFitur()
+                },
+                onOpenAudit = {
+                    scope.launch { drawerState.close() }
+                    onOpenAudit()
+                }
+            )
+        }
+    ) {
+        Scaffold(
+            snackbarHost = { SnackbarHost(snack) },
+            topBar = {
                 TopAppBar(
                     title = {
-                        Text(chatName, color = Color.White, maxLines = 1)
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.Outlined.ArrowBack, stringResource(R.string.hermes_cd_back), tint = Color.White)
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = onOpenSearch) {
-                            Icon(Icons.Outlined.Search, stringResource(R.string.hermes_cd_search), tint = Color.White)
-                        }
-                        IconButton(onClick = { menuOpen = true }) {
-                            Icon(Icons.Outlined.MoreVert, stringResource(R.string.hermes_cd_menu), tint = Color.White)
-                        }
-                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.hermes_action_info)) },
-                                leadingIcon = { Icon(Icons.Outlined.Info, null) },
-                                onClick = { menuOpen = false; onOpenInfo() }
+                        Column {
+                            Text(
+                                text = state.title,
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 1
+                            )
+                            val sub = buildString {
+                                if (state.model.isNotBlank()) append(state.model)
+                                append(" · ~${state.tokenEstimate} token")
+                            }
+                            Text(
+                                text = sub,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
                             )
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = HermesColors.appBar())
+                    navigationIcon = {
+                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                            Icon(Icons.Filled.Menu, contentDescription = "Riwayat chat")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { chatVm.newConversation() }) {
+                            Icon(Icons.Filled.Add, contentDescription = "Chat baru")
+                        }
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(Icons.Filled.Settings, contentDescription = "Pengaturan")
+                        }
+                    IconButton(onClick = onOpenV12Hub) {
+                        Icon(Icons.Filled.Apps, contentDescription = "Fitur v12")
+                    }
+                    }
+                )
+            },
+            bottomBar = {
+                InputBar(
+                    value = input,
+                    onValueChange = { input = it },
+                    isStreaming = state.isStreaming,
+                    onSend = {
+                        chatVm.send(input)
+                        input = ""
+                    },
+                    onStop = { chatVm.stopStream() },
+                    attachments = attachments,
+                    onRemoveAttachment = { chatVm.removeAttachment(it.uri) },
+                    onPickImage = { pickImages.launch("image/*") },
+                    onTakePhoto = { launchCamera() },
+                    onPickDocument = { pickDocs.launch("*/*") },
+                    onWebFetch = { webVm.reset(); showWebInput = true },
+                    // v9.4: ambil teks input → gate di VM → input dikosongkan
+                    // setelah izin diberikan.
+                    onAskUpin = {
+                        val t = input
+                        chatVm.askUpin(t) { input = "" }
+                    },
+                    modifier = Modifier.imePadding()
                 )
             }
-        }
-    ) { pad ->
-        Box(Modifier.padding(pad).fillMaxSize()) {
-            if (rows.isEmpty()) {
-                // Empty state chat baru.
-                androidx.compose.foundation.layout.Column(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
-                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center
-                ) {
-                    Text(
-                        stringResource(R.string.hermes_chat_empty_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = HermesColors.textPrimary()
-                    )
-                    androidx.compose.foundation.layout.Spacer(
-                        androidx.compose.foundation.layout.Modifier.height(8.dp)
-                    )
-                    Text(
-                        stringResource(R.string.hermes_chat_empty_hint),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = HermesColors.textSecondary()
+        ) { pad ->
+            val listState = rememberLazyListState()
+            val all = state.messages
+            // Auto-scroll ke bawah saat pesan/stream bertambah.
+            LaunchedEffect(all.size, state.streamingText.length, state.upinBusy) {
+                if (all.isNotEmpty() || state.streamingText.isNotEmpty()) {
+                    val target = if (state.streamingText.isNotEmpty()) all.size else all.size - 1
+                    if (target >= 0) listState.animateScrollToItem(target)
+                }
+            }
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(pad)
+                    .padding(vertical = 8.dp)
+            ) {
+                items(all, key = { it.id }) { m ->
+                    val isLastAssistant = !state.isStreaming &&
+                        m.role == "assistant" &&
+                        all.lastOrNull { it.role == "assistant" }?.id == m.id
+                    MessageBubble(
+                        message = m,
+                        isLastAssistant = isLastAssistant,
+                        isSpeaking = speakingId == m.id && tts.isSpeaking,
+                        onSpeak = { speak(m) },
+                        onStopSpeak = {
+                            tts.stop()
+                            speakingId = null
+                        },
+                        onEdit = {
+                            editingMsg = m
+                            editText = m.content
+                        },
+                        onRegenerate = { chatVm.regenerate() },
+                        modifier = Modifier.padding(vertical = 4.dp)
                     )
                 }
-            } else {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    itemsIndexed(rows, key = { _, r ->
-                        when (r) {
-                            is ChatRow.Msg -> "msg-${r.message.id}"
-                            is ChatRow.DateSep -> "date-${r.label}"
-                            is ChatRow.Sys -> "sys-${r.event.id}"
+                if (state.isStreaming) {
+                    item(key = "streaming") {
+                        if (state.streamingText.isEmpty()) {
+                            Box(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                                TypingIndicator(status = "Menulis…")
+                            }
+                        } else {
+                            MessageBubble(
+                                message = UiMessage(
+                                    id = -99L,
+                                    role = "assistant",
+                                    content = state.streamingText
+                                ),
+                                isLastAssistant = false,
+                                isSpeaking = false,
+                                onSpeak = {},
+                                onStopSpeak = {},
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
                         }
-                    }) { index, row ->
-                        when (row) {
-                            is ChatRow.DateSep -> DateSeparator(row.label)
-                            is ChatRow.Sys -> SystemPill(row.event.text)
-                            is ChatRow.Msg -> {
-                                val msg = row.message
-                                // Grouping: bandingkan dengan pesan sebelumnya.
-                                val prevMsg = rows.take(index).lastOrNull()
-                                    ?.let { it as? ChatRow.Msg }?.message
-                                val grouped = isGroupedWithPrev(msg, prevMsg)
-                                // Ekor hanya di terakhir grup: cek pesan berikut.
-                                val nextMsg = rows.drop(index + 1).firstOrNull()
-                                    ?.let { it as? ChatRow.Msg }?.message
-                                val isLastInGroup = nextMsg == null ||
-                                        nextMsg.sender != msg.sender ||
-                                        (nextMsg.timestamp - msg.timestamp) > 2 * 60 * 1000
+                    }
+                }
+                // v9.4: indikator sementara saat menunggu jawaban Upin.
+                if (state.upinBusy) {
+                    item(key = "upin_typing") {
+                        Box(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                            TypingIndicator(status = "Upin sedang mengetik…")
+                        }
+                    }
+                }
+            }
+        }
+    }
 
-                                ChatBubble(
-                                    message = msg,
-                                    grouped = grouped,
-                                    isLastInGroup = isLastInGroup,
-                                    selected = msg.id in selectedIds,
-                                    onClick = {
-                                        if (selectionMode) {
-                                            if (msg.id in selectedIds) selectedIds.remove(msg.id)
-                                            else selectedIds.add(msg.id)
-                                        }
-                                    },
-                                    onLongPress = {
-                                        if (selectionMode) {
-                                            if (msg.id !in selectedIds) selectedIds.add(msg.id)
-                                        } else {
-                                            menuMessage = msg
-                                        }
-                                    },
-                                    onReplyTap = {
-                                        msg.replyToId?.let { onScrollToMessage(it) }
-                                    }
+    // Dialog edit pesan.
+    editingMsg?.let { m ->
+        AlertDialog(
+            onDismissRequest = { editingMsg = null },
+            title = { Text("Edit pesan") },
+            text = {
+                TextField(
+                    value = editText,
+                    onValueChange = { editText = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 8
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    chatVm.editAndResend(m.id, editText)
+                    editingMsg = null
+                }) { Text("Kirim ulang") }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingMsg = null }) { Text("Batal") }
+            }
+        )
+    }
+
+    // ---- "Ambil dari web" (v9.2): dialog input URL → preview → masukkan ke input.
+    if (showWebInput) {
+        AlertDialog(
+            onDismissRequest = { showWebInput = false },
+            title = { Text("Ambil dari web") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextField(
+                        value = webVm.urlText,
+                        onValueChange = webVm::setUrl,
+                        label = { Text("URL (http/https)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        "Isi halaman diambil sebagai teks — aksi manual, " +
+                            "bukan browsing otomatis.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showWebInput = false
+                        webVm.fetch()
+                    },
+                    enabled = !webVm.loading
+                ) { Text("Ambil") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWebInput = false }) { Text("Batal") }
+            }
+        )
+    }
+
+    // Preview hasil / loading / error.
+    val webBusy = webVm.loading
+    val webText = webVm.result
+    val webErr = webVm.error
+    if (webBusy || webText != null || webErr != null) {
+        val clipboard = LocalClipboardManager.current
+        AlertDialog(
+            onDismissRequest = { webVm.reset() },
+            title = { Text("Hasil ambil web") },
+            text = {
+                when {
+                    webBusy -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            CircularProgressIndicator()
+                            Text("Mengambil halaman…")
+                        }
+                    }
+                    webErr != null -> Text(webErr)
+                    else -> {
+                        val full = webText.orEmpty()
+                        val shown = full.take(PREVIEW_CHARS)
+                        Column {
+                            Text(
+                                shown,
+                                modifier = Modifier
+                                    .heightIn(max = 400.dp)
+                                    .verticalScroll(rememberScrollState()),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            if (full.length > PREVIEW_CHARS) {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    "…(dipotong, total ${full.length} karakter)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
                     }
                 }
-            }
-        }
-    }
-
-    // ── Menu long-press ──────────────────────────────────────
-    menuMessage?.let { msg ->
-        ModalBottomSheet(
-            onDismissRequest = { menuMessage = null },
-            sheetState = rememberModalBottomSheetState()
-        ) {
-            val isMine = msg.sender == "user"
-            androidx.compose.foundation.layout.Column(
-                Modifier.padding(bottom = 24.dp)
-            ) {
-                // Baris reaksi cepat.
-                androidx.compose.foundation.layout.Row(
-                    Modifier
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .fillMaxWidth(),
-                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceEvenly
-                ) {
-                    REACTION_EMOJIS.forEach { emoji ->
-                        androidx.compose.material3.TextButton(onClick = {
-                            onReaction(msg, emoji)
-                            menuMessage = null
-                        }) { Text(emoji, style = MaterialTheme.typography.headlineSmall) }
+            },
+            confirmButton = {
+                if (webText != null) {
+                    TextButton(onClick = {
+                        clipboard.setText(AnnotatedString(webText))
+                        Toast.makeText(ctx, "Disalin.", Toast.LENGTH_SHORT).show()
+                    }) { Text("Salin") }
+                }
+            },
+            dismissButton = {
+                Row {
+                    if (webText != null) {
+                        TextButton(onClick = {
+                            val insert = webText.take(PREVIEW_CHARS)
+                            input = if (input.isBlank()) insert
+                            else "$input\n\n$insert"
+                            webVm.reset()
+                            Toast.makeText(
+                                ctx,
+                                "Dimasukkan ke input — review dulu sebelum kirim.",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }) { Text("Masukkan ke input chat") }
                     }
-                }
-                androidx.compose.material3.HorizontalDivider()
-                MenuRow(R.string.hermes_bubble_copy, Icons.Outlined.ContentCopy) {
-                    clipboard.setText(AnnotatedString(msg.text)); onCopy(msg); menuMessage = null
-                }
-                MenuRow(R.string.hermes_bubble_reply, Icons.Outlined.Reply) {
-                    onReply(msg); menuMessage = null
-                }
-                MenuRow(R.string.hermes_bubble_forward, Icons.Outlined.Forward) {
-                    onForward(msg); menuMessage = null
-                }
-                MenuRow(R.string.hermes_bubble_star, Icons.Outlined.Star) {
-                    onToggleStar(msg); menuMessage = null
-                }
-                MenuRow(R.string.hermes_bubble_tts, Icons.Outlined.VolumeUp) {
-                    onSpeak(msg); menuMessage = null
-                }
-                if (isMine) {
-                    MenuRow(R.string.hermes_bubble_edit, Icons.Outlined.MoreVert) {
-                        onEdit(msg); menuMessage = null
-                    }
-                }
-                MenuRow(R.string.hermes_bubble_delete_me, Icons.Outlined.Delete) {
-                    onDeleteForMe(msg); menuMessage = null
-                }
-                if (isMine) {
-                    MenuRow(R.string.hermes_bubble_delete_all, Icons.Outlined.Delete) {
-                        onDeleteForAll(msg); menuMessage = null
-                    }
+                    TextButton(onClick = { webVm.reset() }) { Text("Tutup") }
                 }
             }
-        }
+        )
     }
 }
 
-@Composable
-private fun MenuRow(
-    labelRes: Int,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: () -> Unit
-) {
-    DropdownMenuItem(
-        text = { Text(stringResource(labelRes)) },
-        leadingIcon = { Icon(icon, null) },
-        onClick = onClick
-    )
-}
+/* akhir ChatScreen */
