@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  strings.xml — TAMBAHAN untuk UI Tahap 1–5.
+  Tempel ke res/values/strings.xml yang sudah ada (jangan timpa seluruh file).
+  Kunci deskriptif, Bahasa Indonesia. Siap diterjemahkan ke English
+  via res/values-en/strings.xml dengan kunci yang sama.
+-->
+<resources>
+    <!-- Tab daftar chat -->
+    <string name="hermes_tab_all">Semua</string>
+    <string name="hermes_tab_unread">Belum dibaca</string>
+    <string name="hermes_tab_archived">Diarsipkan</string>
+
+    <!-- Daftar chat -->
+    <string name="hermes_chat_list_empty_title">Belum ada percakapan</string>
+    <string name="hermes_chat_list_empty_action">Mulai percakapan baru</string>
+    <string name="hermes_search_hint">Cari percakapan</string>
+
+    <!-- Multi-select daftar chat -->
+    <string name="hermes_action_pin">Sematkan</string>
+    <string name="hermes_action_unpin">Lepas sematan</string>
+    <string name="hermes_action_archive">Arsipkan</string>
+    <string name="hermes_action_unarchive">Keluarkan dari arsip</string>
+    <string name="hermes_action_mark_unread">Tandai belum dibaca</string>
+    <string name="hermes_action_delete">Hapus</string>
+    <string name="hermes_action_select_all">Pilih semua</string>
+    <string name="hermes_undo_delete">Percakapan dihapus</string>
+    <string name="hermes_undo_action">Urungkan</string>
+
+    <!-- Status Tanya Upin (preview daftar chat) -->
+    <string name="hermes_upin_waiting">Menunggu Upin…</string>
+    <string name="hermes_upin_processing">Upin memproses…</string>
+    <string name="hermes_upin_failed">Tanya Upin gagal — coba lagi</string>
+
+    <!-- Menu bubble chat -->
+    <string name="hermes_bubble_copy">Salin</string>
+    <string name="hermes_bubble_reply">Balas</string>
+    <string name="hermes_bubble_forward">Teruskan</string>
+    <string name="hermes_bubble_star">Tandai</string>
+    <string name="hermes_bubble_unstar">Batalkan tanda</string>
+    <string name="hermes_bubble_tts">Bacakan</string>
+    <string name="hermes_bubble_edit">Edit</string>
+    <string name="hermes_bubble_delete_for_me">Hapus untuk saya</string>
+    <string name="hermes_bubble_delete_for_all">Hapus untuk semua</string>
+    <string name="hermes_bubble_retry">Coba lagi</string>
+    <string name="hermes_bubble_regenerate">Buat ulang</string>
+
+    <!-- Status pesan -->
+    <string name="hermes_msg_sending">Mengirim</string>
+    <string name="hermes_msg_sent">Terkirim</string>
+    <string name="hermes_msg_failed">Gagal</string>
+    <string name="hermes_msg_stopped">Dihentikan</string>
+
+    <!-- Streaming -->
+    <string name="hermes_stream_stop">Hentikan</string>
+    <string name="hermes_stream_retry">Coba lagi</string>
+    <string name="hermes_new_messages">Pesan baru</string>
+    <string name="hermes_scroll_to_bottom">Ke bawah</string>
+
+    <!-- Tanya Upin progresif -->
+    <string name="hermes_upin_queued">Mengantre</string>
+    <string name="hermes_upin_cancel">Batal</string>
+
+    <!-- Composer -->
+    <string name="hermes_composer_hint">Ketik pesan</string>
+    <string name="hermes_composer_send">Kirim</string>
+    <string name="hermes_attach_camera">Kamera</string>
+    <string name="hermes_attach_gallery">Galeri</string>
+    <string name="hermes_attach_document">Dokumen</string>
+    <string name="hermes_attach_web">Ambil dari web</string>
+    <string name="hermes_attach_ask_upin">Tanya Upin</string>
+
+    <!-- Pemisah tanggal -->
+    <string name="hermes_date_today">Hari ini</string>
+    <string name="hermes_date_yesterday">Kemarin</string>
+
+    <!-- Pencarian dalam chat -->
+    <string name="hermes_chat_search_hint">Cari dalam percakapan</string>
+
+    <!-- State umum -->
+    <string name="hermes_error_generic">Terjadi kesalahan</string>
+    <string name="hermes_retry">Coba lagi</string>
+    <string name="hermes_loading">Memuat…</string>
+    <string name="hermes_empty">Kosong</string>
+
+    <!-- Aksesibilitas (contentDescription) -->
+    <string name="hermes_cd_back">Kembali</string>
+    <string name="hermes_cd_search">Cari</string>
+    <string name="hermes_cd_menu">Menu</string>
+    <string name="hermes_cd_send">Kirim pesan</string>
+    <string name="hermes_cd_attach">Lampirkan</string>
+    <string name="hermes_cd_avatar">Foto profil</string>
+    <string name="hermes_cd_pin">Sematkan percakapan</string>
+    <string name="hermes_cd_stop_streaming">Hentikan respons</string>
+</resources>

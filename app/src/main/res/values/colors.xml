@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  colors.xml — cermin XML dari ThemeTokens.kt (untuk View/XML legacy,
+  widget, dan notifikasi). Sumber kebenaran tetap ThemeTokens.kt;
+  ubah di sana dulu, lalu sinkronkan ke sini.
+  DILARANG menambah warna hardcoded di layout/drawable.
+-->
+<resources>
+    <!-- Light -->
+    <color name="hermes_appBar">#075E54</color>
+    <color name="hermes_primary">#128C7E</color>
+    <color name="hermes_accent">#25D366</color>
+    <color name="hermes_chatBackground">#ECE5DD</color>
+    <color name="hermes_bubbleOut">#DCF8C6</color>
+    <color name="hermes_bubbleIn">#FFFFFF</color>
+    <color name="hermes_textPrimary">#111B21</color>
+    <color name="hermes_textSecondary">#667781</color>
+    <color name="hermes_divider">#E9EDEF</color>
+    <color name="hermes_destructive">#E5484D</color>
+    <color name="hermes_surface">#FFFFFF</color>
+    <color name="hermes_surfaceVariant">#F0F2F5</color>
+
+    <!-- Dark -->
+    <color name="hermes_appBar_dark">#1F2C34</color>
+    <color name="hermes_primary_dark">#00A884</color>
+    <color name="hermes_chatBackground_dark">#0B141A</color>
+    <color name="hermes_bubbleOut_dark">#005C4B</color>
+    <color name="hermes_bubbleIn_dark">#202C33</color>
+    <color name="hermes_textPrimary_dark">#E9EDEF</color>
+    <color name="hermes_textSecondary_dark">#8696A0</color>
+    <color name="hermes_divider_dark">#222D34</color>
+    <color name="hermes_destructive_dark">#EF6B6B</color>
+    <color name="hermes_surface_dark">#111B21</color>
+    <color name="hermes_surfaceVariant_dark">#1F2C34</color>
+
+    <!-- Status bar: appBar selalu gelap di kedua tema -->
+    <color name="hermes_statusBar">#075E54</color>
+    <color name="hermes_statusBar_dark">#1F2C34</color>
+</resources>

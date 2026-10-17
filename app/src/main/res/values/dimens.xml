@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  dimens.xml — cermin XML dari ThemeTokens.Dimen.
+  Sumber kebenaran tetap ThemeTokens.kt; sinkronkan ke sini bila berubah.
+  Grid dasar 4dp/8dp.
+-->
+<resources>
+    <!-- Layout -->
+    <dimen name="hermes_screen_padding">16dp</dimen>
+    <dimen name="hermes_list_gutter">8dp</dimen>
+    <dimen name="hermes_grid_4">4dp</dimen>
+    <dimen name="hermes_grid_8">8dp</dimen>
+
+    <!-- Bubble -->
+    <dimen name="hermes_bubble_radius">12dp</dimen>
+    <dimen name="hermes_bubble_tail">8dp</dimen>
+    <dimen name="hermes_bubble_gap">8dp</dimen>
+    <dimen name="hermes_bubble_gap_grouped">2dp</dimen>
+
+    <!-- Sheet / kartu / chip -->
+    <dimen name="hermes_sheet_top_radius">28dp</dimen>
+    <dimen name="hermes_card_radius">16dp</dimen>
+
+    <!-- Avatar -->
+    <dimen name="hermes_avatar_list">48dp</dimen>
+    <dimen name="hermes_avatar_chat">40dp</dimen>
+
+    <!-- Interaksi -->
+    <dimen name="hermes_tap_target_min">48dp</dimen>
+    <dimen name="hermes_icon_size">24dp</dimen>
+    <dimen name="hermes_hairline">0.5dp</dimen>
+</resources>
