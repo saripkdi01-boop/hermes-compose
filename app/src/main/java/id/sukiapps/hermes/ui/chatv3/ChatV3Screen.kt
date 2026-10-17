@@ -165,10 +165,8 @@ fun ChatV3Screen(
                                 val dim = if (inSelection && row.m.id !in selected)
                                     0.5f else 1f
                                 Box(modifier = Modifier.fillMaxWidth()) {
-                                    V3Bubble(
+                                    MuseBubble(
                                         message = row.m,
-                                        grouped = row.grouped,
-                                        lastInGroup = row.lastInGroup,
                                         modifier = Modifier.combinedClickable(
                                             onClick = {
                                                 if (inSelection) {
