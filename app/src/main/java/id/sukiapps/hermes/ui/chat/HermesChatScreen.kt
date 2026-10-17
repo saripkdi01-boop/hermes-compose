@@ -165,7 +165,7 @@ fun HermesChatScreen(
                         color = HermesColors.textPrimary()
                     )
                     androidx.compose.foundation.layout.Spacer(
-                        androidx.compose.foundation.layout.Modifier.height(8.dp)
+                        androidx.compose.ui.Modifier.height(8.dp)
                     )
                     Text(
                         stringResource(R.string.hermes_chat_empty_hint),
