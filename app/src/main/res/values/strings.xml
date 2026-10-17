@@ -119,4 +119,22 @@
 
     <!-- Aksesibilitas (contentDescription) -->
 
+
+    <!-- Status pesan -->
+
+    <!-- Menu bubble (long-press) -->
+    <string name="hermes_bubble_delete_me">Hapus untuk saya</string>
+    <string name="hermes_bubble_delete_all">Hapus untuk semua</string>
+
+    <!-- Aksi -->
+    <string name="hermes_action_star">Tandai bintang</string>
+    <string name="hermes_action_info">Info percakapan</string>
+
+    <!-- Empty state -->
+    <string name="hermes_chat_empty_title">Belum ada pesan</string>
+    <string name="hermes_chat_empty_hint">Kirim pesan pertama untuk memulai</string>
+
+    <!-- Aksesibilitas -->
+    <string name="hermes_cd_starred">Ditandai bintang</string>
+
 </resources>
