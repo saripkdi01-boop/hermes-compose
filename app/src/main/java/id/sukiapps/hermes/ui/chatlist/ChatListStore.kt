@@ -43,7 +43,7 @@ object ChatListStore {
     }
 
     private fun writeAll(map: Map<String, Meta>) {
-        JsonStore.mutate(STORE) { json ->
+        JsonStore.mutate<Unit>(STORE, { json ->
             // Hapus key yang tidak ada di map (sinkron penuh).
             val toRemove = mutableListOf<String>()
             val keys = json.keys()
@@ -58,7 +58,7 @@ object ChatListStore {
                     if (meta.displayName != null) put("displayName", meta.displayName)
                 })
             }
-        }
+        })
     }
 
     /** Terapkan metadata ke daftar item (dipanggil ViewModel setelah load chat). */
