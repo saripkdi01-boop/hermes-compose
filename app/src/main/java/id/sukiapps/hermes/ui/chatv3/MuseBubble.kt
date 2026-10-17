@@ -79,16 +79,7 @@ fun MuseBubble(
                         modifier = Modifier.padding(bottom = 4.dp)
                     )
                 }
-                if (message.isCode) {
-                    MuseCodeBlock(code = message.text)
-                } else {
-                    Text(
-                        text = message.text,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = c.textPrimary,
-                        lineHeight = MaterialTheme.typography.bodyLarge.fontSize * 1.6f
-                    )
-                }
+                MuseText(text = message.text)
             }
         }
     }
