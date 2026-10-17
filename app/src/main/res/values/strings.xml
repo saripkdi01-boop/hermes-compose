@@ -92,4 +92,31 @@
     <string name="hermes_cd_avatar">Foto profil</string>
     <string name="hermes_cd_pin">Sematkan percakapan</string>
     <string name="hermes_cd_stop_streaming">Hentikan respons</string>
+
+    <!-- Tab daftar chat -->
+
+    <!-- Daftar chat -->
+
+    <!-- Multi-select daftar chat -->
+
+    <!-- Status Tanya Upin (preview daftar chat) -->
+
+    <!-- Menu bubble chat -->
+
+    <!-- Status pesan -->
+
+    <!-- Streaming -->
+
+    <!-- Tanya Upin progresif -->
+
+    <!-- Composer -->
+
+    <!-- Pemisah tanggal -->
+
+    <!-- Pencarian dalam chat -->
+
+    <!-- State umum -->
+
+    <!-- Aksesibilitas (contentDescription) -->
+
 </resources>

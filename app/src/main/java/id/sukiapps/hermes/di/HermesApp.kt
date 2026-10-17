@@ -1,5 +1,6 @@
 package id.sukiapps.hermes.di
 
+import id.sukiapps.hermes.diagnostics.CrashReporter
 import android.app.Application
 import dagger.hilt.android.HiltAndroidApp
 import id.sukiapps.hermes.data.store.ApprovalNotifier
@@ -11,6 +12,7 @@ import id.sukiapps.hermes.data.work.V12Scheduler
 class HermesApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        CrashReporter.install(this)
         JsonStore.init(this)
         // v12 F2: approval pending baru -> notifikasi "Persetujuan".
         ApprovalStore.onPendingApproval = { item ->

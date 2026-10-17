@@ -16,7 +16,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
-import id.sukiapps.hermes.ui.theme.ThemeTokens.Darken
+import id.sukiapps.hermes.ui.theme.ThemeTokens.Dark
 import id.sukiapps.hermes.ui.theme.ThemeTokens.Light
 
 private val HermesLightScheme = lightColorScheme(
@@ -61,7 +61,7 @@ private val HermesDarkScheme = darkColorScheme(
  * Tipografi Hermes — SEMUA gaya >= 12sp. Tidak ada 8–11sp.
  * Line height 1.35x sesuai ThemeTokens.Type.
  */
-private val HermesTypography = Typography(
+private val HermesThemeTypography = Typography(
     titleMedium = TextStyle(
         fontSize = ThemeTokens.Type.name,
         lineHeight = ThemeTokens.Type.lineHeightFor(ThemeTokens.Type.name),
@@ -117,7 +117,7 @@ fun HermesTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = HermesTypography,
+        typography = HermesThemeTypography,
         content = content
     )
 }

@@ -19,7 +19,8 @@
         <package android:name="com.termux.api" />
     </queries>
 
-    <application
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+<application
         android:name=".di.HermesApp"
         android:label="Hermes Chat"
         android:icon="@mipmap/ic_launcher"
