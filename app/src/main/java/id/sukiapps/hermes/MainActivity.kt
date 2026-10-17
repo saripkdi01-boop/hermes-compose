@@ -181,7 +181,7 @@ class MainActivity : ComponentActivity() {
                             onOpenSoul = { nav.navigate(Nav.SOUL) }
                         )
                     }
-        composable("health") { HealthScreen(onBack = { navController.popBackStack() }) }
+        composable("health") { HealthScreen(onBack = { nav.popBackStack() }) }
     
                 }
             }
