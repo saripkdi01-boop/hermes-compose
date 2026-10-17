@@ -38,6 +38,9 @@ import id.sukiapps.hermes.ui.agent.SoulScreen
 import id.sukiapps.hermes.ui.agent.AktivitasScreen
 import id.sukiapps.hermes.ui.settings.SettingsScreen
 import id.sukiapps.hermes.ui.theme.HermesTheme
+import androidx.hilt.navigation.compose.hiltViewModel
+import id.sukiapps.hermes.ui.chat.ChatViewModel
+import id.sukiapps.hermes.ui.chatv3.V3LiveScreen
 
 /**
  * Single Activity — seluruh navigasi via Navigation Compose.
