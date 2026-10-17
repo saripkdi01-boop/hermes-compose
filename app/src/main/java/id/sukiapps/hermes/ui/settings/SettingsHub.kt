@@ -1,0 +1,165 @@
+package id.sukiapps.hermes.ui.settings
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Hub
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
+import id.sukiapps.hermes.ui.theme.PremiumDark
+import id.sukiapps.hermes.ui.theme.PremiumSpacing
+
+/**
+ * Settings Hub — halaman utama pengaturan.
+ * Header profil + grid 2 kolom + daftar sering diakses.
+ */
+
+data class SettingsCard(
+    val icon: ImageVector,
+    val title: String,
+    val subtitle: String,
+    val route: String
+)
+
+@Composable
+fun SettingsHubScreen(
+    onNavigate: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    // Status real-time — diisi dari ViewModel saat integrasi.
+    modelName: String = "Belum diatur",
+    activeConnectors: Int = 0
+) {
+    val cards = listOf(
+        SettingsCard(Icons.Filled.SmartToy, "Model AI", "Model: $modelName", "settings/model"),
+        SettingsCard(Icons.Filled.Face, "Persona", "Atur kepribadian", "settings/persona"),
+        SettingsCard(Icons.Filled.Psychology, "Jiwa Hermes", "Memori & jiwa", "settings/soul"),
+        SettingsCard(Icons.Filled.Hub, "Konektor", "$activeConnectors aktif", "settings/connectors"),
+        SettingsCard(Icons.Filled.RecordVoiceOver, "TTS", "Suara & bacaan", "settings/tts"),
+        SettingsCard(Icons.Filled.Backup, "Backup", "Cadangkan data", "settings/backup"),
+        SettingsCard(Icons.Filled.Palette, "Tampilan", "Tema & warna", "settings/appearance"),
+    )
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(PremiumDark.chatBackground)
+    ) {
+        // Header profil singkat.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(PremiumSpacing.md),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(PremiumDark.accent),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "H",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = PremiumDark.appBar
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column {
+                Text(
+                    text = "Pengaturan",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = PremiumDark.textPrimary
+                )
+                Text(
+                    text = "Sesuaikan Hermes sesukamu",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = PremiumDark.textSecondary
+                )
+            }
+        }
+
+        // Grid 2 kolom.
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(PremiumSpacing.md),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(cards) { card ->
+                SettingsHubCard(card = card, onClick = { onNavigate(card.route) })
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingsHubCard(
+    card: SettingsCard,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(PremiumDark.cardBackground)
+            .clickable(onClick = onClick)
+            .padding(16.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(PremiumDark.surfaceVariant),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = card.icon,
+                contentDescription = null,
+                tint = PremiumDark.accent,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = card.title,
+            style = MaterialTheme.typography.titleSmall,
+            color = PremiumDark.textPrimary
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = card.subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = PremiumDark.textSecondary
+        )
+    }
+}
