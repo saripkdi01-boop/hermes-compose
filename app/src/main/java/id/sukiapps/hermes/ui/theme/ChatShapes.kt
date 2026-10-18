@@ -19,6 +19,8 @@ import androidx.compose.ui.unit.dp
  * Max lebar 78% layar diatur di layout (Modifier.fillMaxWidth(0.78f)),
  * bukan di shape.
  *
+ * v14: nilai diambil langsung (konstanta geometri, bukan warna tema).
+ *
  * @param tailRight true = ekor kanan bawah (pesan keluar),
  * false = ekor kiri bawah (pesan masuk).
  * @param grouped true = bubble rapat (pesan berurutan pengirim sama
@@ -33,8 +35,8 @@ class ChatBubbleShape(
         layoutDirection: LayoutDirection,
         density: Density
     ): Outline {
-        val radiusPx = with(density) { ThemeTokens.Dimen.bubbleRadius.toPx() }
-        val tailPx = with(density) { ThemeTokens.Dimen.bubbleTail.toPx() }
+        val radiusPx = with(density) { 12.dp.toPx() }
+        val tailPx = with(density) { 8.dp.toPx() }
         val corner = CornerRadius(radiusPx, radiusPx)
         val path = Path()
 
@@ -76,18 +78,18 @@ fun incomingBubbleShape(grouped: Boolean = false) =
     ChatBubbleShape(tailRight = false, grouped = grouped)
 
 /** Pill pemisah tanggal di tengah chat. */
-val dateSeparatorShape = RoundedCornerShape(ThemeTokens.Dimen.chipPillRadius)
+val dateSeparatorShape = RoundedCornerShape(999.dp)
 
 /** Chip reaksi di tepi bawah bubble. */
-val reactionChipShape = RoundedCornerShape(ThemeTokens.Dimen.chipPillRadius)
+val reactionChipShape = RoundedCornerShape(999.dp)
 
 /** Kartu lampiran / info: radius 16dp. */
-val cardShape = RoundedCornerShape(ThemeTokens.Dimen.cardRadius)
+val cardShape = RoundedCornerShape(16.dp)
 
 /** Bottom sheet: radius atas 28dp. */
 val bottomSheetShape = RoundedCornerShape(
-    topStart = ThemeTokens.Dimen.sheetTopRadius,
-    topEnd = ThemeTokens.Dimen.sheetTopRadius,
+    topStart = 28.dp,
+    topEnd = 28.dp,
     bottomStart = 0.dp,
     bottomEnd = 0.dp
 )

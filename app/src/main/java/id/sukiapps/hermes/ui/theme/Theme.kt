@@ -1,162 +1,103 @@
 package id.sukiapps.hermes.ui.theme
 
-import android.app.Activity
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import androidx.core.view.WindowCompat
-import id.sukiapps.hermes.ui.theme.ThemeTokens.Dark
-import id.sukiapps.hermes.ui.theme.ThemeTokens.Light
-
-private val HermesLightScheme = lightColorScheme(
-    primary = Light.primary,
-    onPrimary = Light.onPrimary,
-    primaryContainer = Light.bubbleOut,
-    onPrimaryContainer = Light.textPrimary,
-    secondary = Light.accent,
-    onSecondary = Light.onPrimary,
-    surface = Light.surface,
-    onSurface = Light.textPrimary,
-    surfaceVariant = Light.surfaceVariant,
-    onSurfaceVariant = Light.textSecondary,
-    background = Light.surface,
-    onBackground = Light.textPrimary,
-    error = Light.destructive,
-    onError = Light.onPrimary,
-    outline = Light.divider,
-    outlineVariant = Light.divider
-)
-
-private val HermesDarkScheme = darkColorScheme(
-    primary = Dark.primary,
-    onPrimary = Dark.onPrimary,
-    primaryContainer = Dark.bubbleOut,
-    onPrimaryContainer = Dark.textPrimary,
-    secondary = Dark.accent,
-    onSecondary = Dark.onBadgeUnread,
-    surface = Dark.surface,
-    onSurface = Dark.textPrimary,
-    surfaceVariant = Dark.surfaceVariant,
-    onSurfaceVariant = Dark.textSecondary,
-    background = Dark.surface,
-    onBackground = Dark.textPrimary,
-    error = Dark.destructive,
-    onError = Dark.onPrimary,
-    outline = Dark.divider,
-    outlineVariant = Dark.divider
-)
 
 /**
- * Tipografi Hermes — SEMUA gaya >= 12sp. Tidak ada 8–11sp.
- * Line height 1.35x sesuai ThemeTokens.Type.
+ * Tema Hermes v14 — satu pintu masuk untuk seluruh UI.
+ *
+ * @param darkTheme true = gelap, false = terang.
+ * @param contentStyle MUSE (chat) atau PREMIUM (settings/soul).
  */
-private val HermesThemeTypography = Typography(
+enum class ContentStyle { MUSE, PREMIUM }
+
+private val V14Typography = Typography(
+    displayLarge = TextStyle(
+        fontSize = 24.sp, fontWeight = FontWeight.Bold, lineHeight = 32.sp
+    ),
+    headlineMedium = TextStyle(
+        fontSize = 20.sp, fontWeight = FontWeight.SemiBold, lineHeight = 28.sp
+    ),
+    titleLarge = TextStyle(
+        fontSize = 17.sp, fontWeight = FontWeight.SemiBold, lineHeight = 24.sp
+    ),
     titleMedium = TextStyle(
-        fontSize = ThemeTokens.Type.name,
-        lineHeight = ThemeTokens.Type.lineHeightFor(ThemeTokens.Type.name),
-        fontWeight = FontWeight.Bold
+        fontSize = 15.sp, fontWeight = FontWeight.SemiBold, lineHeight = 20.sp
     ),
     bodyLarge = TextStyle(
-        fontSize = ThemeTokens.Type.message,
-        lineHeight = ThemeTokens.Type.lineHeightFor(ThemeTokens.Type.message),
-        fontWeight = FontWeight.Normal
+        fontSize = 15.sp, fontWeight = FontWeight.Normal, lineHeight = 24.sp
     ),
     bodyMedium = TextStyle(
-        fontSize = ThemeTokens.Type.messageSecondary,
-        lineHeight = ThemeTokens.Type.lineHeightFor(ThemeTokens.Type.messageSecondary),
-        fontWeight = FontWeight.Normal
+        fontSize = 13.sp, fontWeight = FontWeight.Normal, lineHeight = 20.sp
+    ),
+    labelLarge = TextStyle(
+        fontSize = 13.sp, fontWeight = FontWeight.Medium, lineHeight = 18.sp
     ),
     labelSmall = TextStyle(
-        fontSize = ThemeTokens.Type.timestamp, // 12sp = minimum
-        lineHeight = ThemeTokens.Type.lineHeightFor(ThemeTokens.Type.timestamp),
-        fontWeight = FontWeight.Normal
+        fontSize = 12.sp, fontWeight = FontWeight.Medium,
+        lineHeight = 16.sp, letterSpacing = (0.08f).sp
     ),
-    labelMedium = TextStyle(
-        fontSize = ThemeTokens.Type.caption, // 12sp = minimum
-        lineHeight = ThemeTokens.Type.lineHeightFor(ThemeTokens.Type.caption),
-        fontWeight = FontWeight.Normal
+    bodySmall = TextStyle(
+        fontSize = 12.sp, fontWeight = FontWeight.Normal, lineHeight = 16.sp
     )
 )
 
-/**
- * HermesTheme — satu-satunya theme aplikasi.
- *
- * @param darkTheme mengikuti pengaturan sistem/aplikasi. Tidak ada layar
- * yang boleh jatuh ke fallback tema terang saat dark aktif.
- * @param dynamicColor SELALU false — palet Hermes dikunci dari ThemeTokens,
- * dynamic color Android 12+ dilarang agar identitas visual konsisten.
- */
 @Composable
 fun HermesTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    contentStyle: ContentStyle = ContentStyle.MUSE,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = if (darkTheme) HermesDarkScheme else HermesLightScheme
-
-    val view = LocalView.current
-    if (!view.isInEditMode) {
-        SideEffect {
-            val window = (view.context as Activity).window
-            val appBar = (if (darkTheme) Dark.appBar else Light.appBar).toArgb()
-            window.statusBarColor = appBar
-            WindowCompat.getInsetsController(window, view)
-                .isAppearanceLightStatusBars = false // appBar selalu gelap
-        }
+    val palette = when (contentStyle) {
+        ContentStyle.MUSE -> if (darkTheme) museDarkPalette() else museLightPalette()
+        ContentStyle.PREMIUM -> if (darkTheme) premiumDarkPalette() else premiumLightPalette()
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = HermesThemeTypography,
-        content = content
-    )
-}
+    val colorScheme = if (darkTheme) {
+        darkColorScheme(
+            primary = palette.accent,
+            onPrimary = palette.textPrimary,
+            background = palette.background,
+            onBackground = palette.textPrimary,
+            surface = palette.surface,
+            onSurface = palette.textPrimary,
+            surfaceVariant = palette.surfaceVariant,
+            onSurfaceVariant = palette.textSecondary,
+            error = palette.errorColor,
+            onError = palette.textPrimary,
+            outline = palette.divider,
+            outlineVariant = palette.divider
+        )
+    } else {
+        lightColorScheme(
+            primary = palette.accent,
+            onPrimary = palette.background,
+            background = palette.background,
+            onBackground = palette.textPrimary,
+            surface = palette.surface,
+            onSurface = palette.textPrimary,
+            surfaceVariant = palette.surfaceVariant,
+            onSurfaceVariant = palette.textSecondary,
+            error = palette.errorColor,
+            onError = palette.textPrimary,
+            outline = palette.divider,
+            outlineVariant = palette.divider
+        )
+    }
 
-/**
- * Akses token warna sesuai tema aktif. Pakai ini di semua screen,
- * JANGAN baca ThemeTokens.Light/Dark langsung dari composable.
- */
-object HermesColors {
-    @Composable
-    fun appBar() = if (isSystemInDarkTheme()) Dark.appBar else Light.appBar
-    @Composable
-    fun chatBackground() = if (isSystemInDarkTheme()) Dark.chatBackground else Light.chatBackground
-    @Composable
-    fun bubbleOut() = if (isSystemInDarkTheme()) Dark.bubbleOut else Light.bubbleOut
-    @Composable
-    fun bubbleIn() = if (isSystemInDarkTheme()) Dark.bubbleIn else Light.bubbleIn
-    @Composable
-    fun textPrimary() = if (isSystemInDarkTheme()) Dark.textPrimary else Light.textPrimary
-    @Composable
-    fun textSecondary() = if (isSystemInDarkTheme()) Dark.textSecondary else Light.textSecondary
-    @Composable
-    fun divider() = if (isSystemInDarkTheme()) Dark.divider else Light.divider
-    @Composable
-    fun destructive() = if (isSystemInDarkTheme()) Dark.destructive else Light.destructive
-    @Composable
-    fun badgeUnread() = if (isSystemInDarkTheme()) Dark.badgeUnread else Light.badgeUnread
-    @Composable
-    fun onBadgeUnread() = if (isSystemInDarkTheme()) Dark.onBadgeUnread else Light.onBadgeUnread
-    @Composable
-    fun streamingDot() = if (isSystemInDarkTheme()) Dark.streamingDot else Light.streamingDot
-    @Composable
-    fun quoteBar() = if (isSystemInDarkTheme()) Dark.quoteBar else Light.quoteBar
-    @Composable
-    fun upinAccent() = if (isSystemInDarkTheme()) Dark.upinAccent else Light.upinAccent
-    @Composable
-    fun systemPill() = if (isSystemInDarkTheme()) Dark.systemPill else Light.systemPill
-    @Composable
-    fun onSystemPill() = if (isSystemInDarkTheme()) Dark.onSystemPill else Light.onSystemPill
-    @Composable
-    fun surfaceVariant() = if (isSystemInDarkTheme()) Dark.surfaceVariant else Light.surfaceVariant
+    CompositionLocalProvider(LocalChatPalette provides palette) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = V14Typography,
+            content = content
+        )
+    }
 }
