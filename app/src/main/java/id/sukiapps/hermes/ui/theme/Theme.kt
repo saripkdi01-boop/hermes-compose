@@ -13,9 +13,12 @@ import androidx.compose.ui.unit.sp
 
 /**
  * Tema Hermes v14 — satu pintu masuk untuk seluruh UI.
+ * Menyediakan: MaterialTheme + LocalChatPalette + LocalSettingPalette
+ * + LocalSettingsDensity + LocalSettingsShape + LocalSettingsMotion.
  *
  * @param darkTheme true = gelap, false = terang.
  * @param contentStyle MUSE (chat) atau PREMIUM (settings/soul).
+ * @param settingsDensity compact atau comfortable (dari prefs).
  */
 enum class ContentStyle { MUSE, PREMIUM }
 
@@ -54,46 +57,55 @@ private val V14Typography = Typography(
 fun HermesTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     contentStyle: ContentStyle = ContentStyle.MUSE,
+    settingsDensity: SettingsDensity = SettingsDensityCompact,
     content: @Composable () -> Unit
 ) {
-    val palette = when (contentStyle) {
+    val chatPalette = when (contentStyle) {
         ContentStyle.MUSE -> if (darkTheme) museDarkPalette() else museLightPalette()
         ContentStyle.PREMIUM -> if (darkTheme) premiumDarkPalette() else premiumLightPalette()
     }
+    val settingPalette =
+        if (darkTheme) settingDarkPalette() else settingLightPalette()
 
     val colorScheme = if (darkTheme) {
         darkColorScheme(
-            primary = palette.accent,
-            onPrimary = palette.textPrimary,
-            background = palette.background,
-            onBackground = palette.textPrimary,
-            surface = palette.surface,
-            onSurface = palette.textPrimary,
-            surfaceVariant = palette.surfaceVariant,
-            onSurfaceVariant = palette.textSecondary,
-            error = palette.errorColor,
-            onError = palette.textPrimary,
-            outline = palette.divider,
-            outlineVariant = palette.divider
+            primary = chatPalette.accent,
+            onPrimary = chatPalette.textPrimary,
+            background = chatPalette.background,
+            onBackground = chatPalette.textPrimary,
+            surface = chatPalette.surface,
+            onSurface = chatPalette.textPrimary,
+            surfaceVariant = chatPalette.surfaceVariant,
+            onSurfaceVariant = chatPalette.textSecondary,
+            error = chatPalette.errorColor,
+            onError = chatPalette.textPrimary,
+            outline = chatPalette.divider,
+            outlineVariant = chatPalette.divider
         )
     } else {
         lightColorScheme(
-            primary = palette.accent,
-            onPrimary = palette.background,
-            background = palette.background,
-            onBackground = palette.textPrimary,
-            surface = palette.surface,
-            onSurface = palette.textPrimary,
-            surfaceVariant = palette.surfaceVariant,
-            onSurfaceVariant = palette.textSecondary,
-            error = palette.errorColor,
-            onError = palette.textPrimary,
-            outline = palette.divider,
-            outlineVariant = palette.divider
+            primary = chatPalette.accent,
+            onPrimary = chatPalette.background,
+            background = chatPalette.background,
+            onBackground = chatPalette.textPrimary,
+            surface = chatPalette.surface,
+            onSurface = chatPalette.textPrimary,
+            surfaceVariant = chatPalette.surfaceVariant,
+            onSurfaceVariant = chatPalette.textSecondary,
+            error = chatPalette.errorColor,
+            onError = chatPalette.textPrimary,
+            outline = chatPalette.divider,
+            outlineVariant = chatPalette.divider
         )
     }
 
-    CompositionLocalProvider(LocalChatPalette provides palette) {
+    CompositionLocalProvider(
+        LocalChatPalette provides chatPalette,
+        LocalSettingPalette provides settingPalette,
+        LocalSettingsDensity provides settingsDensity,
+        LocalSettingsShape provides DefaultSettingsShape,
+        LocalSettingsMotion provides DefaultSettingsMotion
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = V14Typography,
