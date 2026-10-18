@@ -1,86 +1,110 @@
 package id.sukiapps.hermes.ui.chatv3
 
+import android.content.Context
 import id.sukiapps.hermes.data.store.JsonStore
-import org.json.JSONArray
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 /**
- * V3ExtrasStore — reaksi, bintang, draft via JsonStore.
- * Store: "chatv3_extras". Isolasi penuh dari ui.chat.
+ * Penyimpanan ekstra per chat: bintang, reaksi, teks edit, draft.
+ * Berbasis StateFlow — UI observe, bukan baca langsung.
+ *
+ * Disimpan sebagai JSON per chat: filesDir/chatv3_extras/<chatId>.json
+ * Struktur: { "<msgId>": { "starred": bool, "reaction": "👍"|null, "editedText": "..."|null } }
  */
-object V3ExtrasStore {
+class V3ExtrasStore(context: Context, private val chatId: String) {
 
-    private const val STORE = "chatv3_extras"
+    data class Extras(
+        val starred: Boolean = false,
+        val reaction: String? = null,
+        val editedText: String? = null,
+    )
 
-    private fun chatObj(chatId: String): JSONObject {
-        val root = try {
-            JsonStore.load(STORE)
-        } catch (_: Exception) {
-            JSONObject()
-        }
-        return root.optJSONObject(chatId) ?: JSONObject()
-    }
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val _state = MutableStateFlow<Map<String, Extras>>(emptyMap())
+    val state: StateFlow<Map<String, Extras>> = _state.asStateFlow()
 
-    private fun saveChat(chatId: String, obj: JSONObject) {
-        JsonStore.mutate<Unit>(STORE, { root ->
-            root.put(chatId, obj)
-        })
-    }
+    private val storeName = "chatv3_extras_$chatId"
 
-    fun toggleReaction(chatId: String, messageId: String, emoji: String) {
-        val chat = chatObj(chatId)
-        val reactions = chat.optJSONObject("reactions") ?: JSONObject()
-        val entry = reactions.optJSONObject(messageId) ?: JSONObject()
-        val counts = entry.optJSONObject("counts") ?: JSONObject()
-        val my = entry.optString("my", null).takeIf { !it.isNullOrEmpty() }
-
-        if (my == emoji) {
-            val c = (counts.optInt(emoji, 1) - 1).coerceAtLeast(0)
-            if (c == 0) counts.remove(emoji) else counts.put(emoji, c)
-            entry.remove("my")
-        } else {
-            if (my != null) {
-                val c = (counts.optInt(my, 1) - 1).coerceAtLeast(0)
-                if (c == 0) counts.remove(my) else counts.put(my, c)
+    init {
+        scope.launch {
+            val json = JsonStore.load(storeName)
+            val map = mutableMapOf<String, Extras>()
+            val keys = json.keys()
+            while (keys.hasNext()) {
+                val k = keys.next()
+                val o = json.optJSONObject(k) ?: continue
+                map[k] = Extras(
+                    starred = o.optBoolean("starred", false),
+                    reaction = o.optString("reaction", null as String?),
+                    editedText = o.optString("editedText", null as String?),
+                )
             }
-            counts.put(emoji, counts.optInt(emoji, 0) + 1)
-            entry.put("my", emoji)
+            _state.value = map
         }
-        entry.put("counts", counts)
-        reactions.put(messageId, entry)
-        chat.put("reactions", reactions)
-        saveChat(chatId, chat)
     }
 
-    fun toggleStar(chatId: String, messageId: String): Boolean {
-        val chat = chatObj(chatId)
-        val arr = chat.optJSONArray("starred") ?: JSONArray()
-        val list = (0 until arr.length()).map { arr.getString(it) }.toMutableList()
-        val nowStarred = if (messageId in list) {
-            list.remove(messageId)
-            false
-        } else {
-            list.add(messageId)
-            true
+    private fun persist(map: Map<String, Extras>) {
+        val json = JSONObject()
+        map.forEach { (k, v) ->
+            json.put(k, JSONObject().apply {
+                put("starred", v.starred)
+                if (v.reaction != null) put("reaction", v.reaction)
+                if (v.editedText != null) put("editedText", v.editedText)
+            })
         }
-        val newArr = JSONArray()
-        list.forEach { newArr.put(it) }
-        chat.put("starred", newArr)
-        saveChat(chatId, chat)
-        return nowStarred
+        JsonStore.save(storeName, json) {}
     }
 
-    fun isStarred(chatId: String, messageId: String): Boolean {
-        val arr = chatObj(chatId).optJSONArray("starred") ?: return false
-        return (0 until arr.length()).any { arr.getString(it) == messageId }
+    private fun update(msgId: String, transform: (Extras) -> Extras) {
+        val next = _state.value.toMutableMap()
+        next[msgId] = transform(next[msgId] ?: Extras())
+        _state.value = next
+        scope.launch { persist(next) }
     }
 
-    fun saveDraft(chatId: String, text: String) {
-        val chat = chatObj(chatId)
-        if (text.isBlank()) chat.remove("draft") else chat.put("draft", text)
-        saveChat(chatId, chat)
+    fun toggleStar(msgId: String) = update(msgId) { it.copy(starred = !it.starred) }
+
+    fun toggleReaction(msgId: String, emoji: String) = update(msgId) {
+        it.copy(reaction = if (it.reaction == emoji) null else emoji)
     }
 
-    fun loadDraft(chatId: String): String =
-        chatObj(chatId).optString("draft", "")
+    fun clearReaction(msgId: String) = update(msgId) { it.copy(reaction = null) }
+
+    fun editText(msgId: String, newText: String) = update(msgId) { it.copy(editedText = newText) }
+
+    fun isStarred(msgId: String): Boolean = _state.value[msgId]?.starred == true
+
+    fun getReaction(msgId: String): String? = _state.value[msgId]?.reaction
+
+    /** Ekspor satu pesan sebagai Markdown. */
+    fun exportMd(msgId: String, originalText: String, senderName: String): String {
+        val e = _state.value[msgId]
+        val text = e?.editedText ?: originalText
+        val star = if (e?.starred == true) "⭐ " else ""
+        return "$star**$senderName**\n\n$text\n"
+    }
+
+    // ===== Draft per chat (terpisah dari extras pesan) =====
+    private val draftStore = "chatv3_draft_$chatId"
+
+    fun saveDraft(text: String) {
+        scope.launch {
+            val j = JSONObject().put("draft", text)
+            JsonStore.save(draftStore, j) {}
+        }
+    }
+
+    fun loadDraft(onLoaded: (String) -> Unit) {
+        scope.launch {
+            val j = JsonStore.load(draftStore)
+            onLoaded(j.optString("draft", ""))
+        }
+    }
 }
