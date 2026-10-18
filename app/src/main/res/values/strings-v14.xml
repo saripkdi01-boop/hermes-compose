@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- String v14 Fase H. File aditif: jangan edit strings.xml lama, tambah di sini. -->
+<resources>
+    <!-- Bubble pesan parsial (V3PartialBubble) -->
+    <string name="v14_pesan_terpotong">Pesan terpotong karena koneksi terputus.</string>
+    <string name="v14_lanjutkan">Lanjutkan</string>
+    <string name="v14_coba_lagi">Coba lagi</string>
+
+    <!-- Chat umum -->
+    <string name="v14_berhenti">Berhenti</string>
+    <string name="v14_salin">Salin</string>
+    <string name="v14_tersalin">Tersalin</string>
+    <string name="v14_turun_ke_terbaru">Turun ke pesan terbaru</string>
+    <string name="v14_halo_saya_hermes">Halo, saya Hermes</string>
+    <string name="v14_ketik_pesan">Ketik pesan…</string>
+
+    <!-- Status pesan (TalkBack) -->
+    <string name="v14_status_mengirim">mengirim</string>
+    <string name="v14_status_terkirim">terkirim</string>
+    <string name="v14_status_gagal">gagal terkirim</string>
+</resources>
