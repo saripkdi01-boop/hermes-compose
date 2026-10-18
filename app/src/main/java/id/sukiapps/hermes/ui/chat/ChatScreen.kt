@@ -77,7 +77,7 @@ private const val PREVIEW_CHARS = 4000
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen(
+fun HermesChatScreen(
     onOpenSettings: () -> Unit,
     onOpenV12Hub: () -> Unit,
     onOpenAktivitas: () -> Unit,
