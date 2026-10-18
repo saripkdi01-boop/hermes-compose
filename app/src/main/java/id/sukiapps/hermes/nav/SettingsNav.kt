@@ -1,57 +1,85 @@
 package id.sukiapps.hermes.nav
 
-/**
- * Route Pengaturan v14 — tiga tingkat: Hub → Detail Fitur → (panduan
- * sebagai expandable card, bukan route baru).
- *
- * Fungsi settingsGraph() menyusul di FASE F setelah layar-layar
- * settings jadi (tidak boleh stub di fase ini).
- */
+import androidx.compose.runtime.Composable
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import id.sukiapps.hermes.ui.settings.FeatureCatalog
+import id.sukiapps.hermes.ui.settings.FeatureDetailScreen
+import id.sukiapps.hermes.ui.settings.FeatureStatus
+import id.sukiapps.hermes.ui.settings.SettingsHubScreen
+import id.sukiapps.hermes.ui.settings.SetupChecklist
+import id.sukiapps.hermes.ui.settings.ChecklistItem
+
+/** Konstanta route settings. */
 object SettingsRoutes {
     const val HUB = "settings/hub"
     const val SETUP = "settings/setup"
-    const val MODEL = "settings/model"
-    const val PARAMETERS = "settings/parameters"
-    const val PERSONA = "settings/persona"
-    const val SOUL = "settings/soul"
-    const val CONNECTION = "settings/connection"
-    const val API_KEY = "settings/apikey"
-    const val CONNECTOR_GITHUB = "settings/connector/github"
-    const val CONNECTOR_TELEGRAM = "settings/connector/telegram"
-    const val CONNECTOR_TERMUX = "settings/connector/termux"
-    const val CONNECTOR_UPIN = "settings/connector/upin"
-    const val CONNECTOR_SERVERLESS = "settings/connector/serverless"
-    const val APPEARANCE = "settings/appearance"
-    const val TTS = "settings/tts"
-    const val BACKUP = "settings/backup"
-    const val AUDIT = "settings/audit"
-
-    val ALL = listOf(
-        HUB, SETUP, MODEL, PARAMETERS, PERSONA, SOUL,
-        CONNECTION, API_KEY, CONNECTOR_GITHUB, CONNECTOR_TELEGRAM,
-        CONNECTOR_TERMUX, CONNECTOR_UPIN, CONNECTOR_SERVERLESS,
-        APPEARANCE, TTS, BACKUP, AUDIT
-    )
-
-    /** Urutan setup logis untuk SetupChecklist (BAGIAN 6 masterprompt). */
-    val SETUP_ORDER = listOf(
-        CONNECTION, // 1. Base URL — tanpa ini semua gagal
-        API_KEY, // 2. API key
-        MODEL, // 3. Muat & pilih model
-        PARAMETERS, // 4-5. Uji + parameter (digabung di UI)
-        PERSONA, // 6. Persona
-        CONNECTOR_GITHUB, // 7.
-        CONNECTOR_TELEGRAM, // 8.
-        CONNECTOR_UPIN, // 9.
-        CONNECTOR_TERMUX, // 10.
-        CONNECTOR_SERVERLESS, // 11.
-        SOUL, // jiwa (setelah persona)
-        APPEARANCE, // 12.
-        TTS, // 13.
-        BACKUP, // 14. sangat disarankan
-        AUDIT // 15. read-only
-    )
-
-    /** 4 langkah wajib pertama — bobot 60% progress. */
-    val REQUIRED = listOf(CONNECTION, API_KEY, MODEL, PARAMETERS)
+    val ALL: List<String> = listOf(HUB, SETUP) +
+        FeatureCatalog.all.map { it.route }
 }
+
+/**
+ * Graph navigasi settings. Daftarkan ke NavHost utama:
+ * ```
+ * settingsGraph(navController, ...)
+ * ```
+ */
+@Composable
+fun settingsGraph(
+    navController: NavHostController,
+    statuses: Map<String, FeatureStatus> = emptyMap(),
+    modelName: String? = null,
+    apiKeySaved: Boolean = false,
+) {
+    NavHost(
+        navController = navController,
+        startDestination = SettingsRoutes.HUB,
+    ) {
+        composable(SettingsRoutes.HUB) {
+            SettingsHubScreen(
+                statuses = statuses,
+                modelName = modelName,
+                apiKeySaved = apiKeySaved,
+                onFeatureClick = { route -> navController.navigate(route) },
+                onSetupChecklist = { navController.navigate(SettingsRoutes.SETUP) },
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(SettingsRoutes.SETUP) {
+            val items = FeatureCatalog.setupOrder.map { def ->
+                ChecklistItem(
+                    featureId = def.id,
+                    title = def.title,
+                    status = statuses[def.id] ?: FeatureStatus.Unknown,
+                    order = def.order,
+                )
+            }
+            SetupChecklist(
+                items = items,
+                requiredTotal = FeatureCatalog.all.count { it.required },
+                onItemClick = { id ->
+                    FeatureCatalog.byId(id)?.let {
+                        navController.navigate(it.route)
+                    }
+                },
+                onRetest = { /* TODO Fase G: panggil ConnectorTester */ },
+            )
+        }
+        // 15 rute fitur — satu composable generik per fitur
+        FeatureCatalog.all.forEach { def ->
+            composable(def.route) {
+                FeatureDetailScreen(
+                    def = def,
+                    status = statuses[def.id] ?: FeatureStatus.Unknown,
+                    onBack = { navController.popBackStack() },
+                )
+            }
+        }
+    }
+}
+
+/** Helper: buat NavController khusus settings (bila belum ada). */
+@Composable
+fun rememberSettingsNavController(): NavHostController = rememberNavController()
