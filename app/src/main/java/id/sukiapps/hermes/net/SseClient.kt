@@ -6,6 +6,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
@@ -36,7 +37,13 @@ class SseClient(private val baseClient: OkHttpClient) {
         /** Token/potongan teks yang datang. */
         val onToken: (String) -> Unit = {},
         val onDone: () -> Unit = {},
-        val onError: (message: String, retryable: Boolean) -> Unit = { _, _ -> }
+        val onError: (message: String, retryable: Boolean) -> Unit = { _, _ -> },
+        /**
+         * Delta tool_call (web_fetch): index slot, id (kosong di chunk lanjutan),
+         * nama fungsi, fragmen argumen JSON. Aditif untuk tool-loop.
+         */
+        val onToolCall: (index: Int, id: String, name: String, argsFragment: String) -> Unit =
+            { _, _, _, _ -> }
     )
 
     companion object {
@@ -223,7 +230,34 @@ class SseClient(private val baseClient: OkHttpClient) {
         // Ekstrak delta.content dari JSON OpenAI-compatible
         val token = extractDelta(data)
         if (token.isNotEmpty()) cb.onToken(token)
+        // Tool calls (aditif): hanya parse bila chunk mengandung tool_calls
+        if (data.contains("\"tool_calls\"")) extractToolCalls(data, cb)
         return null
+    }
+
+    /**
+     * Ambil choices[0].delta.tool_calls[] via org.json.
+     * Dipanggil hanya bila data mengandung "tool_calls" (di flushData).
+     * Malformed chunk diabaikan — tidak boleh menggagalkan stream.
+     */
+    private fun extractToolCalls(json: String, cb: StreamCallbacks) {
+        try {
+            val root = JSONObject(json)
+            val choices = root.optJSONArray("choices") ?: return
+            val delta = choices.optJSONObject(0)?.optJSONObject("delta") ?: return
+            val tcs = delta.optJSONArray("tool_calls") ?: return
+            for (i in 0 until tcs.length()) {
+                val tc = tcs.optJSONObject(i) ?: continue
+                val index = tc.optInt("index", 0)
+                val id = tc.optString("id", "")
+                val fn = tc.optJSONObject("function")
+                val name = fn?.optString("name", "").orEmpty()
+                val args = fn?.optString("arguments", "").orEmpty()
+                cb.onToolCall(index, id, name, args)
+            }
+        } catch (_: Exception) {
+            // abaikan: chunk tool_call malformed bukan fatal
+        }
     }
 
     /** Ambil choices[0].delta.content tanpa library JSON berat. */
