@@ -3,8 +3,6 @@ package id.sukiapps.hermes.net
 import id.sukiapps.hermes.data.SettingsRepository
 import id.sukiapps.hermes.tool.ToolCall
 import id.sukiapps.hermes.tool.ToolLoop
-import id.sukiapps.hermes.ui.live.LiveStatus
-import id.sukiapps.hermes.ui.live.LiveStatusBus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -45,16 +43,13 @@ class ChatRepository(
     ): SendResult = withContext(Dispatchers.IO) {
         val baseUrl = settings.connection.value.baseUrl.trim().trimEnd('/')
         if (baseUrl.isEmpty()) {
-            LiveStatusBus.post(LiveStatus.Idle)
             return@withContext SendResult.NeedBaseUrl
         }
 
         val apiKey = settings.getApiKey()
         if (apiKey.isEmpty()) {
-            LiveStatusBus.post(LiveStatus.Idle)
             return@withContext SendResult.NeedApiKey
         }
-        LiveStatusBus.post(LiveStatus.Connecting)
 
         val model = settings.model.value.modelId.ifEmpty { "gpt-4o-mini" }
         val params = settings.parameters.value
@@ -64,7 +59,6 @@ class ChatRepository(
         val t0 = System.currentTimeMillis()
         var failed: SendResult.Failed? = null
         var firstToken = true
-        LiveStatusBus.post(LiveStatus.Sending)
 
         sse.stream(
             url = url,
@@ -75,7 +69,6 @@ class ChatRepository(
                 onToken = { tok ->
                     if (firstToken) {
                         firstToken = false
-                        LiveStatusBus.post(LiveStatus.Drawing)
                     }
                     onToken(tok)
                 },
@@ -86,7 +79,6 @@ class ChatRepository(
             )
         )
 
-        LiveStatusBus.post(LiveStatus.Saving)
         val ms = System.currentTimeMillis() - t0
         logger?.log(
             ActivityLogger.ActivityEvent.ChatRequest(
@@ -96,8 +88,6 @@ class ChatRepository(
                 ok = failed == null
             )
         )
-        if (failed != null) LiveStatusBus.post(LiveStatus.Idle)
-        else LiveStatusBus.post(LiveStatus.Done)
         failed ?: SendResult.Ok
     }
 
@@ -160,12 +150,10 @@ class ChatRepository(
     ): SendResult = withContext(Dispatchers.IO) {
         val baseUrl = settings.connection.value.baseUrl.trim().trimEnd('/')
         if (baseUrl.isEmpty()) {
-            LiveStatusBus.post(LiveStatus.Idle)
             return@withContext SendResult.NeedBaseUrl
         }
         val apiKey = settings.getApiKey()
         if (apiKey.isEmpty()) {
-            LiveStatusBus.post(LiveStatus.Idle)
             return@withContext SendResult.NeedApiKey
         }
         val model = settings.model.value.modelId.ifEmpty { "gpt-4o-mini" }
@@ -177,7 +165,6 @@ class ChatRepository(
         val history = buildBody(messages, systemPrompt, soulExtra, model, params)
             .getJSONArray("messages")
 
-        LiveStatusBus.post(LiveStatus.Connecting)
         var iteration = 0
         var failed: SendResult.Failed? = null
 
@@ -194,7 +181,6 @@ class ChatRepository(
                 .put("tool_choice", "auto")
 
             val pending = mutableMapOf<Int, ToolCall>()
-            LiveStatusBus.post(LiveStatus.Sending)
             sse.stream(
                 url = url,
                 apiKey = apiKey,
@@ -202,7 +188,6 @@ class ChatRepository(
                 cb = SseClient.StreamCallbacks(
                     onState = onState,
                     onToken = { tok ->
-                        LiveStatusBus.post(LiveStatus.Drawing)
                         onToken(tok)
                     },
                     onToolCall = { index, id, name, argsFragment ->
@@ -246,7 +231,6 @@ class ChatRepository(
             )
 
             // 2. Eksekusi tiap tool, append hasilnya sebagai role=tool.
-            LiveStatusBus.post(LiveStatus.Saving)
             for ((_, call) in pending.entries.sortedBy { it.key }) {
                 val tTool = System.currentTimeMillis()
                 val res = ToolLoop.execute(call.name, call.argsJson())
@@ -278,8 +262,6 @@ class ChatRepository(
                 ok = failed == null,
             ),
         )
-        if (failed != null) LiveStatusBus.post(LiveStatus.Idle)
-        else LiveStatusBus.post(LiveStatus.Done)
         failed ?: SendResult.Ok
     }
 }
