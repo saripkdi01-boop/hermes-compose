@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- v9.5.2: cleartext diizinkan. Satu-satunya koneksi http app adalah ke
-     127.0.0.1:8766 (konektor Upin via SSH forward Termux) — data aktual
-     terenkripsi oleh tunnel SSH. Koneksi lain (Jerouter, GitHub, Telegram)
-     tetap pakai https. -->
+<!-- Hardening web_fetch: tolak cleartext global, KECUALI loopback.
+     Carve-out 127.0.0.1/localhost/10.0.2.2 WAJIB agar konektor Upin
+     (http://127.0.0.1:8766) tetap jalan. Jangan hapus domain-config ini. -->
 <network-security-config>
-    <base-config cleartextPermitted="true" />
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
 </network-security-config>

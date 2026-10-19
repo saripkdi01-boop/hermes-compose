@@ -1,6 +1,8 @@
 package id.sukiapps.hermes.net
 
 import id.sukiapps.hermes.data.SettingsRepository
+import id.sukiapps.hermes.tool.ToolCall
+import id.sukiapps.hermes.tool.ToolLoop
 import id.sukiapps.hermes.ui.live.LiveStatus
 import id.sukiapps.hermes.ui.live.LiveStatusBus
 import kotlinx.coroutines.Dispatchers
@@ -135,6 +137,150 @@ class ChatRepository(
             .put("temperature", params.temperature.toDouble())
             .put("top_p", params.topP.toDouble())
             .put("max_tokens", params.maxTokens)
+    }
+
+    /**
+     * Kirim dengan tool-loop web_fetch (ADITIF — sendStreaming tidak diubah).
+     *
+     * Alur: request + tools[] → stream → kumpulkan delta.tool_calls →
+     * eksekusi tool → append pesan assistant(tool_calls) + role=tool →
+     * ulangi (max [maxIterations], default 6).
+     *
+     * @param onToolEvent dipanggil tiap tool selesai: (nama, sukses, ms)
+     *   — untuk chip UI "🌐 web_fetch ✓ 4.2s".
+     */
+    suspend fun sendWithTools(
+        messages: List<ChatMessage>,
+        systemPrompt: String = "",
+        soulExtra: String = "",
+        onToken: (String) -> Unit,
+        onState: (SseClient.SseState) -> Unit = {},
+        onToolEvent: (name: String, ok: Boolean, ms: Long) -> Unit = { _, _, _ -> },
+        maxIterations: Int = ToolLoop.MAX_ITERATIONS,
+    ): SendResult = withContext(Dispatchers.IO) {
+        val baseUrl = settings.connection.value.baseUrl.trim().trimEnd('/')
+        if (baseUrl.isEmpty()) {
+            LiveStatusBus.post(LiveStatus.Idle)
+            return@withContext SendResult.NeedBaseUrl
+        }
+        val apiKey = settings.getApiKey()
+        if (apiKey.isEmpty()) {
+            LiveStatusBus.post(LiveStatus.Idle)
+            return@withContext SendResult.NeedApiKey
+        }
+        val model = settings.model.value.modelId.ifEmpty { "gpt-4o-mini" }
+        val params = settings.parameters.value
+        val url = "$baseUrl/chat/completions"
+        val t0 = System.currentTimeMillis()
+
+        // Riwayat yang berkembang tiap iterasi (mulai dari body standar).
+        val history = buildBody(messages, systemPrompt, soulExtra, model, params)
+            .getJSONArray("messages")
+
+        LiveStatusBus.post(LiveStatus.Connecting)
+        var iteration = 0
+        var failed: SendResult.Failed? = null
+
+        while (iteration < maxIterations) {
+            iteration++
+            val body = JSONObject()
+                .put("model", model)
+                .put("messages", history)
+                .put("stream", true)
+                .put("temperature", params.temperature.toDouble())
+                .put("top_p", params.topP.toDouble())
+                .put("max_tokens", params.maxTokens)
+                .put("tools", ToolLoop.toolsArray())
+                .put("tool_choice", "auto")
+
+            val pending = mutableMapOf<Int, ToolCall>()
+            LiveStatusBus.post(LiveStatus.Sending)
+            sse.stream(
+                url = url,
+                apiKey = apiKey,
+                bodyJson = body.toString(),
+                cb = SseClient.StreamCallbacks(
+                    onState = onState,
+                    onToken = { tok ->
+                        LiveStatusBus.post(LiveStatus.Drawing)
+                        onToken(tok)
+                    },
+                    onToolCall = { index, id, name, argsFragment ->
+                        val slot = pending.getOrPut(index) { ToolCall() }
+                        if (id.isNotEmpty()) slot.id = id
+                        if (name.isNotEmpty()) slot.name = name
+                        slot.argsBuf.append(argsFragment)
+                    },
+                    onDone = {},
+                    onError = { msg, retryable ->
+                        failed = SendResult.Failed(msg, retryable)
+                    },
+                ),
+            )
+            if (failed != null) break
+            if (pending.isEmpty()) break
+
+            // 1. Append pesan assistant berisi tool_calls.
+            history.put(
+                JSONObject()
+                    .put("role", "assistant")
+                    .put("content", JSONObject.NULL)
+                    .put(
+                        "tool_calls",
+                        JSONArray().apply {
+                            pending.entries.sortedBy { it.key }.forEach { (_, c) ->
+                                put(
+                                    JSONObject()
+                                        .put("id", c.id)
+                                        .put("type", "function")
+                                        .put(
+                                            "function",
+                                            JSONObject()
+                                                .put("name", c.name)
+                                                .put("arguments", c.argsBuf.toString()),
+                                        ),
+                                )
+                            }
+                        },
+                    ),
+            )
+
+            // 2. Eksekusi tiap tool, append hasilnya sebagai role=tool.
+            LiveStatusBus.post(LiveStatus.Saving)
+            for ((_, call) in pending.entries.sortedBy { it.key }) {
+                val tTool = System.currentTimeMillis()
+                val res = ToolLoop.execute(call.name, call.argsJson())
+                val ms = System.currentTimeMillis() - tTool
+                onToolEvent(call.name, !res.isError, ms)
+                logger?.log(
+                    ActivityLogger.ActivityEvent.ConnectorExecuted(
+                        id = "web_fetch",
+                        action = call.name,
+                        decision = if (res.isError) "error" else "allow",
+                        ms = ms,
+                    ),
+                )
+                history.put(
+                    JSONObject()
+                        .put("role", "tool")
+                        .put("tool_call_id", call.id)
+                        .put("content", res.content),
+                )
+            }
+        }
+
+        val ms = System.currentTimeMillis() - t0
+        logger?.log(
+            ActivityLogger.ActivityEvent.ChatRequest(
+                model = model,
+                ms = ms,
+                tokens = null,
+                ok = failed == null,
+            ),
+        )
+        if (failed != null) LiveStatusBus.post(LiveStatus.Idle)
+        else LiveStatusBus.post(LiveStatus.Done)
+        failed ?: SendResult.Ok
     }
 }
 
