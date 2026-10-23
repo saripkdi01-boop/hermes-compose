@@ -408,6 +408,106 @@ fun SettingsScreen(
                 ) { Text("Simpan allowlist scan") }
             }
 
+            // ---- Grup: Agen (Sprint 1 Gate 4) ----
+            SettingsGroup("Agen") {
+                val limitsNow = id.sukiapps.hermes.data.agent.AgentLimits.get(ctx)
+                var iterEdit by remember { mutableStateOf(limitsNow.maxIterations.toString()) }
+                var minEdit by remember { mutableStateOf(limitsNow.timeoutMinutes.toString()) }
+                var budgetEdit by remember { mutableStateOf(limitsNow.tokenBudget.toString()) }
+                var memMsg by remember { mutableStateOf<String?>(null) }
+                val exportLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                    androidx.activity.result.contract.ActivityResultContracts
+                        .CreateDocument("application/json")
+                ) { uri ->
+                    if (uri != null) {
+                        val ok = runCatching {
+                            ctx.contentResolver.openOutputStream(uri)?.use { s ->
+                                s.write(
+                                    id.sukiapps.hermes.data.agent.AgentMemory
+                                        .exportJson().toByteArray(Charsets.UTF_8)
+                                )
+                            }
+                        }.isSuccess
+                        memMsg = if (ok) "Export ingatan tersimpan."
+                        else "Export gagal."
+                    }
+                }
+                val importLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                    androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+                ) { uri ->
+                    if (uri != null) {
+                        val ok = runCatching {
+                            val text = ctx.contentResolver.openInputStream(uri)
+                                ?.bufferedReader()?.readText().orEmpty()
+                            id.sukiapps.hermes.data.agent.AgentMemory.importJson(text)
+                        }.getOrDefault(false)
+                        memMsg = if (ok) "Import ingatan diterapkan."
+                        else "Import gagal — format tidak dikenal."
+                    }
+                }
+                Text(
+                    "Batas sesi Mode Agen (chat). Token = estimasi atas isi " +
+                        "percakapan (provider tidak mengirim usage asli).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = iterEdit,
+                    onValueChange = { iterEdit = it.filter { c -> c.isDigit() }.take(2) },
+                    label = { Text("Maks iterasi per sesi (1–25)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = minEdit,
+                    onValueChange = { minEdit = it.filter { c -> c.isDigit() }.take(2) },
+                    label = { Text("Timeout per sesi, menit (1–30)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = budgetEdit,
+                    onValueChange = { budgetEdit = it.filter { c -> c.isDigit() }.take(6) },
+                    label = { Text("Budget token per sesi (10rb–500rb)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        id.sukiapps.hermes.data.agent.AgentLimits.save(
+                            ctx,
+                            iterEdit.toIntOrNull() ?: 10,
+                            minEdit.toIntOrNull() ?: 5,
+                            budgetEdit.toIntOrNull() ?: 100_000
+                        )
+                        memMsg = "Batas agen tersimpan."
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Simpan batas agen") }
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { exportLauncher.launch("hermes-memory-export.json") },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Export ingatan") }
+                    OutlinedButton(
+                        onClick = { importLauncher.launch(arrayOf("application/json")) },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Import ingatan") }
+                }
+                memMsg?.let {
+                    Spacer(Modifier.height(4.dp))
+                    Text(it, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
             // ---- Grup: Mode Developer (Sprint 1 Gate 2) ----
             SettingsGroup("Mode Developer") {
                 Text(
