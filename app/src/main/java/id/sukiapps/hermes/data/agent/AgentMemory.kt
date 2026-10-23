@@ -8,7 +8,7 @@ import java.io.File
 /**
  * AgentMemory — ingatan persisten agen (Sprint 1 Gate 4).
  * Sumber data: JsonStore "agent_memory" (JSON atomik, TANPA Room) +
- * file reflection di filesDir/reflection/*.md.
+ * file reflection berekstensi .md di filesDir/reflection.
  * Export/import = satu dokumen JSON berisi keduanya (keputusan Suki:
  * cakupan agent_memory + reflection).
  */
