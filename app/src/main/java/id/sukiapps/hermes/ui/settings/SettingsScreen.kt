@@ -32,6 +32,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -42,9 +43,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import id.sukiapps.hermes.tool.ToolAllowlist
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -70,6 +73,10 @@ fun SettingsScreen(
 
     var showModelPicker by remember { mutableStateOf(false) }
     var baseUrlEdit by remember { mutableStateOf(state.baseUrl) }
+    // Sprint 1 Gate 2: editor allowlist web_fetch (satu domain per baris).
+    var allowlistEdit by remember {
+        mutableStateOf(ToolAllowlist.current().joinToString("\n"))
+    }
     var presetName by remember { mutableStateOf("") }
     var presetText by remember { mutableStateOf("") }
     var showPresetDialog by remember { mutableStateOf(false) }
@@ -272,7 +279,19 @@ fun SettingsScreen(
                     Text("Tema gelap", modifier = Modifier.weight(1f))
                     Switch(
                         checked = state.darkTheme,
-                        onCheckedChange = vm::setDarkTheme
+                        onCheckedChange = vm::setDarkTheme,
+                        // Fix uji fisik Gate 1: warna default switch nyaris
+                        // menyatu dengan kartu di tema terang (ghost switch).
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            uncheckedThumbColor =
+                                MaterialTheme.colorScheme.onSurfaceVariant,
+                            uncheckedTrackColor =
+                                MaterialTheme.colorScheme.surfaceVariant,
+                            uncheckedBorderColor =
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     )
                 }
             }
@@ -297,6 +316,35 @@ fun SettingsScreen(
                         baseUrlEdit = id.sukiapps.hermes.domain.Prefs.DEFAULT_BASE
                     }) { Text("Reset") }
                 }
+            }
+
+            // ---- Grup: Tool Web (Sprint 1 Gate 2) ----
+            SettingsGroup("Tool Web") {
+                Text(
+                    "Allowlist domain web_fetch — satu domain per baris. " +
+                        "Kosongkan untuk mengizinkan semua domain publik " +
+                            "(akses IP privat tetap diblokir).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = allowlistEdit,
+                    onValueChange = { allowlistEdit = it },
+                    label = { Text("Domain diizinkan") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2
+                )
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        ToolAllowlist.setDomains(
+                            ctx,
+                            allowlistEdit.split("\n")
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Simpan allowlist") }
             }
 
             // ---- Grup: Backup ----
