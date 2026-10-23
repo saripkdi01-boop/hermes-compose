@@ -16,6 +16,12 @@ object ToolLoop {
 
     const val MAX_ITERATIONS = 6
 
+    /** Sprint 1 Gate 2: iterasi default tool-loop di stack live. */
+    const val DEFAULT_ITERATIONS = 5
+
+    /** Sprint 1 Gate 2: batas keras iterasi tool-loop (clamp pemanggil). */
+    const val HARD_MAX_ITERATIONS = 10
+
     private val webFetchParams = JSONObject()
         .put("type", "object")
         .put(
