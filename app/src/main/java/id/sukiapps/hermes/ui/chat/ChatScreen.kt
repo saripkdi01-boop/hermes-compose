@@ -456,7 +456,7 @@ fun HermesChatScreen(
                 ) {
                     Switch(
                         checked = state.agentMode,
-                        onCheckedChange = { vm.setAgentMode(it) }
+                        onCheckedChange = { chatVm.setAgentMode(it) }
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
