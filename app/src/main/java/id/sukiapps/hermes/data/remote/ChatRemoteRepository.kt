@@ -96,6 +96,21 @@ class ChatRemoteRepository @Inject constructor(
     override fun chatStream(request: ChatRequest): Flow<String> =
         sse.stream(prefs.baseUrl, request).flowOn(Dispatchers.IO)
 
+    /**
+     * Sprint 1 Gate 2: jalur tool-loop. Request bergambar tetap lewat
+     * jalur vision lama (tool tidak didukung di jalur itu).
+     */
+    override fun chatStreamWithTools(
+        request: ChatRequest,
+        onToolEvent: (String, Boolean, Long) -> Unit
+    ): Flow<String> =
+        if (request.imageBase64s.isEmpty()) {
+            sse.streamWithTools(prefs.baseUrl, request, onToolEvent)
+                .flowOn(Dispatchers.IO)
+        } else {
+            chatStream(request)
+        }
+
     private fun mapFetchError(e: Exception): String {
         val m = e.message ?: ""
         return when {

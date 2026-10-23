@@ -12,11 +12,16 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.jsonArray
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import id.sukiapps.hermes.tool.ToolCall
+import id.sukiapps.hermes.tool.ToolLoop
 import java.io.IOException
+import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -137,6 +142,169 @@ class SseClient @Inject constructor(
             req.topP?.let { put("top_p", it) }
             req.maxTokens?.let { if (it > 0) put("max_tokens", it) }
         }
+    }
+
+
+    /**
+     * Sprint 1 Gate 2 — streaming DENGAN tool-loop (web_fetch).
+     *
+     * Sama seperti [stream], ditambah: body memuat `tools[]` dari
+     * [ToolLoop.toolsArray]; delta `tool_calls` diakumulasi per index;
+     * tool dieksekusi via [ToolLoop.execute]; hasilnya di-append sebagai
+     * pesan role=tool lalu request diulang (maks [maxIterations] iterasi,
+     * di-clamp 1..[ToolLoop.HARD_MAX_ITERATIONS]).
+     * Hasil tool TIDAK disimpan ke DB — hanya hidup selama request ini;
+     * yang dipersistensi UI tetap jawaban akhir asisten.
+     */
+    fun streamWithTools(
+        baseUrl: String,
+        req: ChatRequest,
+        onToolEvent: (name: String, ok: Boolean, ms: Long) -> Unit,
+        maxIterations: Int = ToolLoop.DEFAULT_ITERATIONS
+    ): Flow<String> = callbackFlow {
+        val toolsJson: JsonArray =
+            json.parseToJsonElement(ToolLoop.toolsArray().toString()).jsonArray
+        val messages = mutableListOf<kotlinx.serialization.json.JsonElement>()
+        messages.add(buildJsonObject {
+            put("role", "system")
+            put("content", req.systemPrompt)
+        })
+        for (m in req.history.takeLast(20)) {
+            messages.add(buildJsonObject {
+                put("role", m.role)
+                put("content", m.content)
+            })
+        }
+        messages.add(buildJsonObject {
+            put("role", "user")
+            put("content", req.prompt)
+        })
+        val limit = maxIterations.coerceIn(1, ToolLoop.HARD_MAX_ITERATIONS)
+        var call: okhttp3.Call? = null
+        try {
+            var iteration = 0
+            var finished = false
+            while (iteration < limit && !finished) {
+                iteration++
+                val body = buildJsonObject {
+                    put("model", req.model)
+                    put("messages", buildJsonArray { addAll(messages) })
+                    put("stream", true)
+                    put("tools", toolsJson)
+                    put("tool_choice", "auto")
+                    req.temperature?.let { put("temperature", it) }
+                    req.topP?.let { put("top_p", it) }
+                    req.maxTokens?.let { if (it > 0) put("max_tokens", it) }
+                }
+                val request = Request.Builder()
+                    .url(baseUrl.trimEnd('/') + "/chat/completions")
+                    .addHeader("Accept", "text/event-stream")
+                    .addHeader("Cache-Control", "no-cache")
+                    .post(body.toString().toRequestBody(mediaType))
+                    .build()
+                val c = client.newCall(request)
+                call = c
+                val resp = c.execute()
+                if (!resp.isSuccessful) {
+                    val errBody = try {
+                        resp.body?.string()?.take(300) ?: ""
+                    } catch (e: Exception) { "" }
+                    val code = resp.code
+                    resp.close()
+                    close(AIHttpException(mapHttpError(code, errBody)))
+                    return@callbackFlow
+                }
+                val source = resp.body?.source()
+                if (source == null) {
+                    resp.close()
+                    close(AIHttpException("Respon server kosong."))
+                    return@callbackFlow
+                }
+                val pending = sortedMapOf<Int, ToolCall>()
+                val iterText = StringBuilder()
+                while (true) {
+                    val line = try {
+                        source.readUtf8Line()
+                    } catch (e: IOException) {
+                        break
+                    } ?: break
+                    val t = line.trim()
+                    if (t.isEmpty() || t.startsWith(":")) continue
+                    if (!t.startsWith("data:")) continue
+                    val data = t.removePrefix("data:").trim()
+                    if (data == "[DONE]") break
+                    val chunk = runCatching { JSONObject(data) }.getOrNull()
+                        ?: continue
+                    val delta = chunk.optJSONArray("choices")
+                        ?.optJSONObject(0)
+                        ?.optJSONObject("delta")
+                        ?: continue
+                    val content = delta.optString("content", "")
+                    if (content.isNotEmpty()) {
+                        iterText.append(content)
+                        trySend(content)
+                    }
+                    val tcs = delta.optJSONArray("tool_calls") ?: continue
+                    for (i in 0 until tcs.length()) {
+                        val tc = tcs.optJSONObject(i) ?: continue
+                        val slot = pending.getOrPut(tc.optInt("index", i)) {
+                            ToolCall()
+                        }
+                        val id = tc.optString("id", "")
+                        if (id.isNotEmpty()) slot.id = id
+                        val fn = tc.optJSONObject("function") ?: continue
+                        val name = fn.optString("name", "")
+                        if (name.isNotEmpty()) slot.name = name
+                        slot.argsBuf.append(fn.optString("arguments", ""))
+                    }
+                }
+                resp.close()
+                if (pending.isEmpty()) {
+                    finished = true
+                } else {
+                    val assistantMsg = buildJsonObject {
+                        put("role", "assistant")
+                        if (iterText.isEmpty()) {
+                            put("content", JsonNull)
+                        } else {
+                            put("content", iterText.toString())
+                        }
+                        put("tool_calls", buildJsonArray {
+                            for ((_, tc) in pending) {
+                                add(buildJsonObject {
+                                    put("id", tc.id)
+                                    put("type", "function")
+                                    put("function", buildJsonObject {
+                                        put("name", tc.name)
+                                        put("arguments", tc.argsBuf.toString())
+                                    })
+                                })
+                            }
+                        })
+                    }
+                    messages.add(assistantMsg)
+                    for ((_, tc) in pending) {
+                        val t0 = System.currentTimeMillis()
+                        val res = ToolLoop.execute(tc.name, tc.argsJson())
+                        val ms = System.currentTimeMillis() - t0
+                        onToolEvent(tc.name, !res.isError, ms)
+                        messages.add(buildJsonObject {
+                            put("role", "tool")
+                            put("tool_call_id", tc.id)
+                            put("content", res.content)
+                        })
+                    }
+                }
+            }
+            close()
+        } catch (e: Exception) {
+            if (e is IOException && call?.isCanceled() == true) {
+                close()
+            } else {
+                close(e)
+            }
+        }
+        awaitClose { call?.cancel() }
     }
 
     /** Mapping error HTTP → pesan Indonesia (dipertahankan dari legacy). */
