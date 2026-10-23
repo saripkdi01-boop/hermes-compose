@@ -18,6 +18,7 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Error
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -27,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -58,6 +60,12 @@ fun HealthScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     var results by remember { mutableStateOf<List<HealthResult>?>(null) }
     var running by remember { mutableStateOf(false) }
+    // Sprint 1 Gate 4: dialog konfirmasi update (approval sebelum unduh/install)
+    var pendingUpdate by remember {
+        mutableStateOf<id.sukiapps.hermes.update.UpdateChecker.Update?>(null)
+    }
+    var updateMsg by remember { mutableStateOf<String?>(null) }
+    var dlProgress by remember { mutableStateOf<Int?>(null) }
 
     fun runCheck() {
         running = true
@@ -161,21 +169,75 @@ fun HealthScreen(onBack: () -> Unit) {
                     OutlinedButton(
                         onClick = {
                             scope.launch {
+                                updateMsg = "Mengecek update…"
                                 val update = withContext(Dispatchers.IO) {
                                     id.sukiapps.hermes.update.UpdateChecker.check(context)
                                 }
-                                // TODO Tahap lanjut: tampilkan dialog konfirmasi update.
-                                // Untuk sekarang hasil cek dicatat ke log.
-                                android.util.Log.i(
-                                    "HermesUpdate",
-                                    "Hasil cek: ${update?.versionName ?: "tidak ada update"}"
-                                )
+                                if (update != null) {
+                                    pendingUpdate = update
+                                    updateMsg = null
+                                } else {
+                                    updateMsg = "Sudah versi terbaru (atau rilis tidak ditemukan)."
+                                }
                             }
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) { Text("Cek update") }
+                    updateMsg?.let { msg ->
+                        Spacer(Modifier.height(4.dp))
+                        Text(msg, style = MaterialTheme.typography.bodySmall)
+                    }
+                    dlProgress?.let { pct ->
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Mengunduh update… $pct%",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             }
         }
+    }
+
+    // Dialog approval update: user memutuskan SEBELUM unduh & install.
+    pendingUpdate?.let { upd ->
+        AlertDialog(
+            onDismissRequest = { if (dlProgress == null) pendingUpdate = null },
+            title = { Text("Update tersedia: ${upd.versionName}") },
+            text = {
+                Text(
+                    (upd.notes.ifBlank { "Versi baru Hermes tersedia." }) +
+                        "\n\nUnduh & install sekarang?"
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = dlProgress == null,
+                    onClick = {
+                        scope.launch {
+                            dlProgress = 0
+                            val apk = withContext(Dispatchers.IO) {
+                                id.sukiapps.hermes.update.UpdateChecker
+                                    .download(context, upd) { pct -> dlProgress = pct }
+                            }
+                            dlProgress = null
+                            pendingUpdate = null
+                            if (apk != null) {
+                                id.sukiapps.hermes.update.UpdateChecker
+                                    .installApk(context, apk)
+                            } else {
+                                updateMsg = "Unduh gagal — cek koneksi/PAT GitHub."
+                            }
+                        }
+                    }
+                ) { Text("Unduh & Install") }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = dlProgress == null,
+                    onClick = { pendingUpdate = null }
+                ) { Text("Nanti") }
+            }
+        )
     }
 }

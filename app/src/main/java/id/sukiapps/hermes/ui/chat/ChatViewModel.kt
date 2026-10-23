@@ -10,6 +10,7 @@ import id.sukiapps.hermes.data.store.ExecutionLog
 import id.sukiapps.hermes.data.agent.MemoryWriter
 import id.sukiapps.hermes.data.agent.SoulPrompt
 import id.sukiapps.hermes.data.audit.DangerLevel
+import id.sukiapps.hermes.data.agent.AgentLimits
 import id.sukiapps.hermes.data.audit.PermissionGate
 import id.sukiapps.hermes.data.connectors.UpinConnector
 import id.sukiapps.hermes.data.local.AppPrefs
@@ -26,6 +27,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
@@ -68,7 +70,10 @@ data class ChatUiState(
     // v9.4: Upin sedang ditanya (polling jawaban)
     val upinBusy: Boolean = false,
     // Sprint 1 Gate 2: ringkasan event tool terakhir (chip di layar chat)
-    val toolEvent: String? = null
+    val toolEvent: String? = null,
+    // Sprint 1 Gate 4: Mode Agen (sesi multi-langkah terbatas)
+    val agentMode: Boolean = false,
+    val agentStatus: String? = null
 )
 
 @HiltViewModel
@@ -90,6 +95,9 @@ class ChatViewModel @Inject constructor(
     val attachmentsFlow: StateFlow<List<AttachmentItem>> = _attachmentsFlow.asStateFlow()
 
     private var streamJob: Job? = null
+    // Sprint 1 Gate 4: sesi agen
+    private var agentJob: Job? = null
+    @Volatile private var agentStopRequested = false
     private var collectJob: Job? = null
     // v9.4: job polling jawaban Upin (dibatalkan saat kirim lain/keluar layar)
     private var upinJob: Job? = null
@@ -240,6 +248,7 @@ class ChatViewModel @Inject constructor(
     }
 
     fun stopStream() {
+        agentStopRequested = true
         streamJob?.cancel()
         streamJob = null
         if (_state.value.isStreaming) {
@@ -390,7 +399,82 @@ class ChatViewModel @Inject constructor(
                 memoryWriter.maybeWriteBack(snapshot)
             }
         }
-        streamReply(convId, fullPrompt, imageB64s)
+        // Sprint 1 Gate 4: Mode Agen aktif (tanpa gambar) -> sesi agen.
+        if (_state.value.agentMode && imageB64s.isEmpty()) {
+            runAgentSession(convId, fullPrompt)
+        } else {
+            streamReply(convId, fullPrompt, imageB64s)
+        }
+    }
+
+    // ---------- Sprint 1 Gate 4: Mode Agen ----------
+
+    fun setAgentMode(on: Boolean) {
+        _state.update { it.copy(agentMode = on, agentStatus = null) }
+    }
+
+    /**
+     * Sesi agen: ulangi langkah chat+tool menuju [goal] sampai model
+     * menandai SELESAI, atau batas AgentLimits tercapai (iterasi /
+     * waktu / budget token ESTIMASI), atau user menekan stop.
+     * Langkah lanjutan hanya hidup sebagai pesan user [SISTEM AGEN]
+     * di percakapan ini (transparan & tercatat di Room sebagai pesan
+     * biasa — BUKAN perubahan skema).
+     */
+    private fun runAgentSession(convId: Long, goal: String) {
+        agentStopRequested = false
+        val limits = AgentLimits.get(appCtx)
+        val startMs = System.currentTimeMillis()
+        var step = 0
+        agentJob = viewModelScope.launch {
+            var reason = "selesai"
+            var currentPrompt = goal
+            while (true) {
+                step++
+                _state.update {
+                    it.copy(agentStatus = "🤖 Agen langkah $step/${limits.maxIterations}…")
+                }
+                streamReply(convId, currentPrompt, emptyList(), AGENT_INSTRUCTION)
+                // streamReply berjalan di streamJob sendiri; tunggu selesai.
+                _state.first { s -> !s.isStreaming }
+                if (agentStopRequested) { reason = "dihentikan user"; break }
+                if (_state.value.error != null) { reason = "error pada langkah $step"; break }
+                val last = _state.value.messages
+                    .lastOrNull { it.role == "assistant" }?.content.orEmpty()
+                val est = _state.value.tokenEstimate
+                val elapsed = System.currentTimeMillis() - startMs
+                _state.update {
+                    it.copy(
+                        agentStatus = "🤖 Langkah $step/${limits.maxIterations} · " +
+                            "±$est token · ${elapsed / 1000} dtk"
+                    )
+                }
+                when {
+                    last.trimStart().startsWith("SELESAI") -> {
+                        reason = "tujuan tercapai"; break
+                    }
+                    step >= limits.maxIterations -> {
+                        reason = "batas iterasi (${limits.maxIterations}) tercapai"; break
+                    }
+                    elapsed >= limits.timeoutMs -> {
+                        reason = "batas waktu (${limits.timeoutMinutes} menit) tercapai"; break
+                    }
+                    est >= limits.tokenBudget -> {
+                        reason = "budget token (${limits.tokenBudget}) tercapai"; break
+                    }
+                }
+                currentPrompt = "[SISTEM AGEN] Lanjutkan langkah berikutnya menuju " +
+                    "tujuan: $goal — bila tujuan sudah tercapai, awali jawabanmu " +
+                    "dengan kata SELESAI diikuti ringkasan hasil akhir."
+                withContext(Dispatchers.IO) {
+                    repo.addMessage(convId, "user", currentPrompt, null)
+                }
+            }
+            ExecutionLog.log("agent", "Sesi agen", "$reason · $step langkah", "ok")
+            _state.update {
+                it.copy(agentStatus = "🤖 Sesi agen berhenti: $reason ($step langkah)")
+            }
+        }
     }
 
     /** Rakit system prompt jiwa SEKALI per conversation (cache per convId). */
@@ -405,7 +489,8 @@ class ChatViewModel @Inject constructor(
     private suspend fun streamReply(
         convId: Long,
         prompt: String,
-        imageB64s: List<String>
+        imageB64s: List<String>,
+        extraSystem: String = ""
     ) {
         val model = prefs.model.ifBlank {
             _state.update { it.copy(error = "Pilih model dulu di Pengaturan.") }
@@ -432,7 +517,8 @@ class ChatViewModel @Inject constructor(
         else "$soulPrompt\n\n$personaText"
         val req = ChatRequest(
             model = model,
-            systemPrompt = "$basePrompt\n\n$capsBlock",
+            systemPrompt = "$basePrompt\n\n$capsBlock" +
+                if (extraSystem.isBlank()) "" else "\n\n$extraSystem",
             history = history,
             prompt = prompt,
             imageBase64s = imageB64s,
@@ -492,6 +578,16 @@ class ChatViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    companion object {
+        private const val AGENT_INSTRUCTION =
+            "MODE AGEN AKTIF: kamu bekerja mandiri menuju tujuan user dengan " +
+                "tool yang tersedia. Kerjakan SATU langkah bermakna per giliran, " +
+                "jelaskan singkat hasil langkahmu. Bila tujuan SUDAH tercapai, " +
+                "awali jawaban akhirmu dengan kata SELESAI diikuti ringkasan " +
+                "hasil. Bila belum, akhiri dengan langkah berikutnya yang akan " +
+                "kamu ambil."
     }
 
     private fun updateTokenEstimate() {
