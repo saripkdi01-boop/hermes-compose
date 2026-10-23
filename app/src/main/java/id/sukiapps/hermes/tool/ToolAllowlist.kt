@@ -41,6 +41,29 @@ object ToolAllowlist {
 
     fun current(): Set<String> = domains
 
+    // ---- Allowlist scan (net_scan / conn_health) — SP yang sama ----
+    private const val KEY_SCAN = "scan_allowlist"
+
+    /** Host scan tersimpan (mentah); kosong = default localhost saja. */
+    fun scanCurrent(ctx: Context): Set<String> {
+        val raw = ctx.applicationContext
+            .getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .getString(KEY_SCAN, "")
+            .orEmpty()
+        return parse(raw.replace(',', '\n'))
+    }
+
+    fun setScanHosts(ctx: Context, list: Collection<String>) {
+        val clean = list.map { it.trim().lowercase() }
+            .filter { it.isNotEmpty() }
+            .toSet()
+        ctx.applicationContext
+            .getSharedPreferences(FILE, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_SCAN, clean.joinToString("\n"))
+            .apply()
+    }
+
     fun isAllowed(host: String): Boolean = hostAllowed(host, domains)
 
     private fun parse(raw: String): Set<String> =
