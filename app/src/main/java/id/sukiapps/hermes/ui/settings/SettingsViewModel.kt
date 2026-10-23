@@ -53,7 +53,11 @@ data class SettingsUiState(
     // v9.4: konektor Upin (URL prefs biasa, secret via KeyVault)
     val upinUrl: String = "",
     val upinSecret: String = "",
-    val upinStatus: String? = null
+    val upinStatus: String? = null,
+    // Sprint 1 Gate 3: Supabase + Vercel read-only (via KeyVault)
+    val supabaseUrl: String = "",
+    val supabaseKey: String = "",
+    val vercelToken: String = ""
 )
 
 @HiltViewModel
@@ -95,12 +99,18 @@ class SettingsViewModel @Inject constructor(
             val tgToken = KeyVault.getSecret(appCtx, "tg_bot_token")
             val chatId = KeyVault.getSecret(appCtx, "tg_chat_id")
             val upinSecret = KeyVault.getSecret(appCtx, UpinConnector.SECRET_KEY)
+            val sbUrl = KeyVault.getSecret(appCtx, "supabase_url")
+            val sbKey = KeyVault.getSecret(appCtx, "supabase_key")
+            val vcToken = KeyVault.getSecret(appCtx, "vercel_token")
             _state.update {
                 it.copy(
                     githubPat = pat,
                     tgBotToken = tgToken,
                     tgChatId = chatId,
-                    upinSecret = upinSecret
+                    upinSecret = upinSecret,
+                    supabaseUrl = sbUrl,
+                    supabaseKey = sbKey,
+                    vercelToken = vcToken
                 )
             }
         }
@@ -273,6 +283,26 @@ class SettingsViewModel @Inject constructor(
                     tgBotToken = tgToken.trim(),
                     tgChatId = chatId.trim(),
                     snack = if (r.isSuccess) "Token konektor tersimpan terenkripsi."
+                    else "Gagal menyimpan: ${r.exceptionOrNull()?.message}".take(200)
+                )
+            }
+        }
+    }
+
+    /** Sprint 1 Gate 3: simpan kredensial Supabase + Vercel (KeyVault). */
+    fun saveCloudTokens(sbUrl: String, sbKey: String, vcToken: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val r = runCatching {
+                KeyVault.putSecret(appCtx, "supabase_url", sbUrl.trim())
+                KeyVault.putSecret(appCtx, "supabase_key", sbKey.trim())
+                KeyVault.putSecret(appCtx, "vercel_token", vcToken.trim())
+            }
+            _state.update {
+                it.copy(
+                    supabaseUrl = sbUrl.trim(),
+                    supabaseKey = sbKey.trim(),
+                    vercelToken = vcToken.trim(),
+                    snack = if (r.isSuccess) "Kredensial Supabase & Vercel tersimpan terenkripsi."
                     else "Gagal menyimpan: ${r.exceptionOrNull()?.message}".take(200)
                 )
             }
