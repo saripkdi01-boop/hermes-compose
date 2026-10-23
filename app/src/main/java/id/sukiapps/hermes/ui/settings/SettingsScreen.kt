@@ -120,6 +120,16 @@ fun SettingsScreen(
     var tgChatEdit by remember(state.githubPat, state.tgBotToken, state.tgChatId) {
         mutableStateOf(state.tgChatId)
     }
+    // Sprint 1 Gate 3: field Supabase + Vercel (read-only dari chat)
+    var sbUrlEdit by remember(state.supabaseUrl, state.supabaseKey, state.vercelToken) {
+        mutableStateOf(state.supabaseUrl)
+    }
+    var sbKeyEdit by remember(state.supabaseUrl, state.supabaseKey, state.vercelToken) {
+        mutableStateOf(state.supabaseKey)
+    }
+    var vcTokenEdit by remember(state.supabaseUrl, state.supabaseKey, state.vercelToken) {
+        mutableStateOf(state.vercelToken)
+    }
     var tmuxPath by remember { mutableStateOf("/data/data/com.termux/files/usr/bin/bash") }
     var tmuxArgs by remember { mutableStateOf("-lc \"echo halo dari Hermes\"") }
     var tmuxWorkdir by remember { mutableStateOf("/data/data/com.termux/files/home") }
@@ -592,6 +602,43 @@ fun SettingsScreen(
                     onClick = { vm.saveConnectorTokens(ghPatEdit, tgTokenEdit, tgChatEdit) },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Simpan token") }
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Supabase & Vercel (read-only dari chat)",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = sbUrlEdit,
+                    onValueChange = { sbUrlEdit = it },
+                    label = { Text("URL Supabase (https://xxx.supabase.co)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = sbKeyEdit,
+                    onValueChange = { sbKeyEdit = it },
+                    label = { Text("Key Supabase (anon/service)") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = vcTokenEdit,
+                    onValueChange = { vcTokenEdit = it },
+                    label = { Text("Token Vercel") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = { vm.saveCloudTokens(sbUrlEdit, sbKeyEdit, vcTokenEdit) },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Simpan Supabase & Vercel") }
                 Spacer(Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
