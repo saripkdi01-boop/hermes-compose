@@ -66,7 +66,9 @@ data class ChatUiState(
     val error: String? = null,
     val tokenEstimate: Int = 0,
     // v9.4: Upin sedang ditanya (polling jawaban)
-    val upinBusy: Boolean = false
+    val upinBusy: Boolean = false,
+    // Sprint 1 Gate 2: ringkasan event tool terakhir (chip di layar chat)
+    val toolEvent: String? = null
 )
 
 @HiltViewModel
@@ -439,12 +441,26 @@ class ChatViewModel @Inject constructor(
             maxTokens = prefs.maxTokens.takeIf { it > 0 }
         )
 
-        _state.update { it.copy(isStreaming = true, streamingText = "", error = null) }
+        _state.update {
+            it.copy(isStreaming = true, streamingText = "", error = null, toolEvent = null)
+        }
         val acc = StringBuilder()
         ExecutionLog.log("prompt", "Prompt → $model", prompt.take(500), "start")
+        // Sprint 1 Gate 2: tanpa lampiran gambar -> jalur tool-loop
+        // (web_fetch); dengan gambar -> jalur vision lama tanpa tool.
+        val flow = if (imageB64s.isEmpty()) {
+            ai.chatStreamWithTools(req) { name, ok, ms ->
+                val label = "🌐 $name ${if (ok) "✓" else "✗"} " +
+                    "${"%.1f".format(ms / 1000.0)} dtk"
+                _state.update { s -> s.copy(toolEvent = label) }
+                ExecutionLog.log("tool", name, "$ms ms", if (ok) "ok" else "fail")
+            }
+        } else {
+            ai.chatStream(req)
+        }
         streamJob = viewModelScope.launch(Dispatchers.IO) {
             try {
-                ai.chatStream(req)
+                flow
                     .catch { e ->
                         withContext(Dispatchers.Main) {
                             val msg = (e.message ?: "Gagal terhubung.").take(200)
