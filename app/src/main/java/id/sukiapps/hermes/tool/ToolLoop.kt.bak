@@ -2,6 +2,11 @@ package id.sukiapps.hermes.tool
 
 import android.content.Context
 import id.sukiapps.hermes.data.audit.PermissionGate
+import id.sukiapps.hermes.data.connectors.GitHubConnector
+import id.sukiapps.hermes.data.connectors.SupabaseConnector
+import id.sukiapps.hermes.data.connectors.TelegramConnector
+import id.sukiapps.hermes.data.connectors.UpinConnector
+import id.sukiapps.hermes.data.connectors.VercelConnector
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -57,10 +62,24 @@ object ToolLoop {
     @Volatile
     private var gate: PermissionGate? = null
 
+    @Volatile
+    private var connectorBag: ConnectorTools.Bag? = null
+
     /** Dipanggil HermesApp.onCreate sekali. */
     fun attach(ctx: Context, permissionGate: PermissionGate) {
         appCtx = ctx.applicationContext
         gate = permissionGate
+    }
+
+    /** Sprint 1 Gate 3: daftarkan konektor untuk ConnectorTools. */
+    fun attachConnectors(
+        github: GitHubConnector,
+        telegram: TelegramConnector,
+        upin: UpinConnector,
+        supabase: SupabaseConnector,
+        vercel: VercelConnector
+    ) {
+        connectorBag = ConnectorTools.Bag(github, telegram, upin, supabase, vercel)
     }
 
     private fun toolDef(name: String, description: String, params: JSONObject): JSONObject =
@@ -173,6 +192,116 @@ object ToolLoop {
         )
         arr.put(
             toolDef(
+                "github_repos",
+                "Daftar repo GitHub milik user (read-only, dari PAT tersimpan).",
+                params(JSONObject(), emptyList()),
+            ),
+        )
+        arr.put(
+            toolDef(
+                "github_runs",
+                "5 workflow run GitHub Actions terakhir sebuah repo (read-only).",
+                params(
+                    JSONObject()
+                        .put("owner", prop("string", "Owner repo"))
+                        .put("repo", prop("string", "Nama repo")),
+                    listOf("owner", "repo"),
+                ),
+            ),
+        )
+        arr.put(
+            toolDef(
+                "github_read_file",
+                "Baca isi file teks dari repo GitHub (read-only).",
+                params(
+                    JSONObject()
+                        .put("owner", prop("string", "Owner repo"))
+                        .put("repo", prop("string", "Nama repo"))
+                        .put("path", prop("string", "Path file di repo")),
+                    listOf("owner", "repo", "path"),
+                ),
+            ),
+        )
+        arr.put(
+            toolDef(
+                "github_write_file",
+                "Tulis/update file di repo GitHub (selalu minta persetujuan user).",
+                params(
+                    JSONObject()
+                        .put("owner", prop("string", "Owner repo"))
+                        .put("repo", prop("string", "Nama repo"))
+                        .put("path", prop("string", "Path file di repo"))
+                        .put("content", prop("string", "Isi file"))
+                        .put("message", prop("string", "Pesan commit")),
+                    listOf("owner", "repo", "path", "content"),
+                ),
+            ),
+        )
+        arr.put(
+            toolDef(
+                "github_dispatch",
+                "Trigger workflow_dispatch GitHub Actions (minta persetujuan user).",
+                params(
+                    JSONObject()
+                        .put("owner", prop("string", "Owner repo"))
+                        .put("repo", prop("string", "Nama repo"))
+                        .put("workflow", prop("string", "Nama file workflow, mis. build.yml"))
+                        .put("ref", prop("string", "Branch/ref, default main")),
+                    listOf("owner", "repo", "workflow"),
+                ),
+            ),
+        )
+        arr.put(
+            toolDef(
+                "telegram_send",
+                "Kirim pesan Telegram lewat bot milik user ke chat ID tersimpan (minta persetujuan user).",
+                params(
+                    JSONObject().put("text", prop("string", "Isi pesan")),
+                    listOf("text"),
+                ),
+            ),
+        )
+        arr.put(
+            toolDef(
+                "upin_ask",
+                "Tanya agent Upin di VM (minta persetujuan user; jawaban bisa 1-2 menit, batas tunggu tool ±100 detik).",
+                params(
+                    JSONObject().put("question", prop("string", "Pertanyaan untuk Upin")),
+                    listOf("question"),
+                ),
+            ),
+        )
+        arr.put(
+            toolDef(
+                "supabase_query",
+                "Baca baris dari tabel Supabase via PostgREST (read-only; URL+key tersimpan).",
+                params(
+                    JSONObject()
+                        .put("table", prop("string", "Nama tabel"))
+                        .put("limit", prop("integer", "Maks baris 1..50, default 10")),
+                    listOf("table"),
+                ),
+            ),
+        )
+        arr.put(
+            toolDef(
+                "vercel_projects",
+                "Daftar project Vercel milik user (read-only).",
+                params(JSONObject(), emptyList()),
+            ),
+        )
+        arr.put(
+            toolDef(
+                "vercel_deployments",
+                "5 deployment Vercel terakhir sebuah project (read-only).",
+                params(
+                    JSONObject().put("project_id", prop("string", "ID project (dari vercel_projects)")),
+                    listOf("project_id"),
+                ),
+            ),
+        )
+        arr.put(
+            toolDef(
                 "system_info",
                 "Info perangkat & sandbox (read-only): model, versi Android, memori, isi sandbox.",
                 params(JSONObject(), emptyList()),
@@ -198,6 +327,18 @@ object ToolLoop {
                 } else {
                     tool.fetch(url, renderJs = false, maxChars = maxChars)
                 }
+            }
+        }
+        "github_repos", "github_runs", "github_read_file", "github_write_file",
+        "github_dispatch", "telegram_send", "upin_ask", "supabase_query",
+        "vercel_projects", "vercel_deployments" -> {
+            val c = appCtx
+            val g = gate
+            val bag = connectorBag
+            if (c == null || g == null || bag == null) {
+                ToolResult("Error: konektor belum diinisialisasi.", true)
+            } else {
+                ConnectorTools.execute(name, args, c, g, bag)
             }
         }
         "shell_exec", "file_read", "file_write", "net_scan",

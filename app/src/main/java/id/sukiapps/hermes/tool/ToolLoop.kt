@@ -302,6 +302,23 @@ object ToolLoop {
         )
         arr.put(
             toolDef(
+                "memory_save",
+                "Simpan catatan/fakta penting ke ingatan persisten agen (bertahan antar sesi; minta izin ringan).",
+                params(
+                    JSONObject().put("text", prop("string", "Catatan yang disimpan")),
+                    listOf("text"),
+                ),
+            ),
+        )
+        arr.put(
+            toolDef(
+                "memory_list",
+                "Baca semua catatan di ingatan persisten agen.",
+                params(JSONObject(), emptyList()),
+            ),
+        )
+        arr.put(
+            toolDef(
                 "system_info",
                 "Info perangkat & sandbox (read-only): model, versi Android, memori, isi sandbox.",
                 params(JSONObject(), emptyList()),
@@ -339,6 +356,14 @@ object ToolLoop {
                 ToolResult("Error: konektor belum diinisialisasi.", true)
             } else {
                 ConnectorTools.execute(name, args, c, g, bag)
+            }
+        }
+        "memory_save", "memory_list" -> {
+            val g = gate
+            if (g == null) {
+                ToolResult("Error: permission gate belum diinisialisasi.", true)
+            } else {
+                MemoryTools.execute(name, args, g)
             }
         }
         "shell_exec", "file_read", "file_write", "net_scan",
