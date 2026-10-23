@@ -359,9 +359,27 @@ fun SettingsScreen(
                         modifier = Modifier.weight(1f)
                     ) { Text("Muse by Meta") }
                 }
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            baseUrlEdit = "https://openrouter.ai/api/v1"
+                            vm.setBaseUrl(baseUrlEdit)
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("OpenRouter") }
+                    OutlinedButton(
+                        onClick = {
+                            baseUrlEdit =
+                                "https://chat.decentralizedcompute.company/v1"
+                            vm.setBaseUrl(baseUrlEdit)
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("DCompute") }
+                }
                 Text(
-                    "Muse by Meta memakai Meta Model API (model awal " +
-                        "muse-spark-1.3). Setelah memilih preset: ketuk " +
+                    "Preset mengisi Base URL (Muse by Meta juga menyetel " +
+                        "model awal muse-spark-1.3). Setelah memilih preset: ketuk " +
                         "\u201cGanti API key\u2026\u201d di bawah untuk menempel API key " +
                         "Meta milikmu, lalu di grup Model AI ketuk \u201cMuat ulang " +
                         "daftar model\u201d.",
