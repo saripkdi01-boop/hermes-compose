@@ -48,6 +48,14 @@ class WebFetchTool {
                 val host = runCatching { URI(current).host }.getOrNull()
                     ?: return@withContext ToolResult("Error: URL tidak punya host: $url", true)
 
+                if (!ToolAllowlist.isAllowed(host)) {
+                    return@withContext ToolResult(
+                        "Error: domain '$host' tidak ada di allowlist web_fetch. " +
+                            "Tambahkan dulu di Pengaturan > Tool Web.",
+                        true,
+                    )
+                }
+
                 val ips = runCatching { InetAddress.getAllByName(host) }.getOrElse {
                     return@withContext ToolResult("Error: host '$host' tidak bisa di-resolve: ${it.message}", true)
                 }

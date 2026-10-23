@@ -57,6 +57,12 @@ class PermissionGate @Inject constructor(
      */
     suspend fun request(type: String, detail: String, level: DangerLevel): Boolean =
         mutex.withLock {
+            // Sprint 1 Gate 2: Mode Developer — LOW/MEDIUM lolos otomatis
+            // (tercatat via="devmode"); HIGH tetap selalu popup.
+            if (level != DangerLevel.HIGH && DevMode.isEnabled(ctx)) {
+                audit.log(type, detail, granted = true, via = "devmode")
+                return true
+            }
             if (level != DangerLevel.HIGH && prefs().getBoolean(rememberKey(type), false)) {
                 audit.log(type, detail, granted = true, via = "remembered")
                 return true

@@ -25,6 +25,17 @@ interface AIProvider {
      * Pembatalan: batalkan coroutine pengoleksi (call HTTP ikut dibatalkan).
      */
     fun chatStream(request: ChatRequest): Flow<String>
+
+    /**
+     * Chat streaming DENGAN tool-loop (Sprint 1 Gate 2).
+     * Model boleh memanggil tool (web_fetch); eksekusi + iterasi terjadi
+     * di implementasi. [onToolEvent]: (nama tool, sukses, durasi ms).
+     * Implementasi default: tanpa tool (sama seperti [chatStream]).
+     */
+    fun chatStreamWithTools(
+        request: ChatRequest,
+        onToolEvent: (name: String, ok: Boolean, ms: Long) -> Unit = { _, _, _ -> }
+    ): Flow<String> = chatStream(request)
 }
 
 /** Parameter satu request chat. */

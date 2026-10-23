@@ -1,7 +1,13 @@
 package id.sukiapps.hermes.ui.chat
 
+import android.Manifest
 import android.app.Activity
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Bundle
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.content.Intent
 import android.net.Uri
 import android.provider.MediaStore
@@ -60,7 +66,11 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import id.sukiapps.hermes.ui.live.LiveActivityBar
+import id.sukiapps.hermes.ui.live.LiveStatus
+import id.sukiapps.hermes.ui.live.LiveStatusBus
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import id.sukiapps.hermes.ApkShareProvider
 import id.sukiapps.hermes.TtsReader
@@ -108,6 +118,138 @@ fun HermesChatScreen(
     DisposableEffect(Unit) {
         onDispose { chatVm.cancelUpin() }
     }
+
+    // ---- Gate 1 (Sprint 1): status live + input suara ----
+    // Live Activity: cerminkan state streaming UI ke LiveStatusBus agar
+    // LiveActivityBar (di atas daftar chat) tampil walau notifikasi ditolak.
+    var wasStreaming by remember { mutableStateOf(false) }
+    LaunchedEffect(state.isStreaming, state.streamingText.isEmpty()) {
+        when {
+            state.isStreaming && state.streamingText.isEmpty() -> {
+                wasStreaming = true
+                LiveStatusBus.post(LiveStatus.Sending)
+            }
+            state.isStreaming -> {
+                wasStreaming = true
+                LiveStatusBus.post(LiveStatus.Drawing)
+            }
+            wasStreaming -> {
+                wasStreaming = false
+                LiveStatusBus.post(LiveStatus.Done)
+            }
+        }
+    }
+
+    // Input suara: SpeechRecognizer bawaan Android, bahasa id-ID, tanpa
+    // dependensi eksternal. Hasil final ditambahkan ke input (tidak langsung
+    // dikirim — user meninjau dulu).
+    var isListening by remember { mutableStateOf(false) }
+    val recognizer = remember {
+        if (SpeechRecognizer.isRecognitionAvailable(ctx)) {
+            SpeechRecognizer.createSpeechRecognizer(ctx)
+        } else {
+            null
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose { recognizer?.destroy() }
+    }
+    fun startListening() {
+        val rec = recognizer
+        if (rec == null) {
+            Toast.makeText(
+                ctx,
+                "Pengenalan suara tidak tersedia di HP ini.",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+        rec.setRecognitionListener(object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) {
+                isListening = true
+            }
+            override fun onBeginningOfSpeech() {}
+            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() {
+                isListening = false
+            }
+            override fun onError(error: Int) {
+                isListening = false
+                val msg = when (error) {
+                    SpeechRecognizer.ERROR_NO_MATCH ->
+                        "Tidak terdengar jelas, coba lagi."
+                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT ->
+                        "Tidak ada suara terdeteksi."
+                    SpeechRecognizer.ERROR_AUDIO ->
+                        "Mikrofon tidak bisa diakses."
+                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
+                        "Izin mikrofon belum diberikan."
+                    else -> "Input suara gagal (kode $error)."
+                }
+                Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
+            }
+            override fun onResults(results: Bundle?) {
+                isListening = false
+                val text = results
+                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    ?.firstOrNull()
+                    .orEmpty()
+                if (text.isNotBlank()) {
+                    input = if (input.isBlank()) {
+                        text
+                    } else {
+                        input.trimEnd() + " " + text
+                    }
+                }
+            }
+            override fun onPartialResults(partialResults: Bundle?) {}
+            override fun onEvent(eventType: Int, params: Bundle?) {}
+        })
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(
+                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+            )
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "id-ID")
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Bicara sekarang\u2026")
+        }
+        runCatching { rec.startListening(intent) }.onFailure {
+            isListening = false
+            Toast.makeText(
+                ctx, "Input suara tidak bisa dimulai.", Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+    val micPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            startListening()
+        } else {
+            Toast.makeText(
+                ctx,
+                "Izin mikrofon ditolak \u2014 input suara mati.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+    fun onVoiceInput() {
+        if (isListening) {
+            recognizer?.stopListening()
+            isListening = false
+            return
+        }
+        if (ContextCompat.checkSelfPermission(
+                ctx, Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            startListening()
+        } else {
+            micPermission.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
     fun speak(msg: UiMessage) {
         tts.ensure(ctx) { ok ->
             if (ok) {
@@ -272,6 +414,8 @@ fun HermesChatScreen(
                         val t = input
                         chatVm.askUpin(t) { input = "" }
                     },
+                    onVoiceInput = { onVoiceInput() },
+                    isListening = isListening,
                     modifier = Modifier.imePadding()
                 )
             }
@@ -285,13 +429,21 @@ fun HermesChatScreen(
                     if (target >= 0) listState.animateScrollToItem(target)
                 }
             }
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(pad)
-                    .padding(vertical = 8.dp)
+            Column(
+                modifier = Modifier.fillMaxSize().padding(pad)
             ) {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    LiveActivityBar(modifier = Modifier.padding(top = 6.dp))
+                }
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(vertical = 8.dp)
+                ) {
                 items(all, key = { it.id }) { m ->
                     val isLastAssistant = !state.isStreaming &&
                         m.role == "assistant" &&
@@ -342,6 +494,7 @@ fun HermesChatScreen(
                             TypingIndicator(status = "Upin sedang mengetik…")
                         }
                     }
+                }
                 }
             }
         }

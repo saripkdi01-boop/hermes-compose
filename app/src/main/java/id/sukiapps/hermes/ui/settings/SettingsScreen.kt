@@ -1,5 +1,9 @@
 package id.sukiapps.hermes.ui.settings
 
+import android.app.KeyguardManager
+import android.content.Context
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,6 +36,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -42,9 +47,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import id.sukiapps.hermes.tool.ToolAllowlist
+import id.sukiapps.hermes.data.audit.DevMode
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -70,6 +78,31 @@ fun SettingsScreen(
 
     var showModelPicker by remember { mutableStateOf(false) }
     var baseUrlEdit by remember { mutableStateOf(state.baseUrl) }
+    // Sprint 1 Gate 2: editor allowlist web_fetch (satu domain per baris).
+    var allowlistEdit by remember {
+        mutableStateOf(ToolAllowlist.current().joinToString("\n"))
+    }
+    // Sprint 1 Gate 2: Mode Developer (PIN 6 digit + kredensial perangkat).
+    // Sprint 1 Gate 2: editor allowlist scan (net_scan / conn_health).
+    var scanEdit by remember {
+        mutableStateOf(ToolAllowlist.scanCurrent(ctx).joinToString("\n"))
+    }
+    var devPinSet by remember { mutableStateOf(DevMode.hasPin(ctx)) }
+    var devOn by remember { mutableStateOf(DevMode.isEnabled(ctx)) }
+    var devPin by remember { mutableStateOf("") }
+    var devPin2 by remember { mutableStateOf("") }
+    var devMsg by remember { mutableStateOf<String?>(null) }
+    val keyguardLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { res ->
+        if (res.resultCode == android.app.Activity.RESULT_OK) {
+            DevMode.setEnabled(ctx, true)
+            devOn = true
+            devMsg = "Mode Developer aktif."
+        } else {
+            devMsg = "Konfirmasi perangkat dibatalkan."
+        }
+    }
     var presetName by remember { mutableStateOf("") }
     var presetText by remember { mutableStateOf("") }
     var showPresetDialog by remember { mutableStateOf(false) }
@@ -272,7 +305,19 @@ fun SettingsScreen(
                     Text("Tema gelap", modifier = Modifier.weight(1f))
                     Switch(
                         checked = state.darkTheme,
-                        onCheckedChange = vm::setDarkTheme
+                        onCheckedChange = vm::setDarkTheme,
+                        // Fix uji fisik Gate 1: warna default switch nyaris
+                        // menyatu dengan kartu di tema terang (ghost switch).
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            uncheckedThumbColor =
+                                MaterialTheme.colorScheme.onSurfaceVariant,
+                            uncheckedTrackColor =
+                                MaterialTheme.colorScheme.surfaceVariant,
+                            uncheckedBorderColor =
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     )
                 }
             }
@@ -296,6 +341,161 @@ fun SettingsScreen(
                         vm.resetBaseUrl()
                         baseUrlEdit = id.sukiapps.hermes.domain.Prefs.DEFAULT_BASE
                     }) { Text("Reset") }
+                }
+            }
+
+            // ---- Grup: Tool Web (Sprint 1 Gate 2) ----
+            SettingsGroup("Tool Web") {
+                Text(
+                    "Allowlist domain web_fetch — satu domain per baris. " +
+                        "Kosongkan untuk mengizinkan semua domain publik " +
+                            "(akses IP privat tetap diblokir).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = allowlistEdit,
+                    onValueChange = { allowlistEdit = it },
+                    label = { Text("Domain diizinkan") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2
+                )
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        ToolAllowlist.setDomains(
+                            ctx,
+                            allowlistEdit.split("\n")
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Simpan allowlist") }
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Allowlist scan untuk net_scan & conn_health — satu host per baris. " +
+                        "Kosongkan untuk default localhost saja.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = scanEdit,
+                    onValueChange = { scanEdit = it },
+                    label = { Text("Host scan diizinkan") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2
+                )
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        ToolAllowlist.setScanHosts(
+                            ctx,
+                            scanEdit.split("\n")
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Simpan allowlist scan") }
+            }
+
+            // ---- Grup: Mode Developer (Sprint 1 Gate 2) ----
+            SettingsGroup("Mode Developer") {
+                Text(
+                    if (devOn) {
+                        "AKTIF — approval LOW/MEDIUM dilewati otomatis; HIGH tetap wajib popup."
+                    } else {
+                        "Nonaktif — tool sensitif selalu meminta izin."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                if (!devPinSet) {
+                    OutlinedTextField(
+                        value = devPin,
+                        onValueChange = { devPin = it.filter { c -> c.isDigit() }.take(6) },
+                        label = { Text("Buat PIN (6 digit)") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = devPin2,
+                        onValueChange = { devPin2 = it.filter { c -> c.isDigit() }.take(6) },
+                        label = { Text("Ulangi PIN") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            when {
+                                devPin.length != 6 -> devMsg = "PIN harus 6 digit."
+                                devPin != devPin2 -> devMsg = "PIN tidak sama."
+                                else -> {
+                                    DevMode.setPin(ctx, devPin)
+                                    devPinSet = true
+                                    devPin = ""
+                                    devPin2 = ""
+                                    devMsg = "PIN tersimpan. Masukkan PIN untuk mengaktifkan."
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Simpan PIN") }
+                } else {
+                    OutlinedTextField(
+                        value = devPin,
+                        onValueChange = { devPin = it.filter { c -> c.isDigit() }.take(6) },
+                        label = { Text("PIN developer") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            if (!DevMode.verifyPin(ctx, devPin)) {
+                                devMsg = "PIN salah."
+                            } else if (devOn) {
+                                DevMode.setEnabled(ctx, false)
+                                devOn = false
+                                devPin = ""
+                                devMsg = "Mode Developer dimatikan."
+                            } else {
+                                val km = ctx.getSystemService(Context.KEYGUARD_SERVICE)
+                                    as KeyguardManager
+                                val intent = km.createConfirmDeviceCredentialIntent(
+                                    "Mode Developer",
+                                    "Konfirmasi untuk mengaktifkan Mode Developer"
+                                )
+                                if (intent != null) {
+                                    keyguardLauncher.launch(intent)
+                                } else {
+                                    DevMode.setEnabled(ctx, true)
+                                    devOn = true
+                                    devMsg = "Mode Developer aktif (perangkat tanpa kunci layar)."
+                                }
+                                devPin = ""
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            if (devOn) "Matikan Mode Developer"
+                            else "Aktifkan Mode Developer"
+                        )
+                    }
+                }
+                devMsg?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
 
