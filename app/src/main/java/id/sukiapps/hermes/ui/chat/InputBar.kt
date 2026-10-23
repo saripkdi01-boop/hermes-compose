@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Stop
@@ -63,6 +64,8 @@ fun InputBar(
     onPickDocument: () -> Unit,
     onWebFetch: () -> Unit,
     onAskUpin: () -> Unit,
+    onVoiceInput: (() -> Unit)? = null,
+    isListening: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -190,6 +193,23 @@ fun InputBar(
                         errorBorderColor = androidx.compose.ui.graphics.Color.Transparent
                     )
                 )
+                if (onVoiceInput != null) {
+                    IconButton(onClick = onVoiceInput) {
+                        Icon(
+                            imageVector = Icons.Filled.Mic,
+                            contentDescription = if (isListening) {
+                                "Sedang mendengarkan\u2026"
+                            } else {
+                                "Input suara"
+                            },
+                            tint = if (isListening) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                    }
+                }
                 Spacer(Modifier.width(4.dp))
                 AnimatedContent(
                     targetState = isStreaming,

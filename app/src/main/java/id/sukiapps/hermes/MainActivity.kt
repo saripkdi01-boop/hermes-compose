@@ -11,6 +11,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.view.WindowCompat
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import id.sukiapps.hermes.ui.chatv3.V3PreviewScreen
@@ -86,9 +98,52 @@ class MainActivity : ComponentActivity() {
                 // Dialog izin global — di atas NavHost agar selalu bisa muncul
                 // dari layar mana pun.
                 PermissionGateDialog(gate)
+                // Gate 1 (Sprint 1): bottom navigation 4 tab standar —
+                // Chat, Agent (Hub v12), Tools (Katalog Tools), Settings.
+                // Bar hanya tampil di destinasi tab; layar turunan tetap
+                // full-screen seperti sebelumnya.
+                val currentRoute = backStack?.destination?.route
+                val tabRoutes = listOf(
+                    Nav.CHAT, Nav.V12_HUB, Nav.TOOLS, Nav.SETTINGS
+                )
+                Scaffold(
+                    bottomBar = {
+                        if (currentRoute in tabRoutes) {
+                            NavigationBar {
+                                val tabs = listOf(
+                                    Triple(Nav.CHAT, "Chat", Icons.Filled.Chat),
+                                    Triple(Nav.V12_HUB, "Agent", Icons.Filled.SmartToy),
+                                    Triple(Nav.TOOLS, "Tools", Icons.Filled.Build),
+                                    Triple(Nav.SETTINGS, "Settings", Icons.Filled.Settings)
+                                )
+                                tabs.forEach { (route, label, icon) ->
+                                    NavigationBarItem(
+                                        selected = currentRoute == route,
+                                        onClick = {
+                                            if (currentRoute != route) {
+                                                nav.navigate(route) {
+                                                    popUpTo(Nav.CHAT) {
+                                                        saveState = true
+                                                    }
+                                                    launchSingleTop = true
+                                                    restoreState = true
+                                                }
+                                            }
+                                        },
+                                        icon = {
+                                            Icon(icon, contentDescription = label)
+                                        },
+                                        label = { Text(label) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                ) { innerPad ->
                 NavHost(
                     navController = nav,
-                    startDestination = startDestination
+                    startDestination = startDestination,
+                    modifier = Modifier.padding(innerPad)
                 ) {
                     composable(Nav.ONBOARDING) {
                         OnboardingScreen(
@@ -188,6 +243,7 @@ class MainActivity : ComponentActivity() {
         composable("chatv3preview") { V3PreviewScreen(onBack = { nav.popBackStack() }) }
             composable("health") { HealthScreen(onBack = { nav.popBackStack() }) }
     
+                }
                 }
             }
         }
