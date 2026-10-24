@@ -1,11 +1,11 @@
 package id.sukiapps.hermes.di
-
 import id.sukiapps.hermes.diagnostics.CrashReporter
 import android.app.Application
 import dagger.hilt.android.HiltAndroidApp
 import id.sukiapps.hermes.data.store.ApprovalNotifier
 import id.sukiapps.hermes.data.store.ApprovalStore
 import id.sukiapps.hermes.data.store.JsonStore
+import id.sukiapps.hermes.data.notif.ExecNotifier
 import id.sukiapps.hermes.data.work.V12Scheduler
 import id.sukiapps.hermes.tool.JsRenderer
 import id.sukiapps.hermes.tool.ToolAllowlist
@@ -20,7 +20,6 @@ import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
-
 @HiltAndroidApp
 class HermesApp : Application() {
     override fun onCreate() {
@@ -47,6 +46,8 @@ class HermesApp : Application() {
             cep.supabaseConnector(),
             cep.vercelConnector()
         )
+        // v15.0: daftarkan channel notifikasi eksekusi & izin.
+        ExecNotifier.ensureChannels(this)
         // v12 F2: approval pending baru -> notifikasi "Persetujuan".
         ApprovalStore.onPendingApproval = { item ->
             ApprovalNotifier.notifyApproval(this, item.id, item.title, item.detail)
@@ -55,14 +56,12 @@ class HermesApp : Application() {
         runCatching { V12Scheduler.scheduleAll(this) }
     }
 }
-
 /** Entry point Hilt untuk mengambil PermissionGate dari Application. */
 @EntryPoint
 @InstallIn(SingletonComponent::class)
 interface GateEntryPoint {
     fun permissionGate(): PermissionGate
 }
-
 /** Entry point Hilt untuk konektor (Sprint 1 Gate 3). */
 @EntryPoint
 @InstallIn(SingletonComponent::class)
