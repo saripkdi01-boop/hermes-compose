@@ -3,56 +3,60 @@ package id.sukiapps.hermes.ui.chat
 import android.Manifest
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
+import android.provider.MediaStore
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.content.Intent
-import android.net.Uri
-import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -64,20 +68,22 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
-import id.sukiapps.hermes.ui.live.LiveActivityBar
-import id.sukiapps.hermes.ui.live.LiveStatus
-import id.sukiapps.hermes.ui.live.LiveStatusBus
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import id.sukiapps.hermes.ApkShareProvider
 import id.sukiapps.hermes.TtsReader
 import id.sukiapps.hermes.ui.history.DrawerContent
 import id.sukiapps.hermes.ui.history.HistoryViewModel
+import id.sukiapps.hermes.ui.live.LiveActivityBar
+import id.sukiapps.hermes.ui.live.LiveStatus
+import id.sukiapps.hermes.ui.live.LiveStatusBus
+import id.sukiapps.hermes.ui.theme.PillShape
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
@@ -87,7 +93,12 @@ import java.util.Locale
 /** Maksimal karakter hasil web yang ditampilkan/dimasukkan ke input. */
 private const val PREVIEW_CHARS = 4000
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * v15 — Chat ala Muse: top bar minimal (judul serif + pil model),
+ * layar kosong berisi sapaan + chip saran, status mode agen jadi pil.
+ * Seluruh fitur lama dipertahankan: drawer, lampiran, kamera, suara,
+ * TTS, web fetch, edit pesan, Upin.
+ */
 @Composable
 fun HermesChatScreen(
     onOpenSettings: () -> Unit,
@@ -109,21 +120,17 @@ fun HermesChatScreen(
     var editingMsg by remember { mutableStateOf<UiMessage?>(null) }
     var editText by remember { mutableStateOf("") }
     var showWebInput by remember { mutableStateOf(false) }
-
     // TTS per pesan (TtsReader legacy, lazy init).
     val tts = remember { TtsReader() }
     var speakingId by remember { mutableStateOf<Long?>(null) }
     DisposableEffect(Unit) {
         onDispose { tts.shutdown() }
     }
-    // v9.4: keluar layar chat → batalkan polling Upin.
+    // Keluar layar chat → batalkan polling Upin.
     DisposableEffect(Unit) {
         onDispose { chatVm.cancelUpin() }
     }
-
-    // ---- Gate 1 (Sprint 1): status live + input suara ----
-    // Live Activity: cerminkan state streaming UI ke LiveStatusBus agar
-    // LiveActivityBar (di atas daftar chat) tampil walau notifikasi ditolak.
+    // ---- status live + input suara ----
     var wasStreaming by remember { mutableStateOf(false) }
     LaunchedEffect(state.isStreaming, state.streamingText.isEmpty()) {
         when {
@@ -141,10 +148,6 @@ fun HermesChatScreen(
             }
         }
     }
-
-    // Input suara: SpeechRecognizer bawaan Android, bahasa id-ID, tanpa
-    // dependensi eksternal. Hasil final ditambahkan ke input (tidak langsung
-    // dikirim — user meninjau dulu).
     var isListening by remember { mutableStateOf(false) }
     val recognizer = remember {
         if (SpeechRecognizer.isRecognitionAvailable(ctx)) {
@@ -214,7 +217,7 @@ fun HermesChatScreen(
                 RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
             )
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "id-ID")
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Bicara sekarang\u2026")
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Bicara sekarang…")
         }
         runCatching { rec.startListening(intent) }.onFailure {
             isListening = false
@@ -231,7 +234,7 @@ fun HermesChatScreen(
         } else {
             Toast.makeText(
                 ctx,
-                "Izin mikrofon ditolak \u2014 input suara mati.",
+                "Izin mikrofon ditolak — input suara mati.",
                 Toast.LENGTH_SHORT
             ).show()
         }
@@ -251,7 +254,6 @@ fun HermesChatScreen(
             micPermission.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
-
     fun speak(msg: UiMessage) {
         tts.ensure(ctx) { ok ->
             if (ok) {
@@ -266,7 +268,6 @@ fun HermesChatScreen(
             }
         }
     }
-
     // Launcher lampiran.
     val pickImages = rememberLauncherForActivityResult(
         ActivityResultContracts.GetMultipleContents()
@@ -313,7 +314,6 @@ fun HermesChatScreen(
             Toast.makeText(ctx, "Kamera tidak tersedia.", Toast.LENGTH_SHORT).show()
         }
     }
-
     LaunchedEffect(state.error) {
         state.error?.let { snack.showSnackbar(it) }
     }
@@ -321,11 +321,9 @@ fun HermesChatScreen(
     LaunchedEffect(state.convId) {
         historyVm.setActive(state.convId)
     }
-
     BackHandler(drawerState.isOpen) {
         scope.launch { drawerState.close() }
     }
-
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -356,42 +354,17 @@ fun HermesChatScreen(
         Scaffold(
             snackbarHost = { SnackbarHost(snack) },
             topBar = {
-                TopAppBar(
-                    title = {
-                        Column {
-                            Text(
-                                text = state.title,
-                                style = MaterialTheme.typography.titleMedium,
-                                maxLines = 1
-                            )
-                            val sub = buildString {
-                                if (state.model.isNotBlank()) append(state.model)
-                                append(" · ~${state.tokenEstimate} token")
-                            }
-                            Text(
-                                text = sub,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1
-                            )
-                        }
+                MuseTopBar(
+                    title = state.title,
+                    subtitle = buildString {
+                        if (state.model.isNotBlank()) append(state.model)
+                        append(" · ~${state.tokenEstimate} token")
                     },
-                    navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Filled.Menu, contentDescription = "Riwayat chat")
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = { chatVm.newConversation() }) {
-                            Icon(Icons.Filled.Add, contentDescription = "Chat baru")
-                        }
-                        IconButton(onClick = onOpenSettings) {
-                            Icon(Icons.Filled.Settings, contentDescription = "Pengaturan")
-                        }
-                    IconButton(onClick = onOpenV12Hub) {
-                        Icon(Icons.Filled.Apps, contentDescription = "Fitur v12")
-                    }
-                    }
+                    modelLabel = state.model,
+                    onOpenDrawer = { scope.launch { drawerState.open() } },
+                    onNewChat = { chatVm.newConversation() },
+                    onOpenSettings = onOpenSettings,
+                    onOpenV12Hub = onOpenV12Hub
                 )
             },
             bottomBar = {
@@ -410,7 +383,7 @@ fun HermesChatScreen(
                     onTakePhoto = { launchCamera() },
                     onPickDocument = { pickDocs.launch("*/*") },
                     onWebFetch = { webVm.reset(); showWebInput = true },
-                    // v9.4: ambil teks input → gate di VM → input dikosongkan
+                    // Ambil teks input → gate di VM → input dikosongkan
                     // setelah izin diberikan.
                     onAskUpin = {
                         val t = input
@@ -431,6 +404,9 @@ fun HermesChatScreen(
                     if (target >= 0) listState.animateScrollToItem(target)
                 }
             }
+            val showEmpty = all.isEmpty() &&
+                state.streamingText.isEmpty() &&
+                !state.upinBusy
             Column(
                 modifier = Modifier.fillMaxSize().padding(pad)
             ) {
@@ -440,7 +416,7 @@ fun HermesChatScreen(
                 ) {
                     LiveActivityBar(modifier = Modifier.padding(top = 6.dp))
                 }
-                // Sprint 1 Gate 2: chip event tool terakhir (mis. web_fetch).
+                // Chip event tool terakhir (mis. web_fetch).
                 state.toolEvent?.let { ev ->
                     Text(
                         text = ev,
@@ -449,84 +425,80 @@ fun HermesChatScreen(
                         modifier = Modifier.padding(start = 16.dp, top = 2.dp)
                     )
                 }
-                // Sprint 1 Gate 4: toggle + status Mode Agen
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(start = 16.dp, top = 2.dp)
-                ) {
-                    Switch(
-                        checked = state.agentMode,
-                        onCheckedChange = { chatVm.setAgentMode(it) }
+                // Mode Agen — pil kompak.
+                AgentModePill(
+                    checked = state.agentMode,
+                    status = state.agentStatus,
+                    onCheckedChange = { chatVm.setAgentMode(it) }
+                )
+                if (showEmpty) {
+                    ChatEmptyState(
+                        onSuggestion = { input = it },
+                        modifier = Modifier.weight(1f)
                     )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = state.agentStatus ?: "Mode Agen",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(vertical = 8.dp)
-                ) {
-                items(all, key = { it.id }) { m ->
-                    val isLastAssistant = !state.isStreaming &&
-                        m.role == "assistant" &&
-                        all.lastOrNull { it.role == "assistant" }?.id == m.id
-                    MessageBubble(
-                        message = m,
-                        isLastAssistant = isLastAssistant,
-                        isSpeaking = speakingId == m.id && tts.isSpeaking,
-                        onSpeak = { speak(m) },
-                        onStopSpeak = {
-                            tts.stop()
-                            speakingId = null
-                        },
-                        onEdit = {
-                            editingMsg = m
-                            editText = m.content
-                        },
-                        onRegenerate = { chatVm.regenerate() },
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    )
-                }
-                if (state.isStreaming) {
-                    item(key = "streaming") {
-                        if (state.streamingText.isEmpty()) {
-                            Box(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-                                TypingIndicator(status = "Menulis…")
-                            }
-                        } else {
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(vertical = 8.dp)
+                    ) {
+                        items(all, key = { it.id }) { m ->
+                            val isLastAssistant = !state.isStreaming &&
+                                m.role == "assistant" &&
+                                all.lastOrNull { it.role == "assistant" }?.id == m.id
                             MessageBubble(
-                                message = UiMessage(
-                                    id = -99L,
-                                    role = "assistant",
-                                    content = state.streamingText
-                                ),
-                                isLastAssistant = false,
-                                isSpeaking = false,
-                                onSpeak = {},
-                                onStopSpeak = {},
+                                message = m,
+                                isLastAssistant = isLastAssistant,
+                                isSpeaking = speakingId == m.id && tts.isSpeaking,
+                                onSpeak = { speak(m) },
+                                onStopSpeak = {
+                                    tts.stop()
+                                    speakingId = null
+                                },
+                                onEdit = {
+                                    editingMsg = m
+                                    editText = m.content
+                                },
+                                onRegenerate = { chatVm.regenerate() },
                                 modifier = Modifier.padding(vertical = 4.dp)
                             )
                         }
-                    }
-                }
-                // v9.4: indikator sementara saat menunggu jawaban Upin.
-                if (state.upinBusy) {
-                    item(key = "upin_typing") {
-                        Box(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-                            TypingIndicator(status = "Upin sedang mengetik…")
+                        if (state.isStreaming) {
+                            item(key = "streaming") {
+                                if (state.streamingText.isEmpty()) {
+                                    Box(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                                        TypingIndicator(status = "Menulis…")
+                                    }
+                                } else {
+                                    MessageBubble(
+                                        message = UiMessage(
+                                            id = -99L,
+                                            role = "assistant",
+                                            content = state.streamingText
+                                        ),
+                                        isLastAssistant = false,
+                                        isSpeaking = false,
+                                        onSpeak = {},
+                                        onStopSpeak = {},
+                                        modifier = Modifier.padding(vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+                        // Indikator sementara saat menunggu jawaban Upin.
+                        if (state.upinBusy) {
+                            item(key = "upin_typing") {
+                                Box(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                                    TypingIndicator(status = "Upin sedang mengetik…")
+                                }
+                            }
                         }
                     }
-                }
                 }
             }
         }
     }
-
     // Dialog edit pesan.
     editingMsg?.let { m ->
         AlertDialog(
@@ -551,8 +523,7 @@ fun HermesChatScreen(
             }
         )
     }
-
-    // ---- "Ambil dari web" (v9.2): dialog input URL → preview → masukkan ke input.
+    // ---- "Ambil dari web": dialog input URL → preview → masukkan ke input.
     if (showWebInput) {
         AlertDialog(
             onDismissRequest = { showWebInput = false },
@@ -588,7 +559,6 @@ fun HermesChatScreen(
             }
         )
     }
-
     // Preview hasil / loading / error.
     val webBusy = webVm.loading
     val webText = webVm.result
@@ -663,4 +633,136 @@ fun HermesChatScreen(
     }
 }
 
+/**
+ * Top bar ala Muse: tinggi 56dp, judul serif + subtitle kecil,
+ * pil model di kanan, aksi ikon (chat baru, pengaturan, hub v12).
+ */
+@Composable
+private fun MuseTopBar(
+    title: String,
+    subtitle: String,
+    modelLabel: String,
+    onOpenDrawer: () -> Unit,
+    onNewChat: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenV12Hub: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(color = scheme.background, tonalElevation = 0.dp) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onOpenDrawer) {
+                Icon(
+                    Icons.Filled.Menu,
+                    contentDescription = "Riwayat chat",
+                    tint = scheme.onSurfaceVariant
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 4.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = scheme.onBackground,
+                    maxLines = 1
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = scheme.onSurfaceVariant,
+                    maxLines = 1
+                )
+            }
+            if (modelLabel.isNotBlank()) {
+                Surface(
+                    shape = PillShape,
+                    color = scheme.surfaceVariant,
+                    modifier = Modifier.padding(end = 4.dp)
+                ) {
+                    Text(
+                        text = modelLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = scheme.onSurfaceVariant,
+                        maxLines = 1,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+            }
+            IconButton(onClick = onNewChat) {
+                Icon(
+                    Icons.Filled.Add,
+                    contentDescription = "Chat baru",
+                    tint = scheme.onSurfaceVariant
+                )
+            }
+            IconButton(onClick = onOpenSettings) {
+                Icon(
+                    Icons.Filled.Settings,
+                    contentDescription = "Pengaturan",
+                    tint = scheme.onSurfaceVariant
+                )
+            }
+            IconButton(onClick = onOpenV12Hub) {
+                Icon(
+                    Icons.Filled.Apps,
+                    contentDescription = "Fitur v12",
+                    tint = scheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+/** Pil status Mode Agen: titik aksen + switch + label status. */
+@Composable
+private fun AgentModePill(
+    checked: Boolean,
+    status: String?,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        shape = PillShape,
+        color = scheme.surfaceVariant,
+        border = BorderStroke(
+            1.dp,
+            if (checked) scheme.primary.copy(alpha = 0.4f) else scheme.outlineVariant
+        ),
+        modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (checked) scheme.primary
+                        else scheme.onSurfaceVariant.copy(alpha = 0.4f)
+                    )
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = status ?: "Mode Agen",
+                style = MaterialTheme.typography.labelSmall,
+                color = scheme.onSurfaceVariant
+            )
+            Spacer(Modifier.width(4.dp))
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange
+            )
+        }
+    }
+}
 /* akhir ChatScreen */
