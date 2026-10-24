@@ -74,11 +74,16 @@ object SelfUpgradeTools {
                         )
                     }
                     gh.createBranch(pat, OWNER, REPO, branch).fold(
-                        onSuccess = {
+                        onSuccess = { created ->
+                            val msg = if (created) {
+                                "Branch dibuat: $branch"
+                            } else {
+                                "Branch sudah ada, dipakai-ulang: $branch"
+                            }
                             ExecutionLog.log(
-                                "selfupgrade", "Branch dibuat", branch, "ok"
+                                "selfupgrade", "Branch", msg, "ok"
                             )
-                            ToolResult("Branch dibuat: $branch")
+                            ToolResult(msg)
                         },
                         onFailure = {
                             ToolResult("Error: ${it.message}", true)
@@ -127,6 +132,18 @@ object SelfUpgradeTools {
                             "Error: 'branch' (awalan $BRANCH_PREFIX) dan " +
                                 "'title' wajib diisi.",
                             true
+                        )
+                    }
+                    val existingPr = gh.getOpenPullRequest(
+                        pat, OWNER, REPO, branch
+                    ).getOrNull()
+                    if (existingPr != null) {
+                        ExecutionLog.log(
+                            "selfupgrade", "PR dipakai-ulang",
+                            "#$existingPr", "ok"
+                        )
+                        return ToolResult(
+                            "PR sudah ada, dipakai-ulang: #$existingPr"
                         )
                     }
                     gh.createPullRequest(
