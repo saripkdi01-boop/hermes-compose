@@ -13,8 +13,8 @@ android {
         applicationId = "id.sukiapps.hermes"
         minSdk = 30
         targetSdk = 34
-        versionCode = 33
-        versionName = "14.9"
+        versionCode = 34
+        versionName = "14.10"
     }
     buildTypes {
         release {
@@ -46,7 +46,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
-    implementation(libs.androidx.activity.compose)
+    implementation(libs.activity.compose)
     implementation(libs.androidx.hilt.navigation.compose)
     implementation("androidx.work:work-runtime-ktx:2.9.0")
     // Compose (versi dikelola BOM)
