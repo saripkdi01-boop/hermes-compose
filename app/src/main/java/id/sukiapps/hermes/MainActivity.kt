@@ -1,10 +1,16 @@
 package id.sukiapps.hermes
 
 import id.sukiapps.hermes.diagnostics.HealthScreen
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -77,6 +83,21 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             val nav = rememberNavController()
+            // v14.10: minta izin notifikasi sekali saat start (API 33+).
+            // Tanpa dialog custom tambahan — PermissionGateDialog yang ada
+            // sudah cukup untuk keputusan izin aksi sensitif.
+            val notifLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission()
+            ) { }
+            LaunchedEffect(Unit) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    ContextCompat.checkSelfPermission(
+                        this@MainActivity, Manifest.permission.POST_NOTIFICATIONS
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
             // v12: deep-link dari notifikasi approval (cold start).
             val pendingRoute = remember { intent.getStringExtra("nav_route") }
             LaunchedEffect(pendingRoute) {
@@ -248,4 +269,5 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+// v14.10: penutup class MainActivity — perbaikan Missing '}' (CI #110, kspReleaseKotlin).
 }

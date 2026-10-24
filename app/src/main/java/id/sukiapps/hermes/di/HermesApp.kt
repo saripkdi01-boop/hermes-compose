@@ -3,6 +3,7 @@ package id.sukiapps.hermes.di
 import id.sukiapps.hermes.diagnostics.CrashReporter
 import android.app.Application
 import dagger.hilt.android.HiltAndroidApp
+import id.sukiapps.hermes.data.notif.ExecNotifier
 import id.sukiapps.hermes.data.store.ApprovalNotifier
 import id.sukiapps.hermes.data.store.ApprovalStore
 import id.sukiapps.hermes.data.store.JsonStore
@@ -51,6 +52,10 @@ class HermesApp : Application() {
         ApprovalStore.onPendingApproval = { item ->
             ApprovalNotifier.notifyApproval(this, item.id, item.title, item.detail)
         }
+        // v14.10: channel notifikasi — approval dulu (channel yang sudah ada),
+        // lalu channel eksekusi. Jangan hapus inisialisasi di atas.
+        ApprovalNotifier.ensureChannel(this)
+        ExecNotifier.ensureChannels(this)
         // v12 F4/F5: jadwalkan brief harian + refleksi mingguan (idempoten).
         runCatching { V12Scheduler.scheduleAll(this) }
     }
