@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import id.sukiapps.hermes.data.notif.ExecNotifier
 import id.sukiapps.hermes.data.store.ExecutionLog
 import id.sukiapps.hermes.data.agent.MemoryWriter
 import id.sukiapps.hermes.data.agent.SoulPrompt
@@ -84,8 +85,52 @@ class ChatViewModel @Inject constructor(
     private val ai: AIProvider,
     private val memoryWriter: MemoryWriter,
     private val upin: UpinConnector,
-    private val gate: PermissionGate
+    private val gate: PermissionGate,
+    private val execNotifier: ExecNotifier
 ) : ViewModel() {
+
+    // v14.10: throttle notifikasi eksekusi (timestamp terakhir per kategori).
+    private var lastPromptNotifAt = 0L
+    private var lastDoneNotifAt = 0L
+    private var lastToolNotifAt = 0L
+    private var lastErrorNotifAt = 0L
+
+    private fun postPromptNotif(summary: String) {
+        if (!prefs.notifEnabled || !prefs.notifExec) return
+        val now = System.currentTimeMillis()
+        if (now - lastPromptNotifAt < 60_000L) return
+        lastPromptNotifAt = now
+        execNotifier.notifyExec("Prompt terkirim", summary)
+    }
+
+    private fun postDoneNotif(text: String) {
+        if (!prefs.notifEnabled || !prefs.notifExec) return
+        val now = System.currentTimeMillis()
+        if (now - lastDoneNotifAt < 60_000L) return
+        lastDoneNotifAt = now
+        execNotifier.notifyDone("Respons selesai", text)
+    }
+
+    private fun postToolNotif(toolName: String) {
+        if (!prefs.notifEnabled || !prefs.notifExec) return
+        val now = System.currentTimeMillis()
+        if (now - lastToolNotifAt < 30_000L) return
+        lastToolNotifAt = now
+        execNotifier.notifyExec("Tool selesai", toolName)
+    }
+
+    private fun postErrorNotif(message: String) {
+        if (!prefs.notifEnabled || !prefs.notifExec) return
+        val now = System.currentTimeMillis()
+        if (now - lastErrorNotifAt < 30_000L) return
+        lastErrorNotifAt = now
+        execNotifier.notifyError("Gagal eksekusi", message)
+    }
+
+    private fun postApprovalNotif(toolName: String) {
+        if (!prefs.notifEnabled || !prefs.notifApproval) return
+        execNotifier.notifyApproval("Perlu izin", toolName)
+    }
 
     private val _state = MutableStateFlow(ChatUiState())
     val state: StateFlow<ChatUiState> = _state.asStateFlow()
@@ -278,6 +323,7 @@ class ChatViewModel @Inject constructor(
         if (q.isEmpty() || upinJob != null) return
         upinJob = viewModelScope.launch {
             try {
+                postApprovalNotif("Upin")
                 val granted = gate.request(
                     "Upin",
                     "Kirim ke Upin:\n${q.take(200)}",
@@ -306,11 +352,13 @@ class ChatViewModel @Inject constructor(
                 }
                 _state.update { it.copy(upinBusy = true, error = null) }
                 ExecutionLog.log("tool", "Tanya Upin", q.take(200), "start")
+                postToolNotif("Tanya Upin")
                 val jobId = withContext(Dispatchers.IO) { upin.sendMessage(q) }
                 val answer = pollUpinAnswer(jobId)
                 withContext(Dispatchers.IO) {
                     repo.addMessage(convId, "assistant", answer, null)
                     ExecutionLog.log("tool", "Upin menjawab", "${answer.length} karakter", "ok")
+                    postToolNotif("Upin menjawab")
                 }
             } catch (e: CancellationException) {
                 throw e // batal wajar (kirim lain / keluar layar) — tanpa pesan error
@@ -537,6 +585,7 @@ class ChatViewModel @Inject constructor(
         }
         val acc = StringBuilder()
         ExecutionLog.log("prompt", "Prompt → $model", prompt.take(500), "start")
+        postPromptNotif(prompt.take(40))
         // Sprint 1 Gate 2: tanpa lampiran gambar -> jalur tool-loop
         // (web_fetch); dengan gambar -> jalur vision lama tanpa tool.
         val flow = if (imageB64s.isEmpty()) {
@@ -545,6 +594,7 @@ class ChatViewModel @Inject constructor(
                     "${"%.1f".format(ms / 1000.0)} dtk"
                 _state.update { s -> s.copy(toolEvent = label) }
                 ExecutionLog.log("tool", name, "$ms ms", if (ok) "ok" else "fail")
+                postToolNotif(name)
             }
         } else {
             ai.chatStream(req)
@@ -557,6 +607,7 @@ class ChatViewModel @Inject constructor(
                             val msg = (e.message ?: "Gagal terhubung.").take(200)
                             _state.update { it.copy(error = msg) }
                             ExecutionLog.log("error", "LLM gagal", msg, "fail")
+                            postErrorNotif(msg)
                         }
                     }
                     .collect { token ->
@@ -574,6 +625,7 @@ class ChatViewModel @Inject constructor(
                         repo.addMessage(convId, "assistant", finalText, null)
                     }
                     ExecutionLog.log("prompt", "Respons selesai", "${finalText.length} karakter", "ok")
+                    postDoneNotif("${finalText.length} karakter")
                     withContext(Dispatchers.Main) {
                         _state.update {
                             it.copy(isStreaming = false, streamingText = "")

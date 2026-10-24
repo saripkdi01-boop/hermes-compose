@@ -30,6 +30,11 @@ object Prefs {
     // v9.4: base URL konektor Upin (bukan secret; default loopback SSH forward).
     const val KEY_UPIN_URL = "upin_url"
 
+    // v14.10: toggle notifikasi eksekusi & izin (bukan secret).
+    const val KEY_NOTIF_ENABLED = "notif_enabled"
+    const val KEY_NOTIF_EXEC = "notif_exec"
+    const val KEY_NOTIF_APPROVAL = "notif_approval"
+
     const val DEFAULT_BASE = "https://je.jerouter.web.id/v1"
     const val DEFAULT_TEMPERATURE = 1.0f
     const val DEFAULT_TOP_P = 1.0f

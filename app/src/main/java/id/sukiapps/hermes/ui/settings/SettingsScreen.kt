@@ -1,8 +1,14 @@
 package id.sukiapps.hermes.ui.settings
 
+import android.Manifest
 import android.app.KeyguardManager
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.core.content.ContextCompat
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -103,6 +109,18 @@ fun SettingsScreen(
             devMsg = "Konfirmasi perangkat dibatalkan."
         }
     }
+    // v14.10: launcher izin notifikasi (API 33+).
+    var notifGranted by remember {
+        mutableStateOf(
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                ContextCompat.checkSelfPermission(
+                    ctx, Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val notifLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> notifGranted = granted }
     var presetName by remember { mutableStateOf("") }
     var presetText by remember { mutableStateOf("") }
     var showPresetDialog by remember { mutableStateOf(false) }
@@ -330,6 +348,68 @@ fun SettingsScreen(
                         )
                     )
                 }
+            }
+
+            // ---- Grup: Notifikasi & Izin (v14.10) ----
+            SettingsGroup("Notifikasi & Izin") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Notifikasi", modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = state.notifEnabled,
+                        onCheckedChange = vm::setNotifEnabled
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Eksekusi (tool, prompt, respons)",
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(
+                        checked = state.notifExec,
+                        onCheckedChange = vm::setNotifExec,
+                        enabled = state.notifEnabled
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Izin & persetujuan", modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = state.notifApproval,
+                        onCheckedChange = vm::setNotifApproval,
+                        enabled = state.notifEnabled
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    !notifGranted
+                ) {
+                    Button(
+                        onClick = {
+                            notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Minta Izin Notifikasi") }
+                    Spacer(Modifier.height(8.dp))
+                }
+                OutlinedButton(
+                    onClick = {
+                        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                            putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+                        }
+                        ctx.startActivity(intent)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Buka Pengaturan Notifikasi") }
             }
 
             // ---- Grup: Koneksi ----

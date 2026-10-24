@@ -58,6 +58,19 @@ class AppPrefs @Inject constructor(
         get() = prefs.getBoolean(Prefs.KEY_ONBOARDED, false)
         set(v) = prefs.edit().putBoolean(Prefs.KEY_ONBOARDED, v).apply()
 
+    // v14.10: toggle notifikasi (mengikuti pola SharedPreferences yang sudah ada).
+    var notifEnabled: Boolean
+        get() = prefs.getBoolean(Prefs.KEY_NOTIF_ENABLED, true)
+        set(v) = prefs.edit().putBoolean(Prefs.KEY_NOTIF_ENABLED, v).apply()
+
+    var notifExec: Boolean
+        get() = prefs.getBoolean(Prefs.KEY_NOTIF_EXEC, true)
+        set(v) = prefs.edit().putBoolean(Prefs.KEY_NOTIF_EXEC, v).apply()
+
+    var notifApproval: Boolean
+        get() = prefs.getBoolean(Prefs.KEY_NOTIF_APPROVAL, true)
+        set(v) = prefs.edit().putBoolean(Prefs.KEY_NOTIF_APPROVAL, v).apply()
+
     /** v9.2: direktori project Telegram Serverless (prefs biasa, bukan secret). */
     var serverlessDir: String
         get() = prefs.getString(Prefs.KEY_SERVERLESS_DIR, "") ?: ""

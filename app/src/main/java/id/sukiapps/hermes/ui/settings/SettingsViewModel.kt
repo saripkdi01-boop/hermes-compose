@@ -57,7 +57,11 @@ data class SettingsUiState(
     // Sprint 1 Gate 3: Supabase + Vercel read-only (via KeyVault)
     val supabaseUrl: String = "",
     val supabaseKey: String = "",
-    val vercelToken: String = ""
+    val vercelToken: String = "",
+    // v14.10: toggle notifikasi eksekusi & izin.
+    val notifEnabled: Boolean = true,
+    val notifExec: Boolean = true,
+    val notifApproval: Boolean = true
 )
 
 @HiltViewModel
@@ -88,6 +92,9 @@ class SettingsViewModel @Inject constructor(
                 presets = prefs.personaPresets(),
                 darkTheme = prefs.themeDark,
                 baseUrl = prefs.baseUrl,
+                notifEnabled = prefs.notifEnabled,
+                notifExec = prefs.notifExec,
+                notifApproval = prefs.notifApproval,
                 keyBroken = KeyVault.broken,
                 serverlessDir = prefs.serverlessDir,
                 upinUrl = prefs.upinUrl
@@ -228,6 +235,22 @@ class SettingsViewModel @Inject constructor(
     fun setDarkTheme(dark: Boolean) {
         prefs.themeDark = dark
         _state.update { it.copy(darkTheme = dark) }
+    }
+
+    // v14.10: setter toggle notifikasi (persist ke AppPrefs).
+    fun setNotifEnabled(v: Boolean) {
+        prefs.notifEnabled = v
+        _state.update { it.copy(notifEnabled = v) }
+    }
+
+    fun setNotifExec(v: Boolean) {
+        prefs.notifExec = v
+        _state.update { it.copy(notifExec = v) }
+    }
+
+    fun setNotifApproval(v: Boolean) {
+        prefs.notifApproval = v
+        _state.update { it.copy(notifApproval = v) }
     }
 
     fun setBaseUrl(url: String) {
