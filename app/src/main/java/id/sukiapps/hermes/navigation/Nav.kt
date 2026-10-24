@@ -1,5 +1,4 @@
 package id.sukiapps.hermes.navigation
-
 object Nav {
     const val ONBOARDING = "onboarding"
     const val KEYSETUP = "keysetup"
@@ -16,4 +15,5 @@ object Nav {
     const val REFLECTION = "reflection"
     const val ACTIVITY = "activity"
     const val WAREHOUSE = "warehouse"
+    const val MANUS = "manus"
 }
