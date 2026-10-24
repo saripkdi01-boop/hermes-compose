@@ -543,6 +543,38 @@ fun SettingsScreen(
                 ) { Text("Simpan batas agen") }
                 Spacer(Modifier.height(8.dp))
                 Row(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        "Upgrade Diri Otomatis — agen boleh branch, tulis, " +
+                            "merge, dan buat rilis draft TANPA popup. " +
+                            "Matikan untuk menghentikan loop (kill switch). " +
+                            "Signing + lampir APK tetap oleh maintainer.",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    var suOn by remember {
+                        mutableStateOf(
+                            id.sukiapps.hermes.data.agent.SelfUpgradePrefs
+                                .enabled(ctx)
+                        )
+                    }
+                    Switch(
+                        checked = suOn,
+                        onCheckedChange = {
+                            suOn = it
+                            id.sukiapps.hermes.data.agent.SelfUpgradePrefs
+                                .setEnabled(ctx, it)
+                            memMsg = if (it) {
+                                "Upgrade Diri Otomatis AKTIF."
+                            } else {
+                                "Upgrade Diri Otomatis nonaktif."
+                            }
+                        }
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
