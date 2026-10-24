@@ -43,6 +43,32 @@ sealed interface ManusEvent {
 }
 
 /**
+ * Pemetaan nama tool ke tingkat risiko. Sengaja TOP-LEVEL (bukan member
+ * `object ManusReducer`) supaya bisa dipanggil dari reducer, dari UI, dan dari
+ * unit test tanpa perlu scope object — member extension hanya terlihat di
+ * dalam tubuh object-nya sendiri.
+ *
+ * Kategori:
+ * - LOW: baca saja, aman dijalankan otomatis
+ * - MEDIUM: menulis/mengirim, sebaiknya diawasi
+ * - HIGH: menjalankan perintah / hapus file
+ * - CRITICAL: deploy, merge PR, release, shell — wajib izin manusia
+ */
+fun ToolCall.risk(): RiskLevel {
+    val low = setOf("read_file", "list_files", "web_search", "read_logs", "summarize")
+    val medium = setOf("write_file", "send_message", "create_task", "edit_file")
+    val high = setOf("run_command", "github_dispatch", "delete_file")
+    val critical = setOf("deploy", "selfupgrade_merge", "selfupgrade_release", "shell_exec")
+    return when (name) {
+        in critical -> RiskLevel.CRITICAL
+        in high -> RiskLevel.HIGH
+        in medium -> RiskLevel.MEDIUM
+        in low -> RiskLevel.LOW
+        else -> RiskLevel.MEDIUM
+    }
+}
+
+/**
  * Reducer tunggal untuk seluruh state Manus. Fungsi murni: (state, event) -> state.
  * Clock disuntikkan supaya test bisa memakai waktu palsu yang deterministik.
  */
@@ -328,19 +354,5 @@ object ManusReducer {
     ): ManusUiState {
         val entry = LogEntry(id = nextLogId, timestamp = at, level = level, tag = tag, message = message)
         return copy(logs = (listOf(entry) + logs).take(200), nextLogId = nextLogId + 1)
-    }
-    /** Tool default per kategori — risiko dipetakan supaya gate izin konsisten. */
-    fun ToolCall.risk(): RiskLevel {
-        val low = setOf("read_file", "list_files", "web_search", "read_logs", "summarize")
-        val medium = setOf("write_file", "send_message", "create_task", "edit_file")
-        val high = setOf("run_command", "github_dispatch", "delete_file")
-        val critical = setOf("deploy", "selfupgrade_merge", "selfupgrade_release", "shell_exec")
-        return when (name) {
-            in critical -> RiskLevel.CRITICAL
-            in high -> RiskLevel.HIGH
-            in medium -> RiskLevel.MEDIUM
-            in low -> RiskLevel.LOW
-            else -> RiskLevel.MEDIUM
-        }
     }
 }
