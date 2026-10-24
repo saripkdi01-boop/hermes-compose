@@ -1,5 +1,4 @@
 package id.sukiapps.hermes.ui.manus
-
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,6 +19,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,7 +32,6 @@ import id.sukiapps.hermes.domain.manus.TaskStatus
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-
 /**
  * Layar Manus — workspace agent:
  * - input goal + rencana (satu langkah per baris)
@@ -52,7 +51,6 @@ fun ManusScreen(
     var goalInput by remember { mutableStateOf("") }
     var planInput by remember { mutableStateOf("") }
     val timeFmt = remember { SimpleDateFormat("HH:mm:ss", Locale.US) }
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -99,7 +97,6 @@ fun ManusScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Kirim Goal") }
             }
-
             state.activeTask?.let { task ->
                 item {
                     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
@@ -173,7 +170,6 @@ fun ManusScreen(
                     }
                 }
             }
-
             if (state.history.isNotEmpty()) {
                 item {
                     Text("Riwayat", style = MaterialTheme.typography.titleMedium)
@@ -195,7 +191,6 @@ fun ManusScreen(
                     }
                 }
             }
-
             item {
                 Text("Log", style = MaterialTheme.typography.titleMedium)
             }
@@ -207,7 +202,6 @@ fun ManusScreen(
             }
         }
     }
-
     state.pendingPermission?.let { req ->
         AlertDialog(
             onDismissRequest = { vm.denyPermission(req.taskId) },
