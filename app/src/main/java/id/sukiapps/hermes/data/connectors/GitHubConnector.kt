@@ -169,7 +169,7 @@ class GitHubConnector @Inject constructor() {
             // GUARD KEAMANAN (v14.9): tolak write ke repo/CI/skrip/biner
             // sebelum token PAT sempat tersentuh ke endpoint GitHub.
             val blocked = SecurityPolicy.blockedReason(owner, repo, path, content)
-            if (blocked != null) return@runCatching Result.failure(Exception(blocked))
+            if (blocked != null) throw Exception(blocked)
             val sha = getFileSha(pat, owner, repo, path).getOrThrow()
             val url = "https://api.github.com/repos/$owner/$repo/contents/$path"
             val body = buildJsonObject {
