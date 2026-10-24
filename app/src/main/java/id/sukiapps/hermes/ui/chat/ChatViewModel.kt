@@ -1,5 +1,4 @@
 package id.sukiapps.hermes.ui.chat
-
 import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
@@ -15,6 +14,7 @@ import id.sukiapps.hermes.data.audit.PermissionGate
 import id.sukiapps.hermes.data.connectors.UpinConnector
 import id.sukiapps.hermes.data.local.AppPrefs
 import id.sukiapps.hermes.data.local.ChatRepository
+import id.sukiapps.hermes.data.notif.ExecNotifier
 import id.sukiapps.hermes.domain.AIProvider
 import id.sukiapps.hermes.domain.AIHttpException
 import id.sukiapps.hermes.domain.ChatMessage
@@ -35,7 +35,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
-
 /** Satu lampiran siap kirim. */
 data class AttachmentItem(
     val uri: Uri,
@@ -48,7 +47,6 @@ data class AttachmentItem(
 ) {
     enum class Kind { IMAGE, TEXT, FILE }
 }
-
 data class UiMessage(
     val id: Long,
     val timestamp: Long = 0L,
@@ -56,7 +54,6 @@ data class UiMessage(
     val content: String,
     val attachmentSummary: String? = null
 )
-
 data class ChatUiState(
     val convId: Long = -1L,
     val title: String = "Percakapan baru",
@@ -75,7 +72,6 @@ data class ChatUiState(
     val agentMode: Boolean = false,
     val agentStatus: String? = null
 )
-
 @HiltViewModel
 class ChatViewModel @Inject constructor(
     @ApplicationContext private val appCtx: Context,
@@ -86,14 +82,11 @@ class ChatViewModel @Inject constructor(
     private val upin: UpinConnector,
     private val gate: PermissionGate
 ) : ViewModel() {
-
     private val _state = MutableStateFlow(ChatUiState())
     val state: StateFlow<ChatUiState> = _state.asStateFlow()
-
     private val attachments = mutableListOf<AttachmentItem>()
     private val _attachmentsFlow = MutableStateFlow<List<AttachmentItem>>(emptyList())
     val attachmentsFlow: StateFlow<List<AttachmentItem>> = _attachmentsFlow.asStateFlow()
-
     private var streamJob: Job? = null
     // Sprint 1 Gate 4: sesi agen
     private var agentJob: Job? = null
@@ -101,23 +94,21 @@ class ChatViewModel @Inject constructor(
     private var collectJob: Job? = null
     // v9.4: job polling jawaban Upin (dibatalkan saat kirim lain/keluar layar)
     private var upinJob: Job? = null
-
     // Jiwa Hermes: cache prompt rakitan per conversation + hitung pesan user
     // untuk pemicu write-back yang murah.
     private var soulCache: Pair<Long, String>? = null
     private var userMsgCount = 0
-
+    // v15.0: throttle notifikasi eksekusi per tool (30 detik).
+    @Volatile private var lastToolNotifAt = 0L
     init {
         _state.update {
             it.copy(model = prefs.model, persona = prefs.persona)
         }
         openConversation(prefs.currentConvId)
     }
-
     fun refreshSettings() {
         _state.update { it.copy(model = prefs.model, persona = prefs.persona) }
     }
-
     /** Buka percakapan; -1 = baru (belum disimpan sampai pesan pertama). */
     fun openConversation(convId: Long) {
         stopStream()
@@ -153,7 +144,6 @@ class ChatViewModel @Inject constructor(
             }
         }
     }
-
     fun newConversation() {
         // Chat lama "ditutup" → coba tulis ingatan dari 10 pesan terakhir.
         cancelUpin()
@@ -169,9 +159,7 @@ class ChatViewModel @Inject constructor(
         clearAttachments()
         openConversation(-1L)
     }
-
     // ---------- lampiran ----------
-
     fun addAttachment(uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             val info = FileUtil.info(appCtx, uri)
@@ -199,19 +187,15 @@ class ChatViewModel @Inject constructor(
             }
         }
     }
-
     fun removeAttachment(uri: Uri) {
         attachments.removeAll { it.uri == uri }
-        _attachmentsFlow.value = attachments.toList()
+        _attachmentsFlow.value = emptyList()
     }
-
     fun clearAttachments() {
         attachments.clear()
         _attachmentsFlow.value = emptyList()
     }
-
     // ---------- kirim ----------
-
     fun send(text: String) {
         val prompt = text.trim()
         if (prompt.isEmpty() && attachments.isEmpty()) return
@@ -223,7 +207,6 @@ class ChatViewModel @Inject constructor(
             sendInternal(prompt, atts)
         }
     }
-
     /** Kirim ulang: jawaban baru untuk pesan user terakhir (tanpa duplikat). */
     fun regenerate() {
         val s = _state.value
@@ -231,10 +214,8 @@ class ChatViewModel @Inject constructor(
         val lastUser = s.messages.lastOrNull { it.role == "user" } ?: return
         viewModelScope.launch { streamReply(s.convId, lastUser.content, emptyList()) }
     }
-
     /** Coba lagi setelah error: sama seperti regenerate. */
     fun retry() = regenerate()
-
     /** Edit pesan user lalu kirim ulang (jawaban setelahnya dihapus & dibuat baru). */
     fun editAndResend(msgId: Long, newText: String) {
         val text = newText.trim()
@@ -246,7 +227,6 @@ class ChatViewModel @Inject constructor(
             streamReply(convId, text, emptyList())
         }
     }
-
     fun stopStream() {
         agentStopRequested = true
         streamJob?.cancel()
@@ -255,9 +235,7 @@ class ChatViewModel @Inject constructor(
             _state.update { it.copy(isStreaming = false) }
         }
     }
-
     // ---------- v9.4: Tanya Upin ----------
-
     /** Batalkan polling Upin (dipanggil saat kirim pesan lain / keluar layar). */
     fun cancelUpin() {
         upinJob?.cancel()
@@ -266,7 +244,6 @@ class ChatViewModel @Inject constructor(
             _state.update { it.copy(upinBusy = false) }
         }
     }
-
     /**
      * Tanya Upin: gate MEDIUM (boleh ingat) → kosongkan input (via
      * [onConsumed]) → indikator "mengetik" → kirim + polling tiap 5 detik
@@ -287,6 +264,11 @@ class ChatViewModel @Inject constructor(
                     _state.update {
                         it.copy(error = "Ditolak — dicatat di Riwayat Izin.")
                     }
+                    ExecNotifier.notifyApproval(
+                        appCtx,
+                        "Izin ditolak",
+                        "Permintaan akses Upin ditolak — tercatat di Riwayat Izin."
+                    )
                     return@launch
                 }
                 onConsumed()
@@ -312,6 +294,11 @@ class ChatViewModel @Inject constructor(
                     repo.addMessage(convId, "assistant", answer, null)
                     ExecutionLog.log("tool", "Upin menjawab", "${answer.length} karakter", "ok")
                 }
+                ExecNotifier.notifyExec(
+                    appCtx,
+                    "Upin menjawab",
+                    "${answer.length} karakter — ketuk untuk membaca."
+                )
             } catch (e: CancellationException) {
                 throw e // batal wajar (kirim lain / keluar layar) — tanpa pesan error
             } catch (e: Exception) {
@@ -321,6 +308,7 @@ class ChatViewModel @Inject constructor(
                     if (cid > 0) repo.addMessage(cid, "assistant", msg, null)
                     else _state.update { it.copy(error = msg) }
                 }
+                ExecNotifier.notifyExec(appCtx, "Upin gagal", msg, force = true)
             } finally {
                 withContext(NonCancellable) {
                     _state.update { it.copy(upinBusy = false) }
@@ -329,7 +317,6 @@ class ChatViewModel @Inject constructor(
             }
         }
     }
-
     /** Polling /upin/reply tiap 5 detik sampai "done" atau 3 menit. */
     private suspend fun pollUpinAnswer(jobId: String): String {
         val deadline = System.currentTimeMillis() + 3 * 60 * 1000L
@@ -350,9 +337,7 @@ class ChatViewModel @Inject constructor(
             delay(5000)
         }
     }
-
     // ---------- internal ----------
-
     private suspend fun sendInternal(
         prompt: String,
         atts: List<AttachmentItem>
@@ -369,7 +354,6 @@ class ChatViewModel @Inject constructor(
             prefs.currentConvId = convId
             openConversation(convId)
         }
-
         // Susun prompt akhir: teks + isi file teks.
         val fullPrompt = buildString {
             append(prompt.ifBlank { "Jelaskan lampiran berikut." })
@@ -386,7 +370,6 @@ class ChatViewModel @Inject constructor(
             .map { it.imageBase64!! }
         val attSummary = if (atts.isEmpty()) null else
             atts.joinToString(", ") { "${it.name} (${FileUtil.formatSize(it.size)})" }
-
         withContext(Dispatchers.IO) {
             repo.addMessage(convId, "user", fullPrompt, attSummary)
         }
@@ -406,13 +389,10 @@ class ChatViewModel @Inject constructor(
             streamReply(convId, fullPrompt, imageB64s)
         }
     }
-
     // ---------- Sprint 1 Gate 4: Mode Agen ----------
-
     fun setAgentMode(on: Boolean) {
         _state.update { it.copy(agentMode = on, agentStatus = null) }
     }
-
     /**
      * Sesi agen: ulangi langkah chat+tool menuju [goal] sampai model
      * menandai SELESAI, atau batas AgentLimits tercapai (iterasi /
@@ -476,12 +456,16 @@ class ChatViewModel @Inject constructor(
                 }
             }
             ExecutionLog.log("agent", "Sesi agen", "$reason · $step langkah", "ok")
+            ExecNotifier.notifyExec(
+                appCtx,
+                "Sesi agen berhenti",
+                "$reason — $step langkah dijalankan."
+            )
             _state.update {
                 it.copy(agentStatus = "🤖 Sesi agen berhenti: $reason ($step langkah)")
             }
         }
     }
-
     /** Rakit system prompt jiwa SEKALI per conversation (cache per convId). */
     private suspend fun getSoulPrompt(convId: Long, firstPrompt: String): String {
         soulCache?.let { if (it.first == convId) return it.second }
@@ -489,7 +473,6 @@ class ChatViewModel @Inject constructor(
         soulCache = convId to built
         return built
     }
-
     /** Streaming jawaban asisten untuk prompt yang SUDAH tersimpan di DB. */
     private suspend fun streamReply(
         convId: Long,
@@ -531,7 +514,6 @@ class ChatViewModel @Inject constructor(
             topP = prefs.topP,
             maxTokens = prefs.maxTokens.takeIf { it > 0 }
         )
-
         _state.update {
             it.copy(isStreaming = true, streamingText = "", error = null, toolEvent = null)
         }
@@ -545,6 +527,18 @@ class ChatViewModel @Inject constructor(
                     "${"%.1f".format(ms / 1000.0)} dtk"
                 _state.update { s -> s.copy(toolEvent = label) }
                 ExecutionLog.log("tool", name, "$ms ms", if (ok) "ok" else "fail")
+                // v15.0: notifikasi hasil tool — throttle 30 detik per tool
+                // supaya sesi multi-langkah tidak bor notifikasi.
+                val now = System.currentTimeMillis()
+                if (now - lastToolNotifAt > 30_000L) {
+                    lastToolNotifAt = now
+                    val notifText = if (ok) {
+                        "$name selesai · ${"%.1f".format(ms / 1000.0)} dtk"
+                    } else {
+                        "$name gagal · ${"%.1f".format(ms / 1000.0)} dtk"
+                    }
+                    ExecNotifier.notifyExec(appCtx, "Eksekusi tool", notifText)
+                }
             }
         } else {
             ai.chatStream(req)
@@ -558,6 +552,14 @@ class ChatViewModel @Inject constructor(
                             _state.update { it.copy(error = msg) }
                             ExecutionLog.log("error", "LLM gagal", msg, "fail")
                         }
+                        // v15.0: error jaringan selalu tampil (tidak di-throttle)
+                        // karena user perlu tahu respons tidak masuk.
+                        ExecNotifier.notifyExec(
+                            appCtx,
+                            "Gagal terhubung",
+                            msg,
+                            force = true
+                        )
                     }
                     .collect { token ->
                         acc.append(token)
@@ -574,6 +576,14 @@ class ChatViewModel @Inject constructor(
                         repo.addMessage(convId, "assistant", finalText, null)
                     }
                     ExecutionLog.log("prompt", "Respons selesai", "${finalText.length} karakter", "ok")
+                    // v15.0: notifikasi respons selesai hanya bila teks substansial.
+                    if (finalText.length > 40) {
+                        ExecNotifier.notifyExec(
+                            appCtx,
+                            "Respons selesai",
+                            "${finalText.length} karakter — ketuk untuk membaca."
+                        )
+                    }
                     withContext(Dispatchers.Main) {
                         _state.update {
                             it.copy(isStreaming = false, streamingText = "")
@@ -584,7 +594,6 @@ class ChatViewModel @Inject constructor(
             }
         }
     }
-
     companion object {
         private const val AGENT_INSTRUCTION =
             "MODE AGEN AKTIF: kamu bekerja mandiri menuju tujuan user dengan " +
@@ -593,7 +602,6 @@ class ChatViewModel @Inject constructor(
                 "awali jawaban akhirmu dengan kata SELESAI diikuti ringkasan " +
                 "hasil. Bila belum, akhiri dengan langkah berikutnya yang akan " +
                 "kamu ambil."
-
         /**
          * Resep Upgrade Diri (14.8) — ditempel ke AGENT_INSTRUCTION
          * hanya bila tujuan sesi menyebut "upgrade diri". Urutan
@@ -622,7 +630,6 @@ class ChatViewModel @Inject constructor(
                 "Bila tool menolak karena toggle nonaktif, suruh user " +
                 "mengaktifkannya di Pengaturan > Agen."
     }
-
     private fun updateTokenEstimate() {
         val s = _state.value
         val all = s.messages.joinToString("\n") { it.content } + s.streamingText
