@@ -8,6 +8,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
@@ -24,10 +25,12 @@ enum class ContentStyle { MUSE, PREMIUM }
 
 private val V14Typography = Typography(
     displayLarge = TextStyle(
-        fontSize = 24.sp, fontWeight = FontWeight.Bold, lineHeight = 32.sp
+        fontFamily = FontFamily.Serif,
+        fontSize = 28.sp, fontWeight = FontWeight.Normal, lineHeight = 36.sp
     ),
     headlineMedium = TextStyle(
-        fontSize = 20.sp, fontWeight = FontWeight.SemiBold, lineHeight = 28.sp
+        fontFamily = FontFamily.Serif,
+        fontSize = 20.sp, fontWeight = FontWeight.Medium, lineHeight = 28.sp
     ),
     titleLarge = TextStyle(
         fontSize = 17.sp, fontWeight = FontWeight.SemiBold, lineHeight = 24.sp
@@ -36,7 +39,7 @@ private val V14Typography = Typography(
         fontSize = 15.sp, fontWeight = FontWeight.SemiBold, lineHeight = 20.sp
     ),
     bodyLarge = TextStyle(
-        fontSize = 15.sp, fontWeight = FontWeight.Normal, lineHeight = 24.sp
+        fontSize = 16.sp, fontWeight = FontWeight.Normal, lineHeight = 24.8.sp
     ),
     bodyMedium = TextStyle(
         fontSize = 13.sp, fontWeight = FontWeight.Normal, lineHeight = 20.sp
@@ -109,6 +112,7 @@ fun HermesTheme(
         MaterialTheme(
             colorScheme = colorScheme,
             typography = V14Typography,
+            shapes = HermesShapes,
             content = content
         )
     }
