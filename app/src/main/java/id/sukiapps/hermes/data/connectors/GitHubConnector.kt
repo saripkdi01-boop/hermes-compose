@@ -1,8 +1,8 @@
 package id.sukiapps.hermes.data.connectors
-
 import android.util.Base64
 import id.sukiapps.hermes.data.audit.DangerLevel
 import id.sukiapps.hermes.data.audit.PermissionGate
+import id.sukiapps.hermes.data.audit.SecurityPolicy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -17,7 +17,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
-
 /** Info satu workflow run GitHub Actions. */
 data class GhRun(
     val name: String,
@@ -25,7 +24,6 @@ data class GhRun(
     val conclusion: String?,
     val url: String
 )
-
 /**
  * Konektor GitHub — AKSI MANUAL via tombol di Pengaturan.
  * BUKAN dipakai agen otomatis: setiap pemanggilan berasal dari ketukan user.
@@ -41,14 +39,12 @@ class GitHubConnector @Inject constructor() {
         .build()
     private val json = Json { ignoreUnknownKeys = true }
     private val mediaType = "application/json; charset=utf-8".toMediaType()
-
     private fun authed(url: String, pat: String): Request.Builder =
         Request.Builder()
             .url(url)
             .addHeader("Authorization", "Bearer $pat")
             .addHeader("Accept", "application/vnd.github+json")
             .addHeader("X-GitHub-Api-Version", "2022-11-28")
-
     /** Tes koneksi: list repo milik user (butuh scope `repo`). */
     suspend fun listRepos(pat: String): Result<List<String>> =
         withContext(Dispatchers.IO) {
@@ -64,7 +60,6 @@ class GitHubConnector @Inject constructor() {
                 }
             }
         }
-
     /**
      * Trigger workflow_dispatch (butuh scope `workflow`). Mentah — hanya
      * dipanggil via [triggerDispatchGated].
@@ -88,7 +83,6 @@ class GitHubConnector @Inject constructor() {
             }
         }
     }
-
     /** Chokepoint publik: trigger workflow — selalu lewat PermissionGate (MEDIUM). */
     suspend fun triggerDispatchGated(
         gate: PermissionGate,
@@ -106,7 +100,6 @@ class GitHubConnector @Inject constructor() {
         if (!ok) return Result.failure(Exception("Ditolak — dicatat di Riwayat Izin."))
         return triggerDispatch(pat, owner, repo, workflowFile, ref)
     }
-
     /**
      * SHA file di repo via Contents API. null bila file belum ada (404) —
      * artinya operasi berikutnya = create, bukan update.
@@ -131,7 +124,6 @@ class GitHubConnector @Inject constructor() {
             }
         }
     }
-
     /** Baca isi file teks via Contents API (read-only). Null bila 404. */
     suspend fun getFileContent(
         pat: String,
@@ -160,7 +152,6 @@ class GitHubConnector @Inject constructor() {
             }
         }
     }
-
     /**
      * Buat/update file via Contents API. Mentah — hanya dipanggil via
      * [putContentsGated]/[pushFilesGated]. Butuh scope `repo`.
@@ -175,6 +166,10 @@ class GitHubConnector @Inject constructor() {
         branch: String = "main"
     ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
+            // GUARD KEAMANAN (v14.9): tolak write ke repo/CI/skrip/biner
+            // sebelum token PAT sempat tersentuh ke endpoint GitHub.
+            val blocked = SecurityPolicy.blockedReason(owner, repo, path, content)
+            if (blocked != null) return@runCatching Result.failure(Exception(blocked))
             val sha = getFileSha(pat, owner, repo, path).getOrThrow()
             val url = "https://api.github.com/repos/$owner/$repo/contents/$path"
             val body = buildJsonObject {
@@ -198,7 +193,6 @@ class GitHubConnector @Inject constructor() {
             }
         }
     }
-
     /** Chokepoint publik: tulis 1 file — selalu lewat PermissionGate (MEDIUM). */
     suspend fun putContentsGated(
         gate: PermissionGate,
@@ -217,7 +211,6 @@ class GitHubConnector @Inject constructor() {
         if (!ok) return Result.failure(Exception("Ditolak — dicatat di Riwayat Izin."))
         return putContents(pat, owner, repo, path, content, message)
     }
-
     /**
      * Chokepoint publik: push N file sekaligus — SATU popup untuk semuanya
      * (bukan N popup). Dipakai layar "Minta Fitur".
@@ -244,7 +237,6 @@ class GitHubConnector @Inject constructor() {
         }
         return Result.success(n)
     }
-
     /** 5 workflow run terakhir sebuah repo. */
     suspend fun latestRuns(
         pat: String,
@@ -262,14 +254,12 @@ class GitHubConnector @Inject constructor() {
             }
         }
     }
-
     /**
      * Self-Upgrade (14.8): metode MENTAH tanpa PermissionGate — HANYA
      * dipanggil SelfUpgradeTools yang sudah memeriksa toggle kill
      * switch + prefix branch + repo Hermes sendiri. Jangan panggil
      * dari tempat lain. Semua butuh scope PAT `repo`.
      */
-
     /** SHA head sebuah branch via Git refs API. */
     suspend fun getBranchSha(
         pat: String,
@@ -289,7 +279,6 @@ class GitHubConnector @Inject constructor() {
             }
         }
     }
-
     /** Buat branch baru dari main. */
     suspend fun createBranch(
         pat: String,
@@ -310,7 +299,6 @@ class GitHubConnector @Inject constructor() {
             }
         }
     }
-
     /**
      * Tulis file ke branch BUKAN main — mentah, hanya untuk
      * SelfUpgradeTools (sudah memeriksa toggle + prefix branch).
@@ -325,7 +313,6 @@ class GitHubConnector @Inject constructor() {
         branch: String
     ): Result<Unit> =
         putContents(pat, owner, repo, path, content, message, branch)
-
     /** Buat pull request branch -> main. Hasil = nomor PR. */
     suspend fun createPullRequest(
         pat: String,
@@ -352,7 +339,6 @@ class GitHubConnector @Inject constructor() {
             }
         }
     }
-
     /** SHA head sebuah PR. */
     suspend fun getPullHeadSha(
         pat: String,
@@ -371,7 +357,6 @@ class GitHubConnector @Inject constructor() {
             }
         }
     }
-
     /** Status CI gabungan sebuah commit: success/pending/failure/error. */
     suspend fun getCombinedStatus(
         pat: String,
@@ -391,7 +376,6 @@ class GitHubConnector @Inject constructor() {
             }
         }
     }
-
     /** Merge PR ke main (metode merge commit). */
     suspend fun mergePullRequest(
         pat: String,
@@ -411,7 +395,6 @@ class GitHubConnector @Inject constructor() {
             }
         }
     }
-
     /**
      * Buat DRAFT rilis (draft=true: tidak terlihat UpdateChecker
      * sampai maintainer melampirkan APK signed lalu publish).
@@ -444,7 +427,6 @@ class GitHubConnector @Inject constructor() {
             }
         }
     }
-
     private fun mapError(code: Int): String = when (code) {
         401 -> "PAT salah/kedaluwarsa (401)."
         403 -> "Scope PAT kurang (403). Butuh repo + workflow."
@@ -452,42 +434,31 @@ class GitHubConnector @Inject constructor() {
         422 -> "Validasi GitHub gagal (422) — cek path file."
         else -> "GitHub menolak (HTTP $code)."
     }
-
     @Serializable
     private data class GhContent(val sha: String = "")
-
     @Serializable
     private data class GhRef(
         @SerialName("object") val obj: GhRefObj = GhRefObj()
     )
-
     @Serializable
     private data class GhRefObj(val sha: String = "")
-
     @Serializable
     private data class GhPr(
         val number: Int = 0,
         val head: GhPrHead = GhPrHead()
     )
-
     @Serializable
     private data class GhPrHead(val sha: String = "")
-
     @Serializable
     private data class GhStatus(val state: String = "")
-
     @Serializable
     private data class GhRelease(val html_url: String = "")
-
     @Serializable
     private data class GhFileContent(val content: String = "", val encoding: String = "")
-
     @Serializable
     private data class GhRepo(val full_name: String = "")
-
     @Serializable
     private data class GhRunsResponse(val workflow_runs: List<GhRunDto> = emptyList())
-
     @Serializable
     private data class GhRunDto(
         val name: String = "",
