@@ -1,10 +1,16 @@
 package id.sukiapps.hermes
-
 import id.sukiapps.hermes.diagnostics.HealthScreen
+import id.sukiapps.hermes.data.notif.ExecNotifier
+import android.Manifest
 import android.content.Context
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -23,6 +29,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import id.sukiapps.hermes.ui.chatv3.V3PreviewScreen
@@ -54,7 +61,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import id.sukiapps.hermes.ui.chat.ChatViewModel
 import id.sukiapps.hermes.ui.chatv3.V3LiveScreen
 import id.sukiapps.hermes.ui.manus.ManusScreen
-
 /**
  * Single Activity — seluruh navigasi via Navigation Compose.
  * Start destination: onboarded? → punya key? → chat.
@@ -81,6 +87,22 @@ class MainActivity : ComponentActivity() {
             val pendingRoute = remember { intent.getStringExtra("nav_route") }
             LaunchedEffect(pendingRoute) {
                 if (pendingRoute != null) runCatching { nav.navigate(pendingRoute) }
+            }
+            // v15.0: minta izin notifikasi runtime (API 33+). Dialog hanya
+            // tampil sekali per install; kalau user menolak permanen, ia
+            // tetap bisa mengaktifkannya dari Pengaturan > Notifikasi.
+            val ctx = LocalContext.current
+            var notifAsked by remember { mutableStateOf(false) }
+            val notifPermLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission()
+            ) { /* hasil tidak wajib ditindaklanjuti — semua posting dicek ulang */ }
+            LaunchedEffect(Unit) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notifAsked) {
+                    notifAsked = true
+                    runCatching {
+                        notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                }
             }
             // Baca ulang tema setiap kali destinasi berubah (mis. kembali
             // dari Settings setelah ganti tema).
