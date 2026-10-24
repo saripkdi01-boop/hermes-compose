@@ -6,19 +6,19 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
 }
-
 android {
     namespace = "id.sukiapps.hermes"
     compileSdk = 34
-
     defaultConfig {
         applicationId = "id.sukiapps.hermes"
         minSdk = 30
         targetSdk = 34
-        versionCode = 32
-        versionName = "14.8"
+        versionCode = 33
+        versionName = "15.0"
+        // Client ID OAuth Google (tipe Android, tanpa client secret).
+        // Diisi maintainer sebelum rilis; string kosong = fitur OAuth nonaktif.
+        buildConfigField("String", "GOOGLE_OAUTH_CLIENT_ID", "\"\"")
     }
-
     buildTypes {
         release {
             // CI menghasilkan APK unsigned; signing dilakukan maintainer
@@ -30,7 +30,9 @@ android {
             )
         }
     }
-
+    buildFeatures {
+        buildConfig = true
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -44,7 +46,6 @@ android {
         }
     }
 }
-
 dependencies {
     // AndroidX core
     implementation(libs.androidx.core.ktx)
@@ -54,7 +55,6 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.hilt.navigation.compose)
     implementation("androidx.work:work-runtime-ktx:2.9.0")
-
     // Compose (versi dikelola BOM)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
@@ -65,16 +65,13 @@ dependencies {
     implementation(libs.compose.material.icons.extended)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.navigation.compose)
-
     // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
-
     // Room
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
-
     // Network
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.kotlinx)
@@ -82,7 +79,10 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
-
+    // v15.0: browsing interaktif + OAuth Google (PKCE)
+    implementation(libs.androidx.browser)
+    implementation(libs.androidx.webkit)
+    implementation(libs.androidx.security.crypto)
     // Unit test JVM
     testImplementation(libs.junit)
 }
