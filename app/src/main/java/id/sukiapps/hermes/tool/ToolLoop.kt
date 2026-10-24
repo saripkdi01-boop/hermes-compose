@@ -302,6 +302,88 @@ object ToolLoop {
         )
         arr.put(
             toolDef(
+                "selfupgrade_branch",
+                "Buat branch upgrade-diri (awalan selfupgrade/) dari main. " +
+                    "Hanya jalan bila Upgrade Diri Otomatis menyala.",
+                params(
+                    JSONObject().put(
+                        "branch",
+                        prop(
+                            "string",
+                            "Nama branch; kosong = otomatis dari tanggal/jam"
+                        )
+                    ),
+                    emptyList(),
+                ),
+            ),
+        )
+        arr.put(
+            toolDef(
+                "selfupgrade_write_file",
+                "Tulis file LENGKAP ke branch upgrade-diri (kontrak " +
+                    "full-file, bukan diff).",
+                params(
+                    JSONObject()
+                        .put("branch", prop("string", "Branch selfupgrade/"))
+                        .put("path", prop("string", "Path file di repo"))
+                        .put("content", prop("string", "Isi file lengkap"))
+                        .put("message", prop("string", "Pesan commit")),
+                    listOf("branch", "path", "content", "message"),
+                ),
+            ),
+        )
+        arr.put(
+            toolDef(
+                "selfupgrade_pr",
+                "Buat pull request branch upgrade-diri ke main.",
+                params(
+                    JSONObject()
+                        .put("branch", prop("string", "Branch selfupgrade/"))
+                        .put("title", prop("string", "Judul PR"))
+                        .put("body", prop("string", "Deskripsi PR")),
+                    listOf("branch", "title"),
+                ),
+            ),
+        )
+        arr.put(
+            toolDef(
+                "selfupgrade_ci",
+                "Status CI gabungan sebuah PR: success, pending, " +
+                    "failure, atau error.",
+                params(
+                    JSONObject().put("pr", prop("integer", "Nomor PR")),
+                    listOf("pr"),
+                ),
+            ),
+        )
+        arr.put(
+            toolDef(
+                "selfupgrade_merge",
+                "Merge PR upgrade-diri ke main. DITOLAK bila CI belum " +
+                    "success.",
+                params(
+                    JSONObject().put("pr", prop("integer", "Nomor PR")),
+                    listOf("pr"),
+                ),
+            ),
+        )
+        arr.put(
+            toolDef(
+                "selfupgrade_release",
+                "Buat DRAFT rilis GitHub. Body wajib memuat baris " +
+                    "versionCode:NN. Maintainer sign APK, lampirkan ke " +
+                    "draft, lalu publish.",
+                params(
+                    JSONObject()
+                        .put("tag", prop("string", "Tag, contoh: v14.9"))
+                        .put("name", prop("string", "Judul rilis"))
+                        .put("body", prop("string", "Isi rilis")),
+                    listOf("tag", "name", "body"),
+                ),
+            ),
+        )
+        arr.put(
+            toolDef(
                 "memory_save",
                 "Simpan catatan/fakta penting ke ingatan persisten agen (bertahan antar sesi; minta izin ringan).",
                 params(
@@ -356,6 +438,16 @@ object ToolLoop {
                 ToolResult("Error: konektor belum diinisialisasi.", true)
             } else {
                 ConnectorTools.execute(name, args, c, g, bag)
+            }
+        }
+        "selfupgrade_branch", "selfupgrade_write_file", "selfupgrade_pr",
+        "selfupgrade_ci", "selfupgrade_merge", "selfupgrade_release" -> {
+            val c = appCtx
+            val bag = connectorBag
+            if (c == null || bag == null) {
+                ToolResult("Error: konektor belum diinisialisasi.", true)
+            } else {
+                SelfUpgradeTools.execute(name, args, c, bag)
             }
         }
         "memory_save", "memory_list" -> {

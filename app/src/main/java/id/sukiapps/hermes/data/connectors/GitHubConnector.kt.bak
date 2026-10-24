@@ -131,6 +131,35 @@ class GitHubConnector @Inject constructor() {
         }
     }
 
+    /** Baca isi file teks via Contents API (read-only). Null bila 404. */
+    suspend fun getFileContent(
+        pat: String,
+        owner: String,
+        repo: String,
+        path: String
+    ): Result<String?> = withContext(Dispatchers.IO) {
+        runCatching {
+            val url = "https://api.github.com/repos/$owner/$repo/contents/$path"
+            val req = authed(url, pat).build()
+            client.newCall(req).execute().use { resp ->
+                when {
+                    resp.code == 404 -> null
+                    !resp.isSuccessful -> throw Exception(mapError(resp.code))
+                    else -> {
+                        val dto = json.decodeFromString<GhFileContent>(
+                            resp.body?.string() ?: "{}"
+                        )
+                        val raw = Base64.decode(
+                            dto.content.replace("\n", ""),
+                            Base64.DEFAULT
+                        )
+                        String(raw, Charsets.UTF_8)
+                    }
+                }
+            }
+        }
+    }
+
     /**
      * Buat/update file via Contents API. Mentah — hanya dipanggil via
      * [putContentsGated]/[pushFilesGated]. Butuh scope `repo`.
@@ -243,6 +272,9 @@ class GitHubConnector @Inject constructor() {
 
     @Serializable
     private data class GhContent(val sha: String = "")
+
+    @Serializable
+    private data class GhFileContent(val content: String = "", val encoding: String = "")
 
     @Serializable
     private data class GhRepo(val full_name: String = "")

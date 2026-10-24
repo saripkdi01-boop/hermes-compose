@@ -434,7 +434,12 @@ class ChatViewModel @Inject constructor(
                 _state.update {
                     it.copy(agentStatus = "🤖 Agen langkah $step/${limits.maxIterations}…")
                 }
-                streamReply(convId, currentPrompt, emptyList(), AGENT_INSTRUCTION)
+                val instruction = if (goal.contains("upgrade diri", ignoreCase = true)) {
+                    AGENT_INSTRUCTION + SELFUPGRADE_INSTRUCTION
+                } else {
+                    AGENT_INSTRUCTION
+                }
+                streamReply(convId, currentPrompt, emptyList(), instruction)
                 // streamReply berjalan di streamJob sendiri; tunggu selesai.
                 _state.first { s -> !s.isStreaming }
                 if (agentStopRequested) { reason = "dihentikan user"; break }
@@ -588,6 +593,34 @@ class ChatViewModel @Inject constructor(
                 "awali jawaban akhirmu dengan kata SELESAI diikuti ringkasan " +
                 "hasil. Bila belum, akhiri dengan langkah berikutnya yang akan " +
                 "kamu ambil."
+
+        /**
+         * Resep Upgrade Diri (14.8) — ditempel ke AGENT_INSTRUCTION
+         * hanya bila tujuan sesi menyebut "upgrade diri". Urutan
+         * wajib: baca -> branch -> tulis -> PR -> CI success ->
+         * merge -> draft rilis -> lapor. Signing + lampir APK +
+         * publish tetap oleh maintainer (bukan oleh agen).
+         */
+        private const val SELFUPGRADE_INSTRUCTION =
+            " RESEP UPGRADE DIRI: target repo saripkdi01-boop/" +
+                "hermes-compose. Langkah: 1) baca file yang diubah via " +
+                "github_read_file; 2) buat branch via selfupgrade_branch " +
+                "(nama berawalan selfupgrade/); 3) tulis file LENGKAP " +
+                "via selfupgrade_write_file — kontrak full-file, JANGAN " +
+                "unified diff; bump versionCode +1 dan versionName di " +
+                "app/build.gradle.kts; file lama yang diubah WAJIB " +
+                "dibackup <nama>.bak; JANGAN ubah skema Room; JANGAN " +
+                "hardcode secret; 4) buat PR via selfupgrade_pr; 5) cek " +
+                "CI via selfupgrade_ci sampai state success — JANGAN " +
+                "merge bila pending atau failure; 6) merge via " +
+                "selfupgrade_merge; 7) buat DRAFT rilis via " +
+                "selfupgrade_release — tag v<versionName>, body WAJIB " +
+                "memuat baris versionCode:NN; 8) laporkan URL draft " +
+                "rilis dan perintah berikut: maintainer sign APK dari " +
+                "artifact CI, lampirkan ke draft, lalu publish — " +
+                "setelah publish, update bisa diunduh dari Cek update. " +
+                "Bila tool menolak karena toggle nonaktif, suruh user " +
+                "mengaktifkannya di Pengaturan > Agen."
     }
 
     private fun updateTokenEstimate() {
