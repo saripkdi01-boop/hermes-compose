@@ -1,9 +1,9 @@
 package id.sukiapps.hermes.ui.chat
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,7 +12,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ContentCopy
@@ -39,11 +40,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
+import id.sukiapps.hermes.ui.theme.UserBubbleShape
 
 /**
- * v9.5 — Bubble ala Muse: pesan assistant FLAT (tanpa bubble, teks langsung
- * di atas background + ikon sparkle kecil), pesan user dalam bubble hangat
- * membulat. Tekan lama → menu aksi (salin/edit/regenerate).
+ * v15 — Bubble ala Muse: pesan assistant FLAT dengan avatar bulat sparkle
+ * di atas nama, pesan user dalam bubble hangat rata kanan (maksi 320dp).
+ * Tekan lama → menu aksi (salin/edit/regenerate).
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -61,7 +63,6 @@ fun MessageBubble(
     val isUser = message.role == "user"
     var menuOpen by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
-
     if (isUser) {
         // ---- Pesan user: bubble hangat rata kanan ----
         Column(
@@ -69,12 +70,13 @@ fun MessageBubble(
             horizontalAlignment = Alignment.End
         ) {
             Surface(
-                shape = RoundedCornerShape(20.dp, 6.dp, 20.dp, 20.dp),
+                shape = UserBubbleShape,
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 modifier = Modifier
                     .padding(horizontal = 12.dp)
+                    .widthIn(max = 320.dp)
                     .combinedClickable(onClick = {}, onLongClick = { menuOpen = true })
-                    .clip(RoundedCornerShape(20.dp, 6.dp, 20.dp, 20.dp))
+                    .clip(UserBubbleShape)
             ) {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
                     AttachmentSummary(message)
@@ -95,13 +97,21 @@ fun MessageBubble(
                 .combinedClickable(onClick = {}, onLongClick = { menuOpen = true })
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Filled.AutoAwesome,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(Modifier.width(6.dp))
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Filled.AutoAwesome,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
                 Text(
                     text = "Hermes",
                     style = MaterialTheme.typography.labelMedium,
@@ -162,7 +172,6 @@ fun MessageBubble(
             }
         }
     }
-
     DropdownMenu(
         expanded = menuOpen,
         onDismissRequest = { menuOpen = false }
@@ -212,3 +221,4 @@ private fun AttachmentSummary(message: UiMessage) {
     }
     Spacer(Modifier.height(6.dp))
 }
+/* akhir MessageBubble */
