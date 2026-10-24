@@ -75,11 +75,62 @@ class ManusReducerTest {
         assertEquals(TaskStatus.WAITING_PERMISSION, gated.status)
         assertNotNull(state.pendingPermission)
         assertEquals(RiskLevel.HIGH, state.pendingPermission!!.risk)
+        // Kartu izin lengkap: target persis, scope sekali-saja, rollback eksplisit.
+        assertTrue(state.pendingPermission!!.targets.contains("path=/tmp/x"))
+        assertEquals("once", state.pendingPermission!!.scope)
+        assertFalse(state.pendingPermission!!.reversible)
+        assertNotNull(state.pendingPermission!!.rollback)
         state = ManusReducer.reduce(state, ManusEvent.PermissionDenied(taskId, "tidak boleh"), clock)
         val denied = state.task(taskId)
-        assertEquals(TaskStatus.FAILED, denied.status)
+        // Penolakan = langkah dilewati, BUKAN task gagal (kontrak masterprompt).
+        // Satu-satunya langkah dilewati -> tidak ada sisa langkah -> COMPLETED.
+        assertEquals(TaskStatus.COMPLETED, denied.status)
         assertNull(state.pendingPermission)
-        assertEquals(StepStatus.BLOCKED, denied.steps[0].status)
+        assertEquals(StepStatus.SKIPPED, denied.steps[0].status)
+        assertEquals(1f, denied.progress, 0.001f)
+    }
+
+    @Test
+    fun izinDitolak_tugasLanjutKeLangkahBerikutnya() {
+        var state = ManusUiState.empty()
+        state = ManusReducer.reduce(state, submit(listOf("hapus file", "ringkas")), clock)
+        val taskId = state.tasks.single().id
+        state = ManusReducer.reduce(
+            state,
+            ManusEvent.RequestPermission(
+                taskId = taskId,
+                stepId = "$taskId-s1",
+                tool = ToolCall("delete_file", mapOf("path" to "/tmp/x")),
+                reason = "uji gate",
+                risk = RiskLevel.HIGH
+            ),
+            clock
+        )
+        state = ManusReducer.reduce(state, ManusEvent.PermissionDenied(taskId, "tidak boleh"), clock)
+        val lanjut = state.task(taskId)
+        assertEquals(StepStatus.SKIPPED, lanjut.steps[0].status)
+        // Langkah kedua tanpa tool = LOW -> langsung RUNNING, bukan FAILED.
+        assertEquals(TaskStatus.RUNNING, lanjut.status)
+        assertEquals(StepStatus.RUNNING, lanjut.steps[1].status)
+        assertNull(state.pendingPermission)
+    }
+
+    @Test
+    fun selectTask_danSteerTask_dicatatTanpaMengubahRencana() {
+        var state = ManusUiState.empty()
+        state = ManusReducer.reduce(state, submit(listOf("a")), clock)
+        val taskId = state.tasks.single().id
+        state = ManusReducer.reduce(state, ManusEvent.StartTask(taskId), clock)
+        state = ManusReducer.reduce(state, ManusEvent.ToolFinished(taskId, "$taskId-s1", "ok"), clock)
+        assertEquals(TaskStatus.COMPLETED, state.task(taskId).status)
+        state = ManusReducer.reduce(state, ManusEvent.SubmitGoal("kedua", listOf("b")), clock)
+        val keduaId = state.tasks.last().id
+        state = ManusReducer.reduce(state, ManusEvent.SelectTask(taskId), clock)
+        assertEquals(taskId, state.activeTaskId)
+        state = ManusReducer.reduce(state, ManusEvent.SteerTask(keduaId, "fokus ke harga saja"), clock)
+        assertTrue(state.logs.any { it.message.contains("fokus ke harga saja") })
+        // Rencana tugas kedua tidak berubah diam-diam oleh arahan.
+        assertEquals(listOf("b"), state.task(keduaId).steps.map { it.title })
     }
 
     @Test

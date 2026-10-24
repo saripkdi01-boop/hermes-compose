@@ -28,7 +28,9 @@ enum class StepStatus {
     RUNNING,
     DONE,
     FAILED,
-    BLOCKED
+    BLOCKED,
+    /** Ditolak user di kartu izin: langkah dilewati, tugas LANJUT (bukan gagal). */
+    SKIPPED
 }
 
 /**
@@ -72,10 +74,15 @@ data class AgentStep(
     val startedAt: Long = 0L,
     val finishedAt: Long = 0L,
     val output: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    /** Bukti langkah untuk panel Komputer: penjelasan, sumber, dan file hasil. */
+    val detail: String? = null,
+    val sources: List<String> = emptyList(),
+    val artifacts: List<String> = emptyList()
 ) {
     val isSettled: Boolean
-        get() = status == StepStatus.DONE || status == StepStatus.FAILED
+        get() = status == StepStatus.DONE || status == StepStatus.FAILED ||
+            status == StepStatus.SKIPPED
 }
 
 /**
@@ -88,7 +95,9 @@ data class AgentTask(
     val steps: List<AgentStep> = emptyList(),
     val status: TaskStatus = TaskStatus.IDLE,
     val createdAt: Long = 0L,
-    val updatedAt: Long = 0L
+    val updatedAt: Long = 0L,
+    /** True hanya untuk tugas contoh bawaan (seed) — UI menandainya CONTOH. */
+    val isDemo: Boolean = false
 ) {
     /** Progress 0f..1f dari langkah yang sudah selesai. */
     val progress: Float
@@ -118,7 +127,15 @@ data class PermissionRequest(
     val stepId: String,
     val tool: ToolCall,
     val reason: String,
-    val risk: RiskLevel
+    val risk: RiskLevel,
+    /** Target persis yang terdampak (dari argumen tool); kosong = nama tool. */
+    val targets: List<String> = emptyList(),
+    /** Scope izin. Satu-satunya nilai yang didukung: "once" (sekali saja). */
+    val scope: String = "once",
+    /** Apakah aksi bisa dibatalkan setelah dijalankan. */
+    val reversible: Boolean = false,
+    /** Penjelasan rollback dalam bahasa manusia. */
+    val rollback: String? = null
 )
 
 /** Level keparahan untuk baris log. */

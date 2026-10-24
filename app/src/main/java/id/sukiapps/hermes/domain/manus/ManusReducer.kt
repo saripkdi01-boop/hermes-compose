@@ -31,8 +31,12 @@ sealed interface ManusEvent {
     ) : ManusEvent
     /** Izin diberikan: lanjutkan ke langkah berikutnya. */
     data class PermissionGranted(val taskId: String) : ManusEvent
-    /** Izin ditolak: langkah diblokir, task ditandai gagal. */
+    /** Izin ditolak: langkah DILEWATI (SKIPPED), task LANJUT ke langkah berikut. */
     data class PermissionDenied(val taskId: String, val reason: String = "ditolak user") : ManusEvent
+    /** User membuka kembali tugas lama (riwayat) untuk dilihat ulang / replay. */
+    data class SelectTask(val taskId: String) : ManusEvent
+    /** Arahan user di tengah jalan: dicatat di timeline, tidak mengubah rencana diam-diam. */
+    data class SteerTask(val taskId: String, val message: String) : ManusEvent
     data class PauseTask(val taskId: String) : ManusEvent
     data class ResumeTask(val taskId: String) : ManusEvent
     data class CancelTask(val taskId: String, val reason: String = "dibatalkan user") : ManusEvent
@@ -82,6 +86,8 @@ object ManusReducer {
         is ManusEvent.RequestPermission -> requestPermission(state, event, clock)
         is ManusEvent.PermissionGranted -> permissionGranted(state, event, clock)
         is ManusEvent.PermissionDenied -> permissionDenied(state, event, clock)
+        is ManusEvent.SelectTask -> selectTask(state, event, clock)
+        is ManusEvent.SteerTask -> steerTask(state, event, clock)
         is ManusEvent.PauseTask -> pauseTask(state, event, clock)
         is ManusEvent.ResumeTask -> resumeTask(state, event, clock)
         is ManusEvent.CancelTask -> cancelTask(state, event, clock)
@@ -160,7 +166,7 @@ object ManusReducer {
                 val gated = task.copy(status = TaskStatus.WAITING_PERMISSION, updatedAt = now)
                 replaceTask(state, gated)
                     .copy(
-                        pendingPermission = PermissionRequest(
+                        pendingPermission = permissionRequestFor(
                             taskId = task.id,
                             stepId = next.id,
                             tool = next.tool!!,
@@ -233,7 +239,7 @@ object ManusReducer {
         val gated = task.copy(status = TaskStatus.WAITING_PERMISSION, updatedAt = now)
         return replaceTask(state, gated)
             .copy(
-                pendingPermission = PermissionRequest(
+                pendingPermission = permissionRequestFor(
                     taskId = event.taskId,
                     stepId = event.stepId,
                     tool = event.tool,
@@ -263,24 +269,83 @@ object ManusReducer {
             .copy(pendingPermission = null)
             .log(now, LogLevel.INFO, "manus", "izin diberikan untuk ${req.tool.summary()}")
     }
+    /**
+     * Penolakan izin = langkah dilewati, BUKAN task gagal. Ini sesuai kontrak
+     * masterprompt: Tolak berarti "jangan jalankan langkah ini", tugas tetap
+     * lanjut ke langkah berikutnya (atau selesai bila tidak ada sisa langkah).
+     * Fail-closed tetap terjaga: tool berisiko itu TIDAK PERNAH dijalankan.
+     */
     private fun permissionDenied(
         state: ManusUiState,
         event: ManusEvent.PermissionDenied,
         clock: () -> Long
     ): ManusUiState {
         val now = clock()
-        val req = state.pendingPermission
+        val req = state.pendingPermission ?: return state
+        if (req.taskId != event.taskId) return state
         val task = state.tasks.firstOrNull { it.id == event.taskId } ?: return state
-        val blockedTask = task.copy(
+        val skippedTask = task.copy(
             steps = task.steps.map {
-                if (it.id == req?.stepId) it.copy(status = StepStatus.BLOCKED, error = event.reason) else it
+                if (it.id == req.stepId) {
+                    it.copy(status = StepStatus.SKIPPED, finishedAt = now, error = event.reason)
+                } else it
             },
-            status = TaskStatus.FAILED,
             updatedAt = now
         )
-        return replaceTask(state, blockedTask)
-            .copy(pendingPermission = null)
-            .log(now, LogLevel.ERROR, "manus", "izin ditolak: ${event.reason}")
+        return advance(replaceTask(state, skippedTask), skippedTask, clock)
+            .log(now, LogLevel.WARN, "manus", "izin ditolak: ${event.reason} — langkah ${req.stepId} dilewati")
+    }
+    private fun selectTask(
+        state: ManusUiState,
+        event: ManusEvent.SelectTask,
+        clock: () -> Long
+    ): ManusUiState {
+        val task = state.tasks.firstOrNull { it.id == event.taskId } ?: return state
+        return state.copy(activeTaskId = task.id)
+            .log(clock(), LogLevel.INFO, "manus", "membuka ulang tugas: ${task.goal}")
+    }
+    private fun steerTask(
+        state: ManusUiState,
+        event: ManusEvent.SteerTask,
+        clock: () -> Long
+    ): ManusUiState {
+        val task = state.tasks.firstOrNull { it.id == event.taskId } ?: return state
+        if (event.message.isBlank()) return state
+        // Sengaja hanya dicatat di timeline: arahan TIDAK mengubah rencana
+        // diam-diam dan TIDAK menjalankan tool apa pun tanpa langkah eksplisit.
+        return state.log(clock(), LogLevel.INFO, "manus", "arahan user untuk ${task.id}: ${event.message}")
+    }
+    /**
+     * Detail kartu izin dari satu tool call. Scope SELALU "once": satu izin
+     * hanya berlaku untuk satu langkah ini, tidak pernah melebar ke langkah
+     * lain (tidak ada opsi "ingat selamanya" di jalur Manus ini).
+     */
+    private fun permissionRequestFor(
+        taskId: String,
+        stepId: String,
+        tool: ToolCall,
+        reason: String,
+        risk: RiskLevel
+    ): PermissionRequest {
+        val targets = if (tool.args.isEmpty()) listOf(tool.name)
+        else tool.args.entries.map { "${it.key}=${it.value}" }
+        val reversible = tool.name in setOf("write_file", "edit_file", "create_task")
+        val rollback = if (reversible) {
+            "Bisa dibatalkan: file/tugas hasil langkah ini bisa dihapus manual setelah dibuat."
+        } else {
+            "TIDAK bisa dibatalkan otomatis — putuskan sebelum menekan Izinkan."
+        }
+        return PermissionRequest(
+            taskId = taskId,
+            stepId = stepId,
+            tool = tool,
+            reason = reason,
+            risk = risk,
+            targets = targets,
+            scope = "once",
+            reversible = reversible,
+            rollback = rollback
+        )
     }
     private fun pauseTask(
         state: ManusUiState,
@@ -303,11 +368,11 @@ object ManusReducer {
         val now = clock()
         val task = state.tasks.firstOrNull { it.id == event.taskId } ?: return state
         if (task.status != TaskStatus.PAUSED) return state
-        // FIX run #116: jangan panggil advance() membabi-buta. Bila langkah yang
-        // di-pause masih RUNNING, advance() melihat nextStep==null (nextStep hanya
-        // mencari PENDING) lalu salah menandai task COMPLETED padahal langkah itu
-        // belum selesai. Lanjut = kembali ke RUNNING dan biarkan pelaksana melapor;
-        // hanya bila tidak ada langkah RUNNING barulah advance() memulai PENDING.
+        // JANGAN panggil advance() membabi-buta: bila ada langkah RUNNING yang
+        // sedang dijeda, advance() melihat nextStep==null lalu menandai task
+        // COMPLETED padahal langkah itu belum selesai. Lanjut = kembali ke
+        // RUNNING dan biarkan pelaksana melapor; hanya bila tidak ada langkah
+        // RUNNING barulah advance() memulai langkah PENDING berikutnya.
         if (task.steps.any { it.status == StepStatus.RUNNING }) {
             val resumed = task.copy(status = TaskStatus.RUNNING, updatedAt = now)
             return replaceTask(state, resumed)

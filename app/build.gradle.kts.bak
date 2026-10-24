@@ -13,8 +13,8 @@ android {
         applicationId = "id.sukiapps.hermes"
         minSdk = 30
         targetSdk = 34
-        versionCode = 35
-        versionName = "14.11"
+        versionCode = 36
+        versionName = "14.12"
     }
     buildTypes {
         release {
