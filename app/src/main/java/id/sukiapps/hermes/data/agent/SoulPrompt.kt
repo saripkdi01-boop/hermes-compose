@@ -5,7 +5,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Merakit system prompt "jiwa" dengan urutan: soul → agents (≤10 baris) →
+ * Merakit system prompt "jiwa" dengan urutan: soul → skill (bawaan) →
+ * agents (≤10 baris) →
  * features (≤40 baris) → memory relevan (keyword match, fallback 15 baris
  * pertama) → todo aktif (≤5). Total dibatasi ±1500 kata.
  *
@@ -19,6 +20,7 @@ object SoulPrompt {
     suspend fun build(ctx: Context, userMessage: String): String =
         withContext(Dispatchers.IO) {
             val soul = AgentFiles.read(ctx, AgentFiles.SOUL)
+            val skill = AgentFiles.read(ctx, AgentFiles.SKILL)
             val agents = AgentFiles.read(ctx, AgentFiles.AGENTS)
                 .lineSequence()
                 .filter { it.isNotBlank() }
@@ -38,6 +40,11 @@ object SoulPrompt {
 
             val assembled = buildString {
                 if (soul.isNotBlank()) appendLine(soul.trim())
+                if (skill.isNotBlank()) {
+                    appendLine()
+                    appendLine("[Skill agen — cara kerja]")
+                    appendLine(skill.trim())
+                }
                 if (agents.isNotBlank()) {
                     appendLine()
                     appendLine("[Aturan operasi]")
