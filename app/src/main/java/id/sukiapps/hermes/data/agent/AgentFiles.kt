@@ -17,8 +17,9 @@ object AgentFiles {
     const val TODO = "todo.md"
     const val AGENTS = "agents.md"
     const val FEATURES = "features.md"
+    const val SKILL = "skill.md"
 
-    val ALL = listOf(SOUL, MEMORY, TODO, AGENTS, FEATURES)
+    val ALL = listOf(SOUL, MEMORY, TODO, AGENTS, FEATURES, SKILL)
 
     fun dir(ctx: Context): File = File(ctx.filesDir, "agent").apply { mkdirs() }
 
