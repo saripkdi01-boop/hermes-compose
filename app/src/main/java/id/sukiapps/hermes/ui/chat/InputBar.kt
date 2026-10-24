@@ -1,6 +1,9 @@
 package id.sukiapps.hermes.ui.chat
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,7 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Chat
@@ -43,12 +45,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import id.sukiapps.hermes.ui.theme.ComposerShape
 import id.sukiapps.hermes.util.FileUtil
 
 /**
- * Input bar: pill-shaped, multiline auto-grow (maks 6 baris),
- * tombol kirim ↔ stop saat streaming, chip lampiran yang bisa di-dismiss.
+ * v15 — Composer ala Muse: pil 28dp, satu container dengan border halus,
+ * cincin aksen saat fokus, tombol kirim ↔ stop saat streaming.
  */
 @Composable
 fun InputBar(
@@ -69,7 +73,8 @@ fun InputBar(
     modifier: Modifier = Modifier
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-
+    val interactionSource = remember { MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
     Column(modifier = modifier) {
         if (attachments.isNotEmpty()) {
             LazyRow(
@@ -113,11 +118,13 @@ fun InputBar(
             }
         }
         Surface(
-            // v9.5: container tunggal ala Muse — border halus, tanpa elevasi.
+            // Container tunggal ala Muse — border halus, cincin aksen saat fokus.
             tonalElevation = 0.dp,
-            shape = RoundedCornerShape(28.dp),
-            border = androidx.compose.foundation.BorderStroke(
-                1.dp, MaterialTheme.colorScheme.outlineVariant
+            shape = ComposerShape,
+            border = BorderStroke(
+                1.dp,
+                if (focused) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                else MaterialTheme.colorScheme.outlineVariant
             ),
             color = MaterialTheme.colorScheme.surface,
             modifier = Modifier
@@ -166,7 +173,7 @@ fun InputBar(
                         },
                         onClick = { menuOpen = false; onWebFetch() }
                     )
-                    // v9.4: Tanya Upin — sejajar "Ambil dari web".
+                    // Tanya Upin — sejajar "Ambil dari web".
                     DropdownMenuItem(
                         text = { Text("Tanya Upin") },
                         leadingIcon = {
@@ -180,17 +187,18 @@ fun InputBar(
                     value = value,
                     onValueChange = onValueChange,
                     placeholder = { Text("Tulis pesan…") },
+                    interactionSource = interactionSource,
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(max = 150.dp),
                     maxLines = 6,
-                    shape = RoundedCornerShape(24.dp),
+                    shape = ComposerShape,
                     colors = OutlinedTextFieldDefaults.colors(
-                        // v9.5: tanpa border ganda — container luar sudah punya border.
-                        focusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
-                        unfocusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
-                        disabledBorderColor = androidx.compose.ui.graphics.Color.Transparent,
-                        errorBorderColor = androidx.compose.ui.graphics.Color.Transparent
+                        // Tanpa border ganda — container luar sudah punya border.
+                        focusedBorderColor = Color.Transparent,
+                        unfocusedBorderColor = Color.Transparent,
+                        disabledBorderColor = Color.Transparent,
+                        errorBorderColor = Color.Transparent
                     )
                 )
                 if (onVoiceInput != null) {
@@ -198,7 +206,7 @@ fun InputBar(
                         Icon(
                             imageVector = Icons.Filled.Mic,
                             contentDescription = if (isListening) {
-                                "Sedang mendengarkan\u2026"
+                                "Sedang mendengarkan…"
                             } else {
                                 "Input suara"
                             },
@@ -244,3 +252,4 @@ fun InputBar(
         }
     }
 }
+/* akhir InputBar */
