@@ -148,4 +148,20 @@ object UpdateChecker {
         }
         context.startActivity(intent)
     }
+
+    /**
+     * Jalur otomatis (Upgrade Diri): cek -> unduh -> buka installer,
+     * TANPA dialog konfirmasi Hermes. Ketukan "Install" terakhir
+     * tetap milik installer sistem Android (tidak bisa dihilangkan
+     * aplikasi biasa). False bila tidak ada update / unduh gagal.
+     */
+    suspend fun autoUpdate(
+        context: Context,
+        onProgress: (Int) -> Unit = {}
+    ): Boolean {
+        val update = check(context) ?: return false
+        val apk = download(context, update, onProgress) ?: return false
+        installApk(context, apk)
+        return true
+    }
 }
