@@ -279,14 +279,22 @@ class GitHubConnector @Inject constructor() {
             }
         }
     }
-    /** Buat branch baru dari main. */
+    /**
+     * Buat branch baru dari main — atau PAKAI ULANG bila sudah ada
+     * (14.11: perbaikan loop branch kosong 25 Okt 00:20 — sesi agen
+     * yang gagal tidak boleh mencetak branch v2/v3). Hasil: true =
+     * baru dibuat, false = sudah ada dan dipakai ulang.
+     */
     suspend fun createBranch(
         pat: String,
         owner: String,
         repo: String,
         branch: String
-    ): Result<Unit> = withContext(Dispatchers.IO) {
+    ): Result<Boolean> = withContext(Dispatchers.IO) {
         runCatching {
+            if (getBranchSha(pat, owner, repo, branch).isSuccess) {
+                return@runCatching false
+            }
             val sha = getBranchSha(pat, owner, repo, "main").getOrThrow()
             val url = "https://api.github.com/repos/$owner/$repo/git/refs"
             val body = buildJsonObject {
@@ -297,6 +305,7 @@ class GitHubConnector @Inject constructor() {
             client.newCall(req).execute().use { resp ->
                 if (resp.code != 201) throw Exception(mapError(resp.code))
             }
+            true
         }
     }
     /**
@@ -339,6 +348,30 @@ class GitHubConnector @Inject constructor() {
             }
         }
     }
+    /**
+     * PR TERBUKA dari sebuah head branch (14.11: pakai-ulang PR —
+     * sesi lanjutan tidak boleh membuka PR duplikat dari branch
+     * yang sama). Null bila belum ada PR terbuka dari branch itu.
+     */
+    suspend fun getOpenPullRequest(
+        pat: String,
+        owner: String,
+        repo: String,
+        head: String
+    ): Result<Int?> = withContext(Dispatchers.IO) {
+        runCatching {
+            val url = "https://api.github.com/repos/$owner/$repo/pulls" +
+                "?state=open&head=$owner:$head&per_page=5"
+            val req = authed(url, pat).build()
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) throw Exception(mapError(resp.code))
+                json.decodeFromString<List<GhPr>>(
+                    resp.body?.string() ?: "[]"
+                ).firstOrNull()?.number
+            }
+        }
+    }
+
     /** SHA head sebuah PR. */
     suspend fun getPullHeadSha(
         pat: String,
