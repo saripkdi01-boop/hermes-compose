@@ -50,6 +50,7 @@ enum class PermissionScope {
 @Serializable
 enum class ToolRunStatus {
     @SerialName("proposed") PROPOSED,
+    @SerialName("approved") APPROVED,
     @SerialName("running") RUNNING,
     @SerialName("success") SUCCESS,
     @SerialName("failed") FAILED,
@@ -95,14 +96,17 @@ data class ToolRun(
 
 /**
  * Permintaan izin yang menunggu keputusan user.
+ * [taskId] + [stepId] eksplisit supaya reducer tidak perlu menebak
+ * task pemilik step.
  */
 @Serializable
 data class PermissionRequest(
     val id: String,
+    val taskId: String,
+    val stepId: String,
     val scope: PermissionScope,
     val reason: String,
     val toolRunId: String? = null,
-    val stepId: String? = null,
     val granted: Boolean? = null,
     val decidedAt: Long? = null
 ) {
