@@ -1,5 +1,4 @@
 package id.sukiapps.hermes.domain.manus
-
 /**
  * Semua input ke state machine lewat event terketat. Tidak ada jalur lain yang
  * boleh mengubah ManusUiState — ini yang bikin perilaku agent bisa diprediksi
@@ -41,7 +40,6 @@ sealed interface ManusEvent {
     /** Bersihkan riwayat task yang sudah selesai. */
     data object ClearHistory : ManusEvent
 }
-
 /**
  * Pemetaan nama tool ke tingkat risiko. Sengaja TOP-LEVEL (bukan member
  * `object ManusReducer`) supaya bisa dipanggil dari reducer, dari UI, dan dari
@@ -67,7 +65,6 @@ fun ToolCall.risk(): RiskLevel {
         else -> RiskLevel.MEDIUM
     }
 }
-
 /**
  * Reducer tunggal untuk seluruh state Manus. Fungsi murni: (state, event) -> state.
  * Clock disuntikkan supaya test bisa memakai waktu palsu yang deterministik.
@@ -112,7 +109,7 @@ object ManusReducer {
         )
         return state
             .copy(
-                tasks = tasks + task,
+                tasks = state.tasks + task,
                 activeTaskId = taskId,
                 nextStepSeq = state.nextStepSeq + 1,
                 running = true
