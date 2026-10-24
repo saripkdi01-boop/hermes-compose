@@ -471,7 +471,21 @@ class ChatViewModel @Inject constructor(
      */
     private fun runAgentSession(convId: Long, goal: String) {
         agentStopRequested = false
-        val limits = AgentLimits.get(appCtx)
+        val baseLimits = AgentLimits.get(appCtx)
+        // 14.11: sesi upgrade-diri memakai batas MAKSIMUM (25 iterasi
+        // / 30 menit / 500rb token). Default 10 iterasi / 5 menit
+        // tidak muat untuk resep upgrade-diri — dan itulah yang
+        // membuat loop branch kosong 25 Okt 00:20 (sesi mati
+        // sebelum sempat menulis file).
+        val limits = if (goal.contains("upgrade diri", ignoreCase = true)) {
+            AgentLimits.Limits(
+                maxIterations = 25,
+                timeoutMinutes = 30,
+                tokenBudget = 500_000
+            )
+        } else {
+            baseLimits
+        }
         val startMs = System.currentTimeMillis()
         var step = 0
         agentJob = viewModelScope.launch {
@@ -647,7 +661,8 @@ class ChatViewModel @Inject constructor(
                 "kamu ambil."
 
         /**
-         * Resep Upgrade Diri (14.8) — ditempel ke AGENT_INSTRUCTION
+         * Resep Upgrade Diri (14.8, diperbaiki 14.11: pakai-ulang
+         * branch/PR + batas sesi maksimum) — ditempel ke AGENT_INSTRUCTION
          * hanya bila tujuan sesi menyebut "upgrade diri". Urutan
          * wajib: baca -> branch -> tulis -> PR -> CI success ->
          * merge -> draft rilis -> lapor. Signing + lampir APK +
@@ -657,19 +672,27 @@ class ChatViewModel @Inject constructor(
             " RESEP UPGRADE DIRI: target repo saripkdi01-boop/" +
                 "hermes-compose. Langkah: 1) baca file yang diubah via " +
                 "github_read_file; 2) buat branch via selfupgrade_branch " +
-                "(nama berawalan selfupgrade/); 3) tulis file LENGKAP " +
+                "(nama berawalan selfupgrade/) — bila branch sudah ada, " +
+                "PAKAI ULANG branch itu, JANGAN membuat nama baru " +
+                "(v2/v3/modern); satu tugas = satu branch; 3) tulis " +
+                "file LENGKAP " +
                 "via selfupgrade_write_file — kontrak full-file, JANGAN " +
                 "unified diff; bump versionCode +1 dan versionName di " +
                 "app/build.gradle.kts; file lama yang diubah WAJIB " +
                 "dibackup <nama>.bak; JANGAN ubah skema Room; JANGAN " +
-                "hardcode secret; 4) buat PR via selfupgrade_pr; 5) cek " +
+                "hardcode secret; 4) buat PR via selfupgrade_pr — bila " +
+                "PR dari branch ini sudah terbuka, PAKAI ULANG nomornya; " +
+                "5) cek " +
                 "CI via selfupgrade_ci sampai state success — JANGAN " +
                 "merge bila pending atau failure; 6) merge via " +
                 "selfupgrade_merge; 7) buat DRAFT rilis via " +
                 "selfupgrade_release — tag v<versionName>, body WAJIB " +
                 "memuat baris versionCode:NN; 8) laporkan URL draft " +
                 "rilis dan perintah berikut: maintainer sign APK dari " +
-                "artifact CI, lampirkan ke draft, lalu publish — " +
+                "artifact CI, lampirkan ke draft, lalu publish. Sesi " +
+                "upgrade-diri memakai batas 25 iterasi / 30 menit — " +
+                "kerjakan sampai tuntas dalam branch yang SAMA, jangan " +
+                "berhenti di tengah lalu mengulang dari branch baru. " +
                 "setelah publish, update bisa diunduh dari Cek update. " +
                 "Bila tool menolak karena toggle nonaktif, suruh user " +
                 "mengaktifkannya di Pengaturan > Agen."
