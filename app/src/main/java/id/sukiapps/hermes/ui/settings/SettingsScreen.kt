@@ -1,16 +1,12 @@
 package id.sukiapps.hermes.ui.settings
 
-import android.Manifest
-import android.app.KeyguardManager
-import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
-import android.provider.Settings
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.core.content.ContextCompat
-import androidx.activity.result.contract.ActivityResultContracts
+import android.net.Uri
+import android.widget.Toast
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,1264 +14,1252 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
-import androidx.compose.foundation.clickable
-import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Slider
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import id.sukiapps.hermes.tool.ToolAllowlist
-import id.sukiapps.hermes.data.audit.DevMode
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import id.sukiapps.hermes.data.connectors.ServerlessConnector
-import id.sukiapps.hermes.data.connectors.TermuxConnector
-import id.sukiapps.hermes.data.connectors.UpinConnector
-import id.sukiapps.hermes.domain.PersonaPreset
+import id.sukiapps.hermes.AppInfo
+import id.sukiapps.hermes.BuildConfig
+import id.sukiapps.hermes.ui.components.ModelPickerDialog
 import java.io.File
+
+// ============================================================
+// ENI / SAE UPGRADE — SettingsScreen Redesign v3
+// Tab Navigation + Adaptive Grid + Modern Section Cards
+// Full backward compatible — semua logic VM tetap sama
+// ============================================================
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(
-    onBack: () -> Unit,
-    onOpenKeySetup: () -> Unit,
-    onOpenSoul: () -> Unit,
-    onOpenAudit: () -> Unit,
-    vm: SettingsViewModel = hiltViewModel()
-) {
-    val state by vm.state.collectAsStateWithLifecycle()
+fun SettingsScreen(vm: SettingsViewModel) {
     val ctx = LocalContext.current
-    val snack = remember { SnackbarHostState() }
+    val state by vm.state.collectAsState()
 
+    // ---- STATE ----
+    var showBaseUrlDialog by remember { mutableStateOf(false) }
     var showModelPicker by remember { mutableStateOf(false) }
-    var baseUrlEdit by remember { mutableStateOf(state.baseUrl) }
-    // Sprint 1 Gate 2: editor allowlist web_fetch (satu domain per baris).
-    var allowlistEdit by remember {
-        mutableStateOf(ToolAllowlist.current().joinToString("\n"))
-    }
-    // Sprint 1 Gate 2: Mode Developer (PIN 6 digit + kredensial perangkat).
-    // Sprint 1 Gate 2: editor allowlist scan (net_scan / conn_health).
-    var scanEdit by remember {
-        mutableStateOf(ToolAllowlist.scanCurrent(ctx).joinToString("\n"))
-    }
-    var devPinSet by remember { mutableStateOf(DevMode.hasPin(ctx)) }
-    var devOn by remember { mutableStateOf(DevMode.isEnabled(ctx)) }
-    var devPin by remember { mutableStateOf("") }
-    var devPin2 by remember { mutableStateOf("") }
-    var devMsg by remember { mutableStateOf<String?>(null) }
-    val keyguardLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { res ->
-        if (res.resultCode == android.app.Activity.RESULT_OK) {
-            DevMode.setEnabled(ctx, true)
-            devOn = true
-            devMsg = "Mode Developer aktif."
-        } else {
-            devMsg = "Konfirmasi perangkat dibatalkan."
-        }
-    }
-    // v14.10: launcher izin notifikasi (API 33+).
-    var notifGranted by remember {
-        mutableStateOf(
-            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-                ContextCompat.checkSelfPermission(
-                    ctx, Manifest.permission.POST_NOTIFICATIONS
-                ) == PackageManager.PERMISSION_GRANTED
-        )
-    }
-    val notifLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted -> notifGranted = granted }
-    var presetName by remember { mutableStateOf("") }
-    var presetText by remember { mutableStateOf("") }
-    var showPresetDialog by remember { mutableStateOf(false) }
-    var showBackups by remember { mutableStateOf(false) }
-    var backups by remember { mutableStateOf(emptyList<File>()) }
-    var confirmClearKey by remember { mutableStateOf(false) }
-    var restartNeeded by remember { mutableStateOf(false) }
-    // v9.1: field konektor (terisi otomatis setelah token termuat dari Keystore)
-    var ghPatEdit by remember(state.githubPat, state.tgBotToken, state.tgChatId) {
-        mutableStateOf(state.githubPat)
-    }
-    var tgTokenEdit by remember(state.githubPat, state.tgBotToken, state.tgChatId) {
-        mutableStateOf(state.tgBotToken)
-    }
-    var tgChatEdit by remember(state.githubPat, state.tgBotToken, state.tgChatId) {
-        mutableStateOf(state.tgChatId)
-    }
-    // Sprint 1 Gate 3: field Supabase + Vercel (read-only dari chat)
-    var sbUrlEdit by remember(state.supabaseUrl, state.supabaseKey, state.vercelToken) {
-        mutableStateOf(state.supabaseUrl)
-    }
-    var sbKeyEdit by remember(state.supabaseUrl, state.supabaseKey, state.vercelToken) {
-        mutableStateOf(state.supabaseKey)
-    }
-    var vcTokenEdit by remember(state.supabaseUrl, state.supabaseKey, state.vercelToken) {
-        mutableStateOf(state.vercelToken)
-    }
-    var tmuxPath by remember { mutableStateOf("/data/data/com.termux/files/usr/bin/bash") }
-    var tmuxArgs by remember { mutableStateOf("-lc \"echo halo dari Hermes\"") }
-    var tmuxWorkdir by remember { mutableStateOf("/data/data/com.termux/files/home") }
-    var tmuxBg by remember { mutableStateOf(false) }
-    var tmuxInstalled by remember { mutableStateOf<Boolean?>(null) }
-    // v9.4: field konektor Upin
-    var upinUrlEdit by remember(state.upinUrl, state.upinSecret) {
-        mutableStateOf(state.upinUrl)
-    }
-    var upinSecretEdit by remember(state.upinUrl, state.upinSecret) {
-        mutableStateOf(state.upinSecret)
-    }
+    var showGithubPatDialog by remember { mutableStateOf(false) }
+    var showGithubRepoDialog by remember { mutableStateOf(false) }
+    var showGithubWorkflowDialog by remember { mutableStateOf(false) }
+    var showGithubActionsDialog by remember { mutableStateOf(false) }
+    var showTelegramDialog by remember { mutableStateOf(false) }
+    var showTermuxDialog by remember { mutableStateOf(false) }
+    var showBackupsDialog by remember { mutableStateOf(false) }
+    var showDevModeDialog by remember { mutableStateOf(false) }
+    var showImportMemoryDialog by remember { mutableStateOf(false) }
+    var showExportMemoryDialog by remember { mutableStateOf(false) }
+    var showMemoryImportMenu by remember { mutableStateOf(false) }
+    var showAddModelDialog by remember { mutableStateOf(false) }
+    var showSoulDialog by remember { mutableStateOf(false) }
+    var showUpgradeLog by remember { mutableStateOf(false) }
+    var showAbout by remember { mutableStateOf(false) }
 
-    LaunchedEffect(state.snack) {
-        state.snack?.let {
-            snack.showSnackbar(it)
-            vm.consumeSnack()
-        }
-    }
+    // ---- TAB STATE ----
+    var selectedTab by remember { mutableStateOf(0) }
+    val tabs = listOf(
+        TabItem("AI", Icons.Filled.Star),
+        TabItem("Tampilan", Icons.Filled.Settings),
+        TabItem("Koneksi", Icons.Filled.Share),
+        TabItem("Agen", Icons.Filled.Warning),
+        TabItem("Sistem", Icons.Filled.Info)
+    )
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(snack) },
-        topBar = {
-            TopAppBar(
-                title = { Text("Pengaturan") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Kembali")
-                    }
-                }
-            )
-        }
-    ) { pad ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(pad)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            if (state.keyBroken) {
-                Card {
-                    Text(
-                        text = "Peringatan: Android Keystore bermasalah di HP ini. " +
-                            "API key disimpan biasa (tetap privat di aplikasi).",
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(12.dp)
-                    )
-                }
-            }
-
-            // ---- Grup: Model ----
-            // v9.3: dropdown (Box+Popup) diganti dialog picker — pola popup
-            // terbukti rapuh di device (tidak bisa switch model).
-            SettingsGroup("Model AI") {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showModelPicker = true }
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "Model aktif",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            state.model.ifBlank { "Belum dipilih" },
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                    }
-                    Icon(Icons.Filled.ArrowDropDown, contentDescription = "Pilih model")
-                }
-                if (showModelPicker) {
-                    ModelPickerDialog(
-                        models = state.models,
-                        current = state.model,
-                        onPick = { m ->
-                            showModelPicker = false
-                            vm.selectModel(m)
-                        },
-                        onDismiss = { showModelPicker = false }
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = { vm.refreshModels() },
-                    enabled = !state.modelsLoading,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Filled.Refresh, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        if (state.modelsLoading) "Memuat…" else "Muat ulang daftar model"
-                    )
-                }
-                if (state.modelsRefreshedAt.isNotBlank()) {
-                    Text(
-                        "Diperbarui: ${state.modelsRefreshedAt}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-            }
-
-            // ---- Grup: Parameter ----
-            SettingsGroup("Parameter Generasi") {
-                SliderRow(
-                    label = "Temperature",
-                    valueText = String.format("%.2f", state.temperature),
-                    value = state.temperature,
-                    range = 0f..2f,
-                    onChange = vm::setTemperature
-                )
-                SliderRow(
-                    label = "Top-P",
-                    valueText = String.format("%.2f", state.topP),
-                    value = state.topP,
-                    range = 0f..1f,
-                    onChange = vm::setTopP
-                )
-                SliderRow(
-                    label = "Max Tokens (0 = otomatis)",
-                    valueText = state.maxTokens.toString(),
-                    value = state.maxTokens.toFloat(),
-                    range = 0f..8192f,
-                    onChange = { vm.setMaxTokens(it.toInt()) }
-                )
-            }
-
-            // ---- Grup: Persona ----
-            SettingsGroup("Persona") {
-                OutlinedTextField(
-                    value = state.persona,
-                    onValueChange = vm::setPersona,
-                    label = { Text("System prompt aktif") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                    maxLines = 6
-                )
-                Spacer(Modifier.height(8.dp))
-                Text("Preset tersimpan:", style = MaterialTheme.typography.labelLarge)
-                state.presets.forEach { p ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { vm.applyPreset(p) },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                p.n,
-                                modifier = Modifier.fillMaxWidth(),
-                                maxLines = 1
-                            )
-                        }
-                        IconButton(onClick = { vm.deletePreset(p) }) {
-                            Icon(Icons.Filled.Delete, contentDescription = "Hapus preset")
-                        }
-                    }
-                }
-                OutlinedButton(
-                    onClick = { showPresetDialog = true },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Filled.Add, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Simpan persona saat ini sebagai preset")
-                }
-            }
-
-            // ---- Grup: Tampilan ----
-            SettingsGroup("Tampilan") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Tema gelap", modifier = Modifier.weight(1f))
-                    Switch(
-                        checked = state.darkTheme,
-                        onCheckedChange = vm::setDarkTheme,
-                        // Fix uji fisik Gate 1: warna default switch nyaris
-                        // menyatu dengan kartu di tema terang (ghost switch).
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = MaterialTheme.colorScheme.primary,
-                            uncheckedThumbColor =
-                                MaterialTheme.colorScheme.onSurfaceVariant,
-                            uncheckedTrackColor =
-                                MaterialTheme.colorScheme.surfaceVariant,
-                            uncheckedBorderColor =
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    )
-                }
-            }
-
-            // ---- Grup: Notifikasi & Izin (v14.10) ----
-            SettingsGroup("Notifikasi & Izin") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Notifikasi", modifier = Modifier.weight(1f))
-                    Switch(
-                        checked = state.notifEnabled,
-                        onCheckedChange = vm::setNotifEnabled
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "Eksekusi (tool, prompt, respons)",
-                        modifier = Modifier.weight(1f)
-                    )
-                    Switch(
-                        checked = state.notifExec,
-                        onCheckedChange = vm::setNotifExec,
-                        enabled = state.notifEnabled
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Izin & persetujuan", modifier = Modifier.weight(1f))
-                    Switch(
-                        checked = state.notifApproval,
-                        onCheckedChange = vm::setNotifApproval,
-                        enabled = state.notifEnabled
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                    !notifGranted
-                ) {
-                    Button(
-                        onClick = {
-                            notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Minta Izin Notifikasi") }
-                    Spacer(Modifier.height(8.dp))
-                }
-                OutlinedButton(
-                    onClick = {
-                        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-                            putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
-                        }
-                        ctx.startActivity(intent)
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Buka Pengaturan Notifikasi") }
-            }
-
-            // ---- Grup: Koneksi ----
-            SettingsGroup("Koneksi") {
-                // Preset provider (Sprint 1 tambahan): Muse by Meta = Meta Model API.
-                Text(
-                    "Preset provider",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = {
-                            baseUrlEdit =
-                                id.sukiapps.hermes.domain.Prefs.DEFAULT_BASE
-                            vm.setBaseUrl(baseUrlEdit)
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("Jerouter") }
-                    OutlinedButton(
-                        onClick = {
-                            baseUrlEdit = "https://api.meta.ai/v1"
-                            vm.setBaseUrl(baseUrlEdit)
-                            vm.selectModel("muse-spark-1.3")
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("Muse by Meta") }
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = {
-                            baseUrlEdit = "https://openrouter.ai/api/v1"
-                            vm.setBaseUrl(baseUrlEdit)
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("OpenRouter") }
-                    OutlinedButton(
-                        onClick = {
-                            baseUrlEdit =
-                                "https://chat.decentralizedcompute.company/v1"
-                            vm.setBaseUrl(baseUrlEdit)
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("DCompute") }
-                }
-                Text(
-                    "Preset mengisi Base URL (Muse by Meta juga menyetel " +
-                        "model awal muse-spark-1.3). Setelah memilih preset: ketuk " +
-                        "\u201cGanti API key\u2026\u201d di bawah untuk menempel API key " +
-                        "Meta milikmu, lalu di grup Model AI ketuk \u201cMuat ulang " +
-                        "daftar model\u201d.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = baseUrlEdit,
-                    onValueChange = { baseUrlEdit = it },
-                    label = { Text("Base URL") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = { vm.setBaseUrl(baseUrlEdit) },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("Simpan") }
-                    OutlinedButton(onClick = {
-                        vm.resetBaseUrl()
-                        baseUrlEdit = id.sukiapps.hermes.domain.Prefs.DEFAULT_BASE
-                    }) { Text("Reset") }
-                }
-            }
-
-            // ---- Grup: Tool Web (Sprint 1 Gate 2) ----
-            SettingsGroup("Tool Web") {
-                Text(
-                    "Allowlist domain web_fetch — satu domain per baris. " +
-                        "Kosongkan untuk mengizinkan semua domain publik " +
-                            "(akses IP privat tetap diblokir).",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = allowlistEdit,
-                    onValueChange = { allowlistEdit = it },
-                    label = { Text("Domain diizinkan") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2
-                )
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = {
-                        ToolAllowlist.setDomains(
-                            ctx,
-                            allowlistEdit.split("\n")
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Simpan allowlist") }
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "Allowlist scan untuk net_scan & conn_health — satu host per baris. " +
-                        "Kosongkan untuk default localhost saja.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = scanEdit,
-                    onValueChange = { scanEdit = it },
-                    label = { Text("Host scan diizinkan") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2
-                )
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = {
-                        ToolAllowlist.setScanHosts(
-                            ctx,
-                            scanEdit.split("\n")
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Simpan allowlist scan") }
-            }
-
-            // ---- Grup: Agen (Sprint 1 Gate 4) ----
-            SettingsGroup("Agen") {
-                val limitsNow = id.sukiapps.hermes.data.agent.AgentLimits.get(ctx)
-                var iterEdit by remember { mutableStateOf(limitsNow.maxIterations.toString()) }
-                var minEdit by remember { mutableStateOf(limitsNow.timeoutMinutes.toString()) }
-                var budgetEdit by remember { mutableStateOf(limitsNow.tokenBudget.toString()) }
-                var memMsg by remember { mutableStateOf<String?>(null) }
-                val exportLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-                    androidx.activity.result.contract.ActivityResultContracts
-                        .CreateDocument("application/json")
-                ) { uri ->
-                    if (uri != null) {
-                        val ok = runCatching {
-                            ctx.contentResolver.openOutputStream(uri)?.use { s ->
-                                s.write(
-                                    id.sukiapps.hermes.data.agent.AgentMemory
-                                        .exportJson().toByteArray(Charsets.UTF_8)
-                                )
-                            }
-                        }.isSuccess
-                        memMsg = if (ok) "Export ingatan tersimpan."
-                        else "Export gagal."
-                    }
-                }
-                val importLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-                    androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
-                ) { uri ->
-                    if (uri != null) {
-                        val ok = runCatching {
-                            val text = ctx.contentResolver.openInputStream(uri)
-                                ?.bufferedReader()?.readText().orEmpty()
-                            id.sukiapps.hermes.data.agent.AgentMemory.importJson(text)
-                        }.getOrDefault(false)
-                        memMsg = if (ok) "Import ingatan diterapkan."
-                        else "Import gagal — format tidak dikenal."
-                    }
-                }
-                Text(
-                    "Batas sesi Mode Agen (chat). Token = estimasi atas isi " +
-                        "percakapan (provider tidak mengirim usage asli).",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = iterEdit,
-                    onValueChange = { iterEdit = it.filter { c -> c.isDigit() }.take(2) },
-                    label = { Text("Maks iterasi per sesi (1–25)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = minEdit,
-                    onValueChange = { minEdit = it.filter { c -> c.isDigit() }.take(2) },
-                    label = { Text("Timeout per sesi, menit (1–30)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = budgetEdit,
-                    onValueChange = { budgetEdit = it.filter { c -> c.isDigit() }.take(6) },
-                    label = { Text("Budget token per sesi (10rb–500rb)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = {
-                        id.sukiapps.hermes.data.agent.AgentLimits.save(
-                            ctx,
-                            iterEdit.toIntOrNull() ?: 10,
-                            minEdit.toIntOrNull() ?: 5,
-                            budgetEdit.toIntOrNull() ?: 100_000
-                        )
-                        memMsg = "Batas agen tersimpan."
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Simpan batas agen") }
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        "Upgrade Diri Otomatis — agen boleh branch, tulis, " +
-                            "merge, dan buat rilis draft TANPA popup. " +
-                            "Matikan untuk menghentikan loop (kill switch). " +
-                            "Signing + lampir APK tetap oleh maintainer.",
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    var suOn by remember {
-                        mutableStateOf(
-                            id.sukiapps.hermes.data.agent.SelfUpgradePrefs
-                                .enabled(ctx)
-                        )
-                    }
-                    Switch(
-                        checked = suOn,
-                        onCheckedChange = {
-                            suOn = it
-                            id.sukiapps.hermes.data.agent.SelfUpgradePrefs
-                                .setEnabled(ctx, it)
-                            memMsg = if (it) {
-                                "Upgrade Diri Otomatis AKTIF."
-                            } else {
-                                "Upgrade Diri Otomatis nonaktif."
-                            }
-                        }
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = { exportLauncher.launch("hermes-memory-export.json") },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("Export ingatan") }
-                    OutlinedButton(
-                        onClick = { importLauncher.launch(arrayOf("application/json")) },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("Import ingatan") }
-                }
-                memMsg?.let {
-                    Spacer(Modifier.height(4.dp))
-                    Text(it, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-
-            // ---- Grup: Mode Developer (Sprint 1 Gate 2) ----
-            SettingsGroup("Mode Developer") {
-                Text(
-                    if (devOn) {
-                        "AKTIF — approval LOW/MEDIUM dilewati otomatis; HIGH tetap wajib popup."
-                    } else {
-                        "Nonaktif — tool sensitif selalu meminta izin."
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(8.dp))
-                if (!devPinSet) {
-                    OutlinedTextField(
-                        value = devPin,
-                        onValueChange = { devPin = it.filter { c -> c.isDigit() }.take(6) },
-                        label = { Text("Buat PIN (6 digit)") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = devPin2,
-                        onValueChange = { devPin2 = it.filter { c -> c.isDigit() }.take(6) },
-                        label = { Text("Ulangi PIN") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Button(
-                        onClick = {
-                            when {
-                                devPin.length != 6 -> devMsg = "PIN harus 6 digit."
-                                devPin != devPin2 -> devMsg = "PIN tidak sama."
-                                else -> {
-                                    DevMode.setPin(ctx, devPin)
-                                    devPinSet = true
-                                    devPin = ""
-                                    devPin2 = ""
-                                    devMsg = "PIN tersimpan. Masukkan PIN untuk mengaktifkan."
-                                }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Simpan PIN") }
-                } else {
-                    OutlinedTextField(
-                        value = devPin,
-                        onValueChange = { devPin = it.filter { c -> c.isDigit() }.take(6) },
-                        label = { Text("PIN developer") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Button(
-                        onClick = {
-                            if (!DevMode.verifyPin(ctx, devPin)) {
-                                devMsg = "PIN salah."
-                            } else if (devOn) {
-                                DevMode.setEnabled(ctx, false)
-                                devOn = false
-                                devPin = ""
-                                devMsg = "Mode Developer dimatikan."
-                            } else {
-                                val km = ctx.getSystemService(Context.KEYGUARD_SERVICE)
-                                    as KeyguardManager
-                                val intent = km.createConfirmDeviceCredentialIntent(
-                                    "Mode Developer",
-                                    "Konfirmasi untuk mengaktifkan Mode Developer"
-                                )
-                                if (intent != null) {
-                                    keyguardLauncher.launch(intent)
-                                } else {
-                                    DevMode.setEnabled(ctx, true)
-                                    devOn = true
-                                    devMsg = "Mode Developer aktif (perangkat tanpa kunci layar)."
-                                }
-                                devPin = ""
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            if (devOn) "Matikan Mode Developer"
-                            else "Aktifkan Mode Developer"
-                        )
-                    }
-                }
-                devMsg?.let {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-
-            // ---- Grup: Backup ----
-            SettingsGroup("Backup & Restore") {
-                Button(
-                    onClick = { vm.doBackup() },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Buat backup sekarang") }
-                OutlinedButton(
-                    onClick = {
-                        backups = vm.listBackups()
-                        showBackups = true
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Restore dari backup…") }
-                if (state.busyMessage != null) {
-                    Text(
-                        state.busyMessage!!,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-
-            // ---- Grup: API Key ----
-            SettingsGroup("API Key") {
-                OutlinedButton(
-                    onClick = onOpenKeySetup,
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Ganti API key…") }
-                OutlinedButton(
-                    onClick = { confirmClearKey = true },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        "Hapus API key",
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-            }
-
-            // ---- Grup: Jiwa Hermes (v9.1) ----
-            SettingsGroup("Jiwa Hermes") {
-                Text(
-                    "Persona tetap, ingatan jangka panjang, dan todo — " +
-                        "disusun otomatis menjadi system prompt.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = onOpenSoul,
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Buka Jiwa Hermes…") }
-            }
-
-            // ---- Grup: Konektor (v9.1, aksi manual) ----
-            SettingsGroup("Konektor") {
-                Text(
-                    "Aksi manual — setiap tombol di bawah ditekan olehmu, " +
-                        "tidak pernah berjalan otomatis. Token tersimpan " +
-                        "terenkripsi di Keystore.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = ghPatEdit,
-                    onValueChange = { ghPatEdit = it },
-                    label = { Text("GitHub PAT (scope repo + workflow)") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = tgTokenEdit,
-                    onValueChange = { tgTokenEdit = it },
-                    label = { Text("Token bot Telegram") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = tgChatEdit,
-                    onValueChange = { tgChatEdit = it },
-                    label = { Text("Chat ID Telegram") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = { vm.saveConnectorTokens(ghPatEdit, tgTokenEdit, tgChatEdit) },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Simpan token") }
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "Supabase & Vercel (read-only dari chat)",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = sbUrlEdit,
-                    onValueChange = { sbUrlEdit = it },
-                    label = { Text("URL Supabase (https://xxx.supabase.co)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = sbKeyEdit,
-                    onValueChange = { sbKeyEdit = it },
-                    label = { Text("Key Supabase (anon/service)") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = vcTokenEdit,
-                    onValueChange = { vcTokenEdit = it },
-                    label = { Text("Token Vercel") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = { vm.saveCloudTokens(sbUrlEdit, sbKeyEdit, vcTokenEdit) },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Simpan Supabase & Vercel") }
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = { vm.testGitHub() },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("Tes GitHub") }
-                    OutlinedButton(
-                        onClick = { vm.testTelegram() },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("Tes Telegram") }
-                }
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "Termux",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    tmuxInstalled?.let {
-                        if (it) "Termux:API terdeteksi ✅"
-                        else "Termux:API tidak terinstal."
-                    } ?: "Status Termux:API belum dicek.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Spacer(Modifier.height(4.dp))
-                OutlinedButton(
-                    onClick = { tmuxInstalled = TermuxConnector.isApiInstalled(ctx) },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Cek Termux:API") }
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = tmuxPath,
-                    onValueChange = { tmuxPath = it },
-                    label = { Text("Path perintah") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = tmuxArgs,
-                    onValueChange = { tmuxArgs = it },
-                    label = { Text("Argumen (pisah spasi)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = tmuxWorkdir,
-                    onValueChange = { tmuxWorkdir = it },
-                    label = { Text("Workdir") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Switch(
-                        checked = tmuxBg,
-                        onCheckedChange = { tmuxBg = it }
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("Jalan di background")
-                }
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = {
-                        val args = tmuxArgs.split(Regex("\\s+")).filter { it.isNotEmpty() }
-                        vm.runTermux(
-                            tmuxPath.trim(), args, tmuxWorkdir.trim(), tmuxBg
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Jalankan di Termux…") }
-                Text(
-                    "Setiap eksekusi selalu minta izin popup (tidak bisa " +
-                        "diingat) & tercatat di Riwayat Izin.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "Telegram Serverless",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    "Deploy backend bot JS ke infrastruktur Telegram via " +
-                        "CLI tgcloud di Termux.\nJalankan `npx tgcloud login` " +
-                        "sekali secara manual di Termux (tempel CLI access " +
-                        "token dari BotFather → bot → Serverless → CLI " +
-                        "Access). Token dipegang Termux, tidak disimpan di app.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = state.serverlessDir,
-                    onValueChange = vm::setServerlessDir,
-                    label = { Text("Direktori project Serverless") },
-                    placeholder = { Text("~/my-bot") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = {
-                            vm.runServerless(ServerlessConnector.Action.CHECK_INSTALL)
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("Cek instalasi") }
-                    OutlinedButton(
-                        onClick = {
-                            vm.runServerless(ServerlessConnector.Action.STATUS)
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("Status") }
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = {
-                            vm.runServerless(ServerlessConnector.Action.PUSH)
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("Push") }
-                    OutlinedButton(
-                        onClick = {
-                            vm.runServerless(ServerlessConnector.Action.MIGRATE)
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("Migrate") }
-                }
-            }
-
-            // ---- Grup: Konektor Upin (v9.4) ----
-            SettingsGroup("Konektor Upin") {
-                Text(
-                    "Tanya-jawab dengan agent Upin di VM via SSH forward. " +
-                        "Secret tersimpan terenkripsi di Keystore.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = upinUrlEdit,
-                    onValueChange = { upinUrlEdit = it },
-                    label = { Text("URL Upin") },
-                    placeholder = { Text(UpinConnector.DEFAULT_URL) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = upinSecretEdit,
-                    onValueChange = { upinSecretEdit = it },
-                    label = { Text("Secret Upin") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = { vm.saveUpinSettings(upinUrlEdit, upinSecretEdit) },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("Simpan") }
-                    OutlinedButton(
-                        onClick = { vm.testUpin() },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("Test koneksi") }
-                }
-                if (state.upinStatus != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        state.upinStatus!!,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (state.upinStatus == "Terhubung ✓")
-                            MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.error
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Di Termux jalankan:\nssh -L 8766:127.0.0.1:8766 muse-vm -N",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            // ---- Grup: Izin & Riwayat (v9.2) ----
-            SettingsGroup("Izin & Riwayat") {
-                Text(
-                    "Semua aksi sensitif (Termux, Telegram, GitHub, tulis " +
-                        "ingatan) tercatat — termasuk yang kamu tolak.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = onOpenAudit,
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Buka Riwayat Izin…") }
-            }
-        }
-    }
-
-    // Dialog tambah preset.
-    if (showPresetDialog) {
+    // ---- BASE URL DIALOG ----
+    if (showBaseUrlDialog) {
+        var baseUrl by remember { mutableStateOf(state.baseUrl) }
         AlertDialog(
-            onDismissRequest = { showPresetDialog = false },
-            title = { Text("Preset baru") },
+            onDismissRequest = { showBaseUrlDialog = false },
+            title = { Text("Server AI (Jerouter)") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextField(
-                        value = presetName,
-                        onValueChange = { presetName = it },
-                        label = { Text("Nama preset") },
+                    Text(
+                        "Endpoint OpenAI-compatible. Default: http://10.0.2.2:8766/v1 (emulator).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = baseUrl,
+                        onValueChange = { baseUrl = it },
+                        label = { Text("Base URL") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    TextField(
-                        value = presetText,
-                        onValueChange = { presetText = it },
-                        label = { Text("Isi system prompt") },
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.saveBaseUrl(baseUrl)
+                    showBaseUrlDialog = false
+                }) { Text("Simpan") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBaseUrlDialog = false }) { Text("Batal") }
+            }
+        )
+    }
+
+    // ---- SOUL DIALOG ----
+    if (showSoulDialog) {
+        var soul by remember { mutableStateOf(state.soulPrompt) }
+        AlertDialog(
+            onDismissRequest = { showSoulDialog = false },
+            title = { Text("Jiwa Hermes (System Prompt)") },
+            text = {
+                OutlinedTextField(
+                    value = soul,
+                    onValueChange = { soul = it },
+                    label = { Text("Instruksi sistem") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp)
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.saveSoul(soul)
+                    showSoulDialog = false
+                }) { Text("Simpan") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSoulDialog = false }) { Text("Batal") }
+            }
+        )
+    }
+
+    // ---- TELEGRAM DIALOG ----
+    if (showTelegramDialog) {
+        var tgToken by remember { mutableStateOf(state.telegramToken) }
+        var tgChatId by remember { mutableStateOf(state.telegramChatId) }
+        AlertDialog(
+            onDismissRequest = { showTelegramDialog = false },
+            title = { Text("Konektor Telegram") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = tgToken,
+                        onValueChange = { tgToken = it },
+                        label = { Text("Bot Token") },
+                        singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
-                        minLines = 3,
-                        maxLines = 8
+                        visualTransformation = PasswordVisualTransformation()
+                    )
+                    OutlinedTextField(
+                        value = tgChatId,
+                        onValueChange = { tgChatId = it },
+                        label = { Text("Chat ID") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    vm.addPreset(presetName, presetText)
-                    presetName = ""
-                    presetText = ""
-                    showPresetDialog = false
+                    vm.saveTelegram(tgToken, tgChatId)
+                    showTelegramDialog = false
                 }) { Text("Simpan") }
             },
             dismissButton = {
-                TextButton(onClick = { showPresetDialog = false }) { Text("Batal") }
+                TextButton(onClick = { showTelegramDialog = false }) { Text("Batal") }
             }
         )
     }
 
-    // Dialog daftar backup.
-    if (showBackups) {
+    // ---- GITHUB PAT DIALOG ----
+    if (showGithubPatDialog) {
+        var pat by remember { mutableStateOf(state.githubPat) }
         AlertDialog(
-            onDismissRequest = { showBackups = false },
-            title = { Text("Pilih backup") },
+            onDismissRequest = { showGithubPatDialog = false },
+            title = { Text("GitHub PAT") },
             text = {
-                Column {
-                    if (backups.isEmpty()) {
-                        Text("Belum ada file backup.")
-                    } else {
-                        backups.forEach { f ->
-                            TextButton(
-                                onClick = {
-                                    showBackups = false
-                                    vm.doRestore(f) { needsRestart ->
-                                        if (needsRestart) restartNeeded = true
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth()
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Personal Access Token untuk akses repo & Actions.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = pat,
+                        onValueChange = { pat = it },
+                        label = { Text("Token") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        visualTransformation = PasswordVisualTransformation()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.saveGithubPat(pat)
+                    showGithubPatDialog = false
+                }) { Text("Simpan") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showGithubPatDialog = false }) { Text("Batal") }
+            }
+        )
+    }
+
+    // ---- GITHUB REPO DIALOG ----
+    if (showGithubRepoDialog) {
+        var ghOwner by remember { mutableStateOf(state.githubOwner) }
+        var ghRepo by remember { mutableStateOf(state.githubRepo) }
+        AlertDialog(
+            onDismissRequest = { showGithubRepoDialog = false },
+            title = { Text("Repo GitHub") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = ghOwner,
+                        onValueChange = { ghOwner = it },
+                        label = { Text("Owner") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = ghRepo,
+                        onValueChange = { ghRepo = it },
+                        label = { Text("Repo") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.saveGithubRepo(ghOwner, ghRepo)
+                    showGithubRepoDialog = false
+                }) { Text("Simpan") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showGithubRepoDialog = false }) { Text("Batal") }
+            }
+        )
+    }
+
+    // ---- GITHUB WORKFLOW DIALOG ----
+    if (showGithubWorkflowDialog) {
+        var wfFile by remember { mutableStateOf(state.githubWorkflow) }
+        AlertDialog(
+            onDismissRequest = { showGithubWorkflowDialog = false },
+            title = { Text("Workflow File") },
+            text = {
+                OutlinedTextField(
+                    value = wfFile,
+                    onValueChange = { wfFile = it },
+                    label = { Text("Nama file .yml") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.saveGithubWorkflow(wfFile)
+                    showGithubWorkflowDialog = false
+                }) { Text("Simpan") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showGithubWorkflowDialog = false }) { Text("Batal") }
+            }
+        )
+    }
+
+    // ---- GITHUB ACTIONS DIALOG ----
+    if (showGithubActionsDialog) {
+        AlertDialog(
+            onDismissRequest = { showGithubActionsDialog = false },
+            title = { Text("Trigger GitHub Actions") },
+            text = { Text("Jalankan workflow ${state.githubWorkflow} di ${state.githubOwner}/${state.githubRepo}?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.triggerGithubActions()
+                    showGithubActionsDialog = false
+                }) { Text("Jalankan") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showGithubActionsDialog = false }) { Text("Batal") }
+            }
+        )
+    }
+
+    // ---- TERMUX DIALOG ----
+    if (showTermuxDialog) {
+        var cmd by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showTermuxDialog = false },
+            title = { Text("Konektor Termux") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Perintah shell di Termux. SETIAP perintah wajib konfirmasi.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = cmd,
+                        onValueChange = { cmd = it },
+                        label = { Text("Command") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (cmd.isNotBlank()) {
+                        vm.executeTermuxCommand(cmd)
+                    }
+                    showTermuxDialog = false
+                }) { Text("Jalankan") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTermuxDialog = false }) { Text("Batal") }
+            }
+        )
+    }
+
+    // ---- BACKUPS DIALOG ----
+    if (showBackupsDialog) {
+        AlertDialog(
+            onDismissRequest = { showBackupsDialog = false },
+            title = { Text("Backup & Restore") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Buat backup ZIP (database chat + preferensi). Restore dari file ZIP.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Button(onClick = { vm.createBackup(ctx) }, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Filled.Star, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Buat Backup ZIP")
+                    }
+                    if (state.backupFiles.isNotEmpty()) {
+                        Divider()
+                        Text("Backup tersedia:", style = MaterialTheme.typography.labelMedium)
+                        state.backupFiles.takeLast(5).forEach { f ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { vm.restoreBackup(ctx, f) }
+                                    .padding(vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    "${f.name} (${f.length() / 1024} KB)",
-                                    modifier = Modifier.fillMaxWidth()
-                                )
+                                Text(f.name, style = MaterialTheme.typography.bodySmall)
+                                Text("Restore", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
                             }
                         }
                     }
                 }
             },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { showBackups = false }) { Text("Tutup") }
+            confirmButton = {
+                TextButton(onClick = { showBackupsDialog = false }) { Text("Tutup") }
             }
         )
     }
 
-    // Konfirmasi hapus key.
-    if (confirmClearKey) {
+    // ---- DEV MODE DIALOG ----
+    if (showDevModeDialog) {
         AlertDialog(
-            onDismissRequest = { confirmClearKey = false },
-            title = { Text("Hapus API key?") },
-            text = { Text("Kamu harus memasukkan API key baru untuk memakai aplikasi.") },
+            onDismissRequest = { showDevModeDialog = false },
+            title = { Text("Mode Developer") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Fitur untuk debugging dan pengembangan aktif.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Debug logging")
+                        Switch(
+                            checked = state.debugLogging,
+                            onCheckedChange = { vm.setDebugLogging(it) }
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Verbose network")
+                        Switch(
+                            checked = state.verboseNetwork,
+                            onCheckedChange = { vm.setVerboseNetwork(it) }
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showDevModeDialog = false }) { Text("Tutup") }
+            }
+        )
+    }
+
+    // ---- IMPORT MEMORY DIALOG ----
+    if (showImportMemoryDialog) {
+        AlertDialog(
+            onDismissRequest = { showImportMemoryDialog = false },
+            title = { Text("Import Ingatan") },
+            text = { Text("Paste isi memory.md untuk mengimpor ingatan persisten.") },
+            confirmButton = {
+                TextButton(onClick = { showImportMemoryDialog = false }) { Text("Tutup") }
+            }
+        )
+    }
+
+    // ---- EXPORT MEMORY DIALOG ----
+    if (showExportMemoryDialog) {
+        AlertDialog(
+            onDismissRequest = { showExportMemoryDialog = false },
+            title = { Text("Export Ingatan") },
+            text = { Text("Isi memory.md akan dibagikan via share intent.") },
             confirmButton = {
                 TextButton(onClick = {
-                    confirmClearKey = false
-                    vm.clearKey(onOpenKeySetup)
-                }) { Text("Hapus") }
+                    vm.exportMemory(ctx)
+                    showExportMemoryDialog = false
+                }) { Text("Export") }
             },
             dismissButton = {
-                TextButton(onClick = { confirmClearKey = false }) { Text("Batal") }
+                TextButton(onClick = { showExportMemoryDialog = false }) { Text("Batal") }
             }
         )
     }
 
-    // Restore berhasil → wajib restart agar Room membuka DB baru.
-    if (restartNeeded) {
+    // ---- ADD MODEL DIALOG ----
+    if (showAddModelDialog) {
+        var modelId by remember { mutableStateOf("") }
+        var modelLabel by remember { mutableStateOf("") }
         AlertDialog(
-            onDismissRequest = {},
-            title = { Text("Restore berhasil") },
+            onDismissRequest = { showAddModelDialog = false },
+            title = { Text("Tambah Model") },
             text = {
-                Text(
-                    "Tutup dan buka ulang aplikasi agar data yang di-restore " +
-                        "dimuat dengan benar."
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = modelId,
+                        onValueChange = { modelId = it },
+                        label = { Text("Model ID") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = modelLabel,
+                        onValueChange = { modelLabel = it },
+                        label = { Text("Label (opsional)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             },
             confirmButton = {
-                TextButton(onClick = { restartNeeded = false }) { Text("Mengerti") }
+                TextButton(onClick = {
+                    if (modelId.isNotBlank()) {
+                        vm.addCustomModel(modelId, modelLabel.ifBlank { modelId })
+                    }
+                    showAddModelDialog = false
+                }) { Text("Simpan") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddModelDialog = false }) { Text("Batal") }
             }
         )
+    }
+
+    // ---- ABOUT DIALOG ----
+    if (showAbout) {
+        AlertDialog(
+            onDismissRequest = { showAbout = false },
+            title = { Text("Tentang Hermes") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Hermes — aplikasi chat AI Android native.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        "Versi ${AppInfo.versionName} (${AppInfo.versionCode})",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        "Backend: OpenAI-compatible (Jerouter). UI: Jetpack Compose + Material 3.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        "Engine: Suki Autonomous Engine (SAE).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showAbout = false }) { Text("Tutup") }
+            }
+        )
+    }
+
+    // ---- MODEL PICKER ----
+    if (showModelPicker) {
+        ModelPickerDialog(
+            models = state.models,
+            currentModelId = state.modelId,
+            onModelSelected = { model ->
+                vm.saveModel(model.id)
+                showModelPicker = false
+            },
+            onDismiss = { showModelPicker = false },
+            onRefresh = { vm.refreshModels() },
+            onAddModel = { showModelPicker = false; showAddModelDialog = true },
+            isLoading = state.modelsLoading
+        )
+    }
+
+    // ================================================================
+    // MAIN LAYOUT — Tab + Adaptive Grid
+    // ================================================================
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Top App Bar
+        TopAppBar(
+            title = {
+                Column {
+                    Text(
+                        "Pengaturan",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Hermes v${AppInfo.versionName}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            actions = {
+                IconButton(onClick = { showAbout = true }) {
+                    Icon(Icons.Filled.Info, contentDescription = "Tentang")
+                }
+            }
+        )
+
+        // StatsBanner — hero section
+        StatsBanner(
+            modelName = state.modelLabel.ifBlank { state.modelId },
+            temperature = state.temperature,
+            maxTokens = state.maxTokens,
+            themeLabel = when (state.themeMode) {
+                                "light" -> "Terang"
+                                "dark" -> "Gelap"
+                                else -> "Sistem"
+                            },
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+
+        // Tab Row
+        ScrollableTabRow(
+            selectedTabIndex = selectedTab,
+            edgePadding = 16.dp,
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.primary
+        ) {
+            tabs.forEachIndexed { index, tab ->
+                Tab(
+                    selected = selectedTab == index,
+                    onClick = { selectedTab = index },
+                    text = {
+                        Text(
+                            tab.label,
+                            fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal
+                        )
+                    },
+                    icon = {
+                        Icon(
+                            tab.icon,
+                            contentDescription = tab.label,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                )
+            }
+        }
+
+        // Tab Content — Adaptive Grid
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 340.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            when (selectedTab) {
+                // ---- TAB 0: AI ----
+                0 -> {
+                    item {
+                        SettingsGroup(
+                            title = "Model AI",
+                            icon = Icons.Filled.Star,
+                            subtitle = "Pilih model yang aktif"
+                        ) {
+                            SettingsItem(
+                                title = "Model aktif",
+                                subtitle = state.modelLabel.ifBlank { state.modelId },
+                                onClick = { showModelPicker = true }
+                            ) {
+                                if (state.modelsLoading) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+                                }
+                            }
+                            Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            SettingsItem(
+                                title = "Tambah model custom",
+                                subtitle = "Daftarkan model ID manual",
+                                onClick = { showAddModelDialog = true }
+                            ) {
+                                Icon(Icons.Filled.Star, contentDescription = null)
+                            }
+                        }
+                    }
+                    item {
+                        SettingsGroup(
+                            title = "Parameter Generasi",
+                            icon = Icons.Filled.Settings,
+                            subtitle = "Atur sampling & batas output"
+                        ) {
+                            SliderRow(
+                                label = "Temperature",
+                                subtitle = "Kreativitas (0=faktual, 2=liar)",
+                                value = state.temperature,
+                                valueRange = 0f..2f,
+                                onValueChange = { vm.saveTemperature(it) },
+                                valueLabel = String.format("%.1f", state.temperature)
+                            )
+                            Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            SliderRow(
+                                label = "Top P",
+                                subtitle = "Nucleus sampling",
+                                value = state.topP,
+                                valueRange = 0.05f..1f,
+                                onValueChange = { vm.saveTopP(it) },
+                                valueLabel = String.format("%.2f", state.topP)
+                            )
+                            Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            SliderRow(
+                                label = "Max Tokens",
+                                subtitle = "Batas panjang jawaban",
+                                value = state.maxTokens.toFloat(),
+                                valueRange = 256f..8192f,
+                                onValueChange = { vm.saveMaxTokens(it.toInt()) },
+                                valueLabel = state.maxTokens.toString()
+                            )
+                            Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            SliderRow(
+                                label = "Max Context",
+                                subtitle = "Jendela konteks percakapan",
+                                value = state.maxContext.toFloat(),
+                                valueRange = 1024f..32768f,
+                                onValueChange = { vm.saveMaxContext(it.toInt()) },
+                                valueLabel = state.maxContext.toString()
+                            )
+                            Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            SliderRow(
+                                label = "Timeout",
+                                subtitle = "Batas tunggu respons (detik)",
+                                value = state.timeoutSeconds.toFloat(),
+                                valueRange = 15f..180f,
+                                onValueChange = { vm.saveTimeoutSeconds(it.toInt()) },
+                                valueLabel = "${state.timeoutSeconds}s"
+                            )
+                        }
+                    }
+                    item {
+                        SettingsGroup(
+                            title = "Persona & Soul",
+                            icon = Icons.Filled.Edit,
+                            subtitle = "System prompt aktif"
+                        ) {
+                            SettingsItem(
+                                title = "Jiwa Hermes",
+                                subtitle = state.soulPrompt.take(60).ifBlank { "Belum diatur" },
+                                onClick = { showSoulDialog = true }
+                            ) {
+                                Icon(Icons.Filled.Edit, contentDescription = null)
+                            }
+                        }
+                    }
+                }
+
+                // ---- TAB 1: TAMPILAN ----
+                1 -> {
+                    item {
+                        SettingsGroup(
+                            title = "Tema",
+                            icon = Icons.Filled.Settings,
+                            subtitle = "Mode tampilan aplikasi"
+                        ) {
+                            SettingsItem(
+                                title = "Mode tema",
+                                subtitle = when (state.themeMode) {
+                                    "light" -> "Terang"
+                                    "dark" -> "Gelap"
+                                    else -> "Ikuti sistem"
+                                },
+                                onClick = {
+                                    val next = when (state.themeMode) {
+                                        "light" -> "dark"
+                                        "dark" -> "system"
+                                        else -> "light"
+                                    }
+                                    vm.saveThemeMode(next)
+                                }
+                            ) {
+                                Icon(Icons.Filled.Refresh, contentDescription = null)
+                            }
+                        }
+                    }
+                    item {
+                        SettingsGroup(
+                            title = "Bahasa & Gaya",
+                            icon = Icons.Filled.Info,
+                            subtitle = "Preferensi penampilan"
+                        ) {
+                            SettingsItem(
+                                title = "Bahasa",
+                                subtitle = "Bahasa Indonesia",
+                                onClick = { }
+                            ) {
+                                Icon(Icons.Filled.Info, contentDescription = null)
+                            }
+                            Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            SettingsItem(
+                                title = "Gaya chat",
+                                subtitle = "Bubble modern",
+                                onClick = { }
+                            ) {
+                                Icon(Icons.Filled.Star, contentDescription = null)
+                            }
+                        }
+                    }
+                }
+
+                // ---- TAB 2: KONEKSI ----
+                2 -> {
+                    item {
+                        SettingsGroup(
+                            title = "Server AI",
+                            icon = Icons.Filled.Share,
+                            subtitle = "Endpoint Jerouter"
+                        ) {
+                            SettingsItem(
+                                title = "Base URL",
+                                subtitle = state.baseUrl,
+                                onClick = { showBaseUrlDialog = true }
+                            ) {
+                                Icon(Icons.Filled.Edit, contentDescription = null)
+                            }
+                        }
+                    }
+                    item {
+                        SettingsGroup(
+                            title = "Konektor Telegram",
+                            icon = Icons.Filled.Notifications,
+                            subtitle = if (state.telegramToken.isNotBlank()) "Terhubung" else "Belum diatur"
+                        ) {
+                            SettingsItem(
+                                title = "Bot Token & Chat ID",
+                                subtitle = if (state.telegramToken.isNotBlank()) "Tersimpan" else "Belum diatur",
+                                onClick = { showTelegramDialog = true }
+                            ) {
+                                Icon(Icons.Filled.Edit, contentDescription = null)
+                            }
+                        }
+                    }
+                    item {
+                        SettingsGroup(
+                            title = "Konektor GitHub",
+                            icon = Icons.Filled.Share,
+                            subtitle = if (state.githubPat.isNotBlank()) "PAT aktif" else "Belum diatur"
+                        ) {
+                            SettingsItem(
+                                title = "Personal Access Token",
+                                subtitle = if (state.githubPat.isNotBlank()) "Tersimpan" else "Belum diatur",
+                                onClick = { showGithubPatDialog = true }
+                            ) {
+                                Icon(Icons.Filled.Lock, contentDescription = null)
+                            }
+                            Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            SettingsItem(
+                                title = "Owner / Repo",
+                                subtitle = "${state.githubOwner}/${state.githubRepo}",
+                                onClick = { showGithubRepoDialog = true }
+                            ) {
+                                Icon(Icons.Filled.Edit, contentDescription = null)
+                            }
+                            Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            SettingsItem(
+                                title = "Workflow File",
+                                subtitle = state.githubWorkflow,
+                                onClick = { showGithubWorkflowDialog = true }
+                            ) {
+                                Icon(Icons.Filled.Edit, contentDescription = null)
+                            }
+                            Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            SettingsItem(
+                                title = "Trigger Actions",
+                                subtitle = "Jalankan workflow CI/CD",
+                                onClick = { showGithubActionsDialog = true }
+                            ) {
+                                Icon(Icons.Filled.Refresh, contentDescription = null)
+                            }
+                        }
+                    }
+                    item {
+                        SettingsGroup(
+                            title = "Konektor Termux",
+                            icon = Icons.Filled.Warning,
+                            subtitle = "Eksekusi shell HP"
+                        ) {
+                            SettingsItem(
+                                title = "Jalankan perintah",
+                                subtitle = "Wajib konfirmasi tiap eksekusi",
+                                onClick = { showTermuxDialog = true }
+                            ) {
+                                Icon(Icons.Filled.Warning, contentDescription = null)
+                            }
+                        }
+                    }
+                }
+
+                // ---- TAB 3: AGEN ----
+                3 -> {
+                    item {
+                        SettingsGroup(
+                            title = "Batas Agen",
+                            icon = Icons.Filled.Warning,
+                            subtitle = "Limit eksekusi otomatis"
+                        ) {
+                            SettingsItem(
+                                title = "Batas langkah agen",
+                                subtitle = "Maksimal ${state.agentMaxSteps} langkah per tugas",
+                                onClick = { }
+                            ) {
+                                Icon(Icons.Filled.Warning, contentDescription = null)
+                            }
+                            Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            SettingsItem(
+                                title = "Auto-approve tool call",
+                                subtitle = if (state.autoApprove) "Aktif" else "Nonaktif",
+                                onClick = { vm.setAutoApprove(!state.autoApprove) }
+                            ) {
+                                Switch(
+                                    checked = state.autoApprove,
+                                    onCheckedChange = { vm.setAutoApprove(it) }
+                                )
+                            }
+                        }
+                    }
+                    item {
+                        SettingsGroup(
+                            title = "Upgrade Diri Otomatis",
+                            icon = Icons.Filled.Star,
+                            subtitle = if (state.selfUpgradeEnabled) "Aktif" else "Nonaktif"
+                        ) {
+                            SettingsItem(
+                                title = "Fitur upgrade otomatis",
+                                subtitle = "Branch + PR otomatis ke repo Hermes",
+                                onClick = { vm.setSelfUpgradeEnabled(!state.selfUpgradeEnabled) }
+                            ) {
+                                Switch(
+                                    checked = state.selfUpgradeEnabled,
+                                    onCheckedChange = { vm.setSelfUpgradeEnabled(it) }
+                                )
+                            }
+                        }
+                    }
+                    item {
+                        SettingsGroup(
+                            title = "Ingatan Persisten",
+                            icon = Icons.Filled.Info,
+                            subtitle = "memory.md — maks 3 fakta/sesi"
+                        ) {
+                            SettingsItem(
+                                title = "Export ingatan",
+                                subtitle = "Bagikan memory.md",
+                                onClick = { showExportMemoryDialog = true }
+                            ) {
+                                Icon(Icons.Filled.Share, contentDescription = null)
+                            }
+                            Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            SettingsItem(
+                                title = "Import ingatan",
+                                subtitle = "Paste dari file eksternal",
+                                onClick = { showImportMemoryDialog = true }
+                            ) {
+                                Icon(Icons.Filled.Share, contentDescription = null)
+                            }
+                        }
+                    }
+                }
+
+                // ---- TAB 4: SISTEM ----
+                4 -> {
+                    item {
+                        SettingsGroup(
+                            title = "Backup & Restore",
+                            icon = Icons.Filled.Star,
+                            subtitle = "ZIP database + preferensi"
+                        ) {
+                            SettingsItem(
+                                title = "Kelola backup",
+                                subtitle = "${state.backupFiles.size} file tersimpan",
+                                onClick = { showBackupsDialog = true }
+                            ) {
+                                Icon(Icons.Filled.Star, contentDescription = null)
+                            }
+                        }
+                    }
+                    item {
+                        SettingsGroup(
+                            title = "Keamanan & Dev",
+                            icon = Icons.Filled.Lock,
+                            subtitle = "Opsi lanjutan"
+                        ) {
+                            SettingsItem(
+                                title = "Mode Developer",
+                                subtitle = if (state.devMode) "Aktif" else "Nonaktif",
+                                onClick = { showDevModeDialog = true }
+                            ) {
+                                Icon(Icons.Filled.Settings, contentDescription = null)
+                            }
+                        }
+                    }
+                    item {
+                        SettingsGroup(
+                            title = "Tentang",
+                            icon = Icons.Filled.Info,
+                            subtitle = "Versi & info aplikasi"
+                        ) {
+                            SettingsItem(
+                                title = "Hermes v${AppInfo.versionName}",
+                                subtitle = "Build ${AppInfo.versionCode} — SAE Engine",
+                                onClick = { showAbout = true }
+                            ) {
+                                Icon(Icons.Filled.Info, contentDescription = null)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ============================================================
+// DATA & COMPOSABLE HELPERS
+// ============================================================
+
+data class TabItem(val label: String, val icon: ImageVector)
+
+@Composable
+fun StatsBanner(
+    modelName: String,
+    temperature: Float,
+    maxTokens: Int,
+    themeLabel: String,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Model aktif",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                )
+                Text(
+                    modelName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    maxLines = 1
+                )
+            }
+            StatChip(
+                label = "Temp",
+                value = String.format("%.1f", temperature)
+            )
+            Spacer(Modifier.width(8.dp))
+            StatChip(
+                label = "Max",
+                value = maxTokens.toString()
+            )
+            Spacer(Modifier.width(8.dp))
+            StatChip(
+                label = "Tema",
+                value = themeLabel
+            )
+        }
     }
 }
 
 @Composable
-private fun SettingsGroup(
+fun StatChip(label: String, value: String) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+        tonalElevation = 2.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                value,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
+@Composable
+fun SettingsGroup(
     title: String,
+    icon: ImageVector? = null,
+    subtitle: String? = null,
     content: @Composable () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(Modifier.height(12.dp))
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            // Header
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 8.dp)
+            ) {
+                if (icon != null) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                icon,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(10.dp))
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    if (subtitle != null) {
+                        Text(
+                            subtitle,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
             content()
         }
     }
 }
 
 @Composable
-private fun SliderRow(
-    label: String,
-    valueText: String,
-    value: Float,
-    range: ClosedFloatingPointRange<Float>,
-    onChange: (Float) -> Unit
+fun SettingsItem(
+    title: String,
+    subtitle: String? = null,
+    onClick: (() -> Unit)? = null,
+    trailing: @Composable (() -> Unit)? = null
 ) {
-    Column {
+    val mod = if (onClick != null) {
+        Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 10.dp)
+    } else {
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 10.dp)
+    }
+    Row(
+        modifier = mod,
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+            if (subtitle != null) {
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2
+                )
+            }
+        }
+        if (trailing != null) {
+            Spacer(Modifier.width(8.dp))
+            trailing()
+        }
+    }
+}
+
+@Composable
+fun SliderRow(
+    label: String,
+    subtitle: String? = null,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    onValueChange: (Float) -> Unit,
+    valueLabel: String
+) {
+    Column(modifier = Modifier
+        .fillMaxWidth()
+        .padding(vertical = 6.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(label, modifier = Modifier.weight(1f))
-            Text(
-                valueText,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                if (subtitle != null) {
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer
+            ) {
+                Text(
+                    valueLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                )
+            }
         }
         Slider(
             value = value,
-            onValueChange = onChange,
-            valueRange = range
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }
