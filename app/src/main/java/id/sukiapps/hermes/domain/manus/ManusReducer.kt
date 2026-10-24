@@ -1,31 +1,27 @@
 package id.sukiapps.hermes.domain.manus
 
 /**
- * Semua input ke state machine lewat event terketik. Tidak ada jalur lain yang
+ * Semua input ke state machine lewat event terketat. Tidak ada jalur lain yang
  * boleh mengubah ManusUiState — ini yang bikin perilaku agent bisa diprediksi
  * dan bisa dites tanpa Android.
  */
 sealed interface ManusEvent {
     /** User menyerahkan goal baru. Membuat task IDLE + langkah rencana awal. */
     data class SubmitGoal(val goal: String, val plan: List<String>) : ManusEvent
-
     /** Mulai eksekusi task aktif dari langkah pertama. */
     data class StartTask(val taskId: String) : ManusEvent
-
     /** Pelaksana tool melaporkan langkah selesai. */
     data class ToolFinished(
         val taskId: String,
         val stepId: String,
         val output: String? = null
     ) : ManusEvent
-
     /** Pelaksana tool melaporkan langkah gagal. */
     data class ToolFailed(
         val taskId: String,
         val stepId: String,
         val error: String
     ) : ManusEvent
-
     /** Agent minta izin menjalankan tool berisiko. */
     data class RequestPermission(
         val taskId: String,
@@ -34,18 +30,14 @@ sealed interface ManusEvent {
         val reason: String,
         val risk: RiskLevel
     ) : ManusEvent
-
     /** Izin diberikan: lanjutkan ke langkah berikutnya. */
     data class PermissionGranted(val taskId: String) : ManusEvent
-
     /** Izin ditolak: langkah diblokir, task ditandai gagal. */
     data class PermissionDenied(val taskId: String, val reason: String = "ditolak user") : ManusEvent
-
     data class PauseTask(val taskId: String) : ManusEvent
     data class ResumeTask(val taskId: String) : ManusEvent
     data class CancelTask(val taskId: String, val reason: String = "dibatalkan user") : ManusEvent
     data class RetryStep(val taskId: String, val stepId: String) : ManusEvent
-
     /** Bersihkan riwayat task yang sudah selesai. */
     data object ClearHistory : ManusEvent
 }
@@ -55,7 +47,6 @@ sealed interface ManusEvent {
  * Clock disuntikkan supaya test bisa memakai waktu palsu yang deterministik.
  */
 object ManusReducer {
-
     fun reduce(
         state: ManusUiState,
         event: ManusEvent,
@@ -74,9 +65,7 @@ object ManusReducer {
         is ManusEvent.RetryStep -> retryStep(state, event, clock)
         ManusEvent.ClearHistory -> clearHistory(state)
     }
-
     // --- transisi per event -------------------------------------------------
-
     private fun submitGoal(
         state: ManusUiState,
         event: ManusEvent.SubmitGoal,
@@ -104,7 +93,11 @@ object ManusReducer {
             )
             .log(now, LogLevel.INFO, "manus", "goal diterima: ${event.goal} (${steps.size} langkah)")
     }
-
+    /**
+     * StartTask harus langsung masuk [advance] supaya langkah pertama benar-benar
+     * menjadi RUNNING. Tanpa ini task nyangkut di PLANNING: tidak ada langkah
+     * RUNNING, tombol "Selesai Langkah" di UI jadi no-op, task tak pernah maju.
+     */
     private fun startTask(
         state: ManusUiState,
         event: ManusEvent.StartTask,
@@ -114,10 +107,9 @@ object ManusReducer {
         val task = state.tasks.firstOrNull { it.id == event.taskId } ?: return state
         if (task.status != TaskStatus.IDLE && task.status != TaskStatus.PAUSED) return state
         val updated = task.copy(status = TaskStatus.PLANNING, updatedAt = now)
-        return replaceTask(state, updated)
+        return advance(replaceTask(state, updated), updated, clock)
             .log(now, LogLevel.INFO, "manus", "task ${task.id} mulai direncanakan")
     }
-
     /**
      * Setelah sebuah langkah selesai, tentukan langkah berikutnya. Bila langkah
      * berikutnya memakai tool berisiko -> catat pendingPermission dan berhenti.
@@ -168,7 +160,6 @@ object ManusReducer {
             }
         }
     }
-
     private fun toolFinished(
         state: ManusUiState,
         event: ManusEvent.ToolFinished,
@@ -176,7 +167,7 @@ object ManusReducer {
     ): ManusUiState {
         val now = clock()
         val task = state.tasks.firstOrNull { it.id == event.taskId } ?: return state
-        val target = task.steps.firstOrNull { it.id == event.stepId } ?: return task.let { state }
+        val target = task.steps.firstOrNull { it.id == event.stepId } ?: return state
         val updatedTask = task.copy(
             steps = task.steps.map {
                 if (it.id == event.stepId) {
@@ -188,7 +179,6 @@ object ManusReducer {
         return advance(replaceTask(state, updatedTask), updatedTask, clock)
             .log(now, LogLevel.INFO, "manus", "langkah ${target.id} selesai: ${target.title}")
     }
-
     private fun toolFailed(
         state: ManusUiState,
         event: ManusEvent.ToolFailed,
@@ -210,7 +200,6 @@ object ManusReducer {
             .copy(pendingPermission = null)
             .log(now, LogLevel.ERROR, "manus", "langkah ${target.id} gagal: ${event.error}")
     }
-
     private fun requestPermission(
         state: ManusUiState,
         event: ManusEvent.RequestPermission,
@@ -231,7 +220,6 @@ object ManusReducer {
             )
             .log(now, LogLevel.WARN, "manus", "izin diminta: ${event.tool.summary()} (risk=${event.risk})")
     }
-
     private fun permissionGranted(
         state: ManusUiState,
         event: ManusEvent.PermissionGranted,
@@ -252,7 +240,6 @@ object ManusReducer {
             .copy(pendingPermission = null)
             .log(now, LogLevel.INFO, "manus", "izin diberikan untuk ${req.tool.summary()}")
     }
-
     private fun permissionDenied(
         state: ManusUiState,
         event: ManusEvent.PermissionDenied,
@@ -272,7 +259,6 @@ object ManusReducer {
             .copy(pendingPermission = null)
             .log(now, LogLevel.ERROR, "manus", "izin ditolak: ${event.reason}")
     }
-
     private fun pauseTask(
         state: ManusUiState,
         event: ManusEvent.PauseTask,
@@ -286,7 +272,6 @@ object ManusReducer {
             .copy(pendingPermission = null)
             .log(now, LogLevel.INFO, "manus", "task ${task.id} dijeda")
     }
-
     private fun resumeTask(
         state: ManusUiState,
         event: ManusEvent.ResumeTask,
@@ -298,7 +283,6 @@ object ManusReducer {
         val updated = task.copy(status = TaskStatus.RUNNING, updatedAt = now)
         return advance(replaceTask(state, updated), updated, clock)
     }
-
     private fun cancelTask(
         state: ManusUiState,
         event: ManusEvent.CancelTask,
@@ -311,7 +295,6 @@ object ManusReducer {
             .copy(pendingPermission = null)
             .log(now, LogLevel.WARN, "manus", "task ${task.id} dibatalkan: ${event.reason}")
     }
-
     private fun retryStep(
         state: ManusUiState,
         event: ManusEvent.RetryStep,
@@ -330,16 +313,12 @@ object ManusReducer {
         )
         return advance(replaceTask(state, updated), updated, clock)
     }
-
     private fun clearHistory(state: ManusUiState): ManusUiState =
         state.copy(tasks = state.tasks.filter { !it.isFinished })
-
     // --- util ----------------------------------------------------------------
-
     /** Ganti task berdasar id; kalau tidak ketemu, state tidak berubah. */
     private fun replaceTask(state: ManusUiState, task: AgentTask): ManusUiState =
         state.copy(tasks = state.tasks.map { if (it.id == task.id) task else it })
-
     /** Tambah satu baris log di kepala daftar (paling baru di depan). */
     private fun ManusUiState.log(
         at: Long,
@@ -350,11 +329,6 @@ object ManusReducer {
         val entry = LogEntry(id = nextLogId, timestamp = at, level = level, tag = tag, message = message)
         return copy(logs = (listOf(entry) + logs).take(200), nextLogId = nextLogId + 1)
     }
-
-    /** Beri langkah tool LOW-risk secara default supaya agent bisa jalan sendiri. */
-    fun planWithLowRisk(title: String): AgentStep =
-        AgentStep(id = "", title = title, tool = null)
-
     /** Tool default per kategori — risiko dipetakan supaya gate izin konsisten. */
     fun ToolCall.risk(): RiskLevel {
         val low = setOf("read_file", "list_files", "web_search", "read_logs", "summarize")
