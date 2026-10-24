@@ -13,8 +13,8 @@ android {
         applicationId = "id.sukiapps.hermes"
         minSdk = 30
         targetSdk = 34
-        versionCode = 37
-        versionName = "14.13"
+        versionCode = 38
+        versionName = "14.14"
     }
     buildTypes {
         release {
@@ -75,4 +75,9 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     // Unit test JVM
     testImplementation(libs.junit)
+    // org.json asli untuk unit test JVM. android.jar hanya stub
+    // (semua method throw "Stub!"), jadi tanpa ini setiap test yang
+    // menyentuh ToolLoop/ToolCall crash — bukan karena bug kode,
+    // tapi karena implementasi org.json palsu.
+    testImplementation("org.json:json:20240303")
 }
