@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- v15.0: notifikasi lokal hasil eksekusi & izin (runtime request API 33+). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- v9.1: konektor Termux — menjalankan perintah via Termux:API
          (aksi manual + dialog konfirmasi, tidak pernah otomatis). -->
     <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
-
     <!-- Package visibility (API 30+): agar queryIntentActivities bisa
          melihat app kamera untuk grant URI EXTRA_OUTPUT. -->
     <queries>
@@ -18,7 +18,6 @@
         <package android:name="com.termux" />
         <package android:name="com.termux.api" />
     </queries>
-
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 <application
         android:networkSecurityConfig="@xml/network_security_config"
