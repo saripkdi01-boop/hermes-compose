@@ -1,13 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- v9.1: konektor Termux — menjalankan perintah via Termux:API
          (aksi manual + dialog konfirmasi, tidak pernah otomatis). -->
     <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
-
     <!-- Package visibility (API 30+): agar queryIntentActivities bisa
          melihat app kamera untuk grant URI EXTRA_OUTPUT. -->
     <queries>
@@ -18,7 +16,6 @@
         <package android:name="com.termux" />
         <package android:name="com.termux.api" />
     </queries>
-
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 <application
         android:networkSecurityConfig="@xml/network_security_config"
@@ -37,6 +34,31 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <!-- v15.0: browsing interaktif untuk portal tanpa API publik
+             (WebView internal, tidak exported, tidak ada kredensial disimpan di sini). -->
+        <activity
+            android:name=".ui.web.InteractiveWebActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Material.NoActionBar"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+        <!-- v15.0: OAuth Google (PKCE) via Chrome Custom Tab.
+             exported=true WAJIB agar redirect hermes://oauth/callback
+             dari browser bisa masuk balik ke aplikasi ini. -->
+        <activity
+            android:name=".ui.oauth.GoogleOAuthActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Material.NoActionBar"
+            android:configChanges="orientation|screenSize|keyboardHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="hermes"
+                    android:host="oauth"
+                    android:pathPrefix="/callback" />
             </intent-filter>
         </activity>
         <!-- v5.1: berbagi file APK/ZIP/foto kamera via provider framework-only
