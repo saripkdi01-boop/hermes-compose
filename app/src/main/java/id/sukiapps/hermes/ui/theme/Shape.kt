@@ -12,3 +12,13 @@ val HermesShapes = Shapes(
     large = RoundedCornerShape(20.dp),
     extraLarge = RoundedCornerShape(24.dp)
 )
+
+// ---- Bentuk khas Muse (chat) ----
+/** Composer: pil lebar, sudut membulat penuh. */
+val ComposerShape = RoundedCornerShape(28.dp)
+
+/** Bubble pesan user: sudut kanan-atar "tajam" sebagai penanda arah. */
+val UserBubbleShape = RoundedCornerShape(20.dp, 6.dp, 20.dp, 20.dp)
+
+/** Chip saran / pil status / pil model. */
+val PillShape = RoundedCornerShape(999.dp)
