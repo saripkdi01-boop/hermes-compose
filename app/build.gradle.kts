@@ -47,7 +47,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
-    implementation(libs.hilt.navigation.compose)
+    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
     implementation("androidx.work:work-runtime-ktx:2.9.0")
     // Compose (versi dikelola BOM)
     implementation(platform(libs.compose.bom))
