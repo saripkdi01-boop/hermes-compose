@@ -31,6 +31,11 @@ data class GhRun(
  * BUKAN dipakai agen otomatis: setiap pemanggilan berasal dari ketukan user.
  * Auth: Personal Access Token milik user (terenkripsi via KeyVault.putSecret).
  * 0 dependensi baru.
+ *
+ * HARDENING (v14.9): semua jalur tulis (putContents, pushFiles) melewati
+ * [GitHubContentGuard] — owner/repo wajib allowlist self-upgrade; path
+ * `.github/`, `*.sh`, `*.apk`, `*.keystore` ditolak; isi file discan pola
+ * shell-injection & eksfil rahasia.
  */
 @Singleton
 class GitHubConnector @Inject constructor() {
@@ -39,6 +44,7 @@ class GitHubConnector @Inject constructor() {
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
+
     private val json = Json { ignoreUnknownKeys = true }
     private val mediaType = "application/json; charset=utf-8".toMediaType()
 
@@ -199,7 +205,10 @@ class GitHubConnector @Inject constructor() {
         }
     }
 
-    /** Chokepoint publik: tulis 1 file — selalu lewat PermissionGate (MEDIUM). */
+    /**
+     * Chokepoint publik: tulis 1 file — SELALU lewat PermissionGate (MEDIUM)
+     * + [GitHubContentGuard] (owner/repo allowlist + path/content scan).
+     */
     suspend fun putContentsGated(
         gate: PermissionGate,
         pat: String,
@@ -209,6 +218,18 @@ class GitHubConnector @Inject constructor() {
         content: String,
         message: String
     ): Result<Unit> {
+        // Guard konten lebih dulu — gagal tanpa popup (tidak perlu user lihat
+        // penolakan teknis; itu hitungan connector, bukan keputusan user).
+        when (val v = GitHubContentGuard.checkRepo(owner, repo)) {
+            is GitHubContentGuard.Verdict.Rejected ->
+                return Result.failure(Exception("GitHub ditolak: ${v.reason}"))
+            else -> {}
+        }
+        when (val v = GitHubContentGuard.checkPathAndContent(path, content)) {
+            is GitHubContentGuard.Verdict.Rejected ->
+                return Result.failure(Exception("GitHub ditolak: ${v.reason}"))
+            else -> {}
+        }
         val ok = gate.request(
             "GitHub",
             "Tulis file:\n$path\nke $owner/$repo@main\n\n$message",
@@ -221,6 +242,9 @@ class GitHubConnector @Inject constructor() {
     /**
      * Chokepoint publik: push N file sekaligus — SATU popup untuk semuanya
      * (bukan N popup). Dipakai layar "Minta Fitur".
+     *
+     * HARDENING (v14.9): seluruh batch divalidasi
+     * [GitHubContentGuard.checkBatch] sebelum popup muncul.
      */
     suspend fun pushFilesGated(
         gate: PermissionGate,
@@ -230,6 +254,11 @@ class GitHubConnector @Inject constructor() {
         files: List<Pair<String, String>>,
         message: String
     ): Result<Int> {
+        when (val v = GitHubContentGuard.checkBatch(owner, repo, files)) {
+            is GitHubContentGuard.Verdict.Rejected ->
+                return Result.failure(Exception("GitHub ditolak: ${v.reason}"))
+            else -> {}
+        }
         val listing = files.joinToString("\n") { (p, _) -> "• $p" }
         val ok = gate.request(
             "GitHub",
@@ -268,6 +297,10 @@ class GitHubConnector @Inject constructor() {
      * dipanggil SelfUpgradeTools yang sudah memeriksa toggle kill
      * switch + prefix branch + repo Hermes sendiri. Jangan panggil
      * dari tempat lain. Semua butuh scope PAT `repo`.
+     *
+     * HARDENING (v14.9): putContentsOnBranch juga melewati
+     * [GitHubContentGuard] — self-upgrade path-lah yang paling rawan
+     * supply-chain kode jalankan percuma.
      */
 
     /** SHA head sebuah branch via Git refs API. */
@@ -314,6 +347,8 @@ class GitHubConnector @Inject constructor() {
     /**
      * Tulis file ke branch BUKAN main — mentah, hanya untuk
      * SelfUpgradeTools (sudah memeriksa toggle + prefix branch).
+     *
+     * HARDENING (v14.9): path + isi divalidasi guard sebelum commit.
      */
     suspend fun putContentsOnBranch(
         pat: String,
@@ -323,8 +358,19 @@ class GitHubConnector @Inject constructor() {
         content: String,
         message: String,
         branch: String
-    ): Result<Unit> =
-        putContents(pat, owner, repo, path, content, message, branch)
+    ): Result<Unit> {
+        when (val v = GitHubContentGuard.checkRepo(owner, repo)) {
+            is GitHubContentGuard.Verdict.Rejected ->
+                return Result.failure(Exception("GitHub ditolak: ${v.reason}"))
+            else -> {}
+        }
+        when (val v = GitHubContentGuard.checkPathAndContent(path, content)) {
+            is GitHubContentGuard.Verdict.Rejected ->
+                return Result.failure(Exception("GitHub ditolak: ${v.reason}"))
+            else -> {}
+        }
+        return putContents(pat, owner, repo, path, content, message, branch)
+    }
 
     /** Buat pull request branch -> main. Hasil = nomor PR. */
     suspend fun createPullRequest(
@@ -455,39 +501,29 @@ class GitHubConnector @Inject constructor() {
 
     @Serializable
     private data class GhContent(val sha: String = "")
-
     @Serializable
     private data class GhRef(
         @SerialName("object") val obj: GhRefObj = GhRefObj()
     )
-
     @Serializable
     private data class GhRefObj(val sha: String = "")
-
     @Serializable
     private data class GhPr(
         val number: Int = 0,
         val head: GhPrHead = GhPrHead()
     )
-
     @Serializable
     private data class GhPrHead(val sha: String = "")
-
     @Serializable
     private data class GhStatus(val state: String = "")
-
     @Serializable
     private data class GhRelease(val html_url: String = "")
-
     @Serializable
     private data class GhFileContent(val content: String = "", val encoding: String = "")
-
     @Serializable
     private data class GhRepo(val full_name: String = "")
-
     @Serializable
     private data class GhRunsResponse(val workflow_runs: List<GhRunDto> = emptyList())
-
     @Serializable
     private data class GhRunDto(
         val name: String = "",
