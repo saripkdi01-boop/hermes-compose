@@ -303,6 +303,16 @@ object ManusReducer {
         val now = clock()
         val task = state.tasks.firstOrNull { it.id == event.taskId } ?: return state
         if (task.status != TaskStatus.PAUSED) return state
+        // FIX run #116: jangan panggil advance() membabi-buta. Bila langkah yang
+        // di-pause masih RUNNING, advance() melihat nextStep==null (nextStep hanya
+        // mencari PENDING) lalu salah menandai task COMPLETED padahal langkah itu
+        // belum selesai. Lanjut = kembali ke RUNNING dan biarkan pelaksana melapor;
+        // hanya bila tidak ada langkah RUNNING barulah advance() memulai PENDING.
+        if (task.steps.any { it.status == StepStatus.RUNNING }) {
+            val resumed = task.copy(status = TaskStatus.RUNNING, updatedAt = now)
+            return replaceTask(state, resumed)
+                .log(now, LogLevel.INFO, "manus", "task ${task.id} dilanjutkan")
+        }
         val updated = task.copy(status = TaskStatus.RUNNING, updatedAt = now)
         return advance(replaceTask(state, updated), updated, clock)
     }
