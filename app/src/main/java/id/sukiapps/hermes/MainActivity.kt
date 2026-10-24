@@ -53,6 +53,7 @@ import id.sukiapps.hermes.ui.theme.HermesTheme
 import androidx.hilt.navigation.compose.hiltViewModel
 import id.sukiapps.hermes.ui.chat.ChatViewModel
 import id.sukiapps.hermes.ui.chatv3.V3LiveScreen
+import id.sukiapps.hermes.ui.manus.ManusScreen
 
 /**
  * Single Activity — seluruh navigasi via Navigation Compose.
@@ -61,23 +62,19 @@ import id.sukiapps.hermes.ui.chatv3.V3LiveScreen
  */
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-
     // Gate izin: dialog-nya dirender sekali di setContent (PermissionGateDialog)
     // agar selalu ada selama app hidup — chokepoint UI semua aksi sensitif.
     @Inject
     lateinit var gate: PermissionGate
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
-
         val prefs = getSharedPreferences(Prefs.FILE, Context.MODE_PRIVATE)
         val startDestination = when {
             !prefs.getBoolean(Prefs.KEY_ONBOARDED, false) -> Nav.ONBOARDING
             !KeyVault.hasKey(this) -> Nav.KEYSETUP
             else -> Nav.CHAT
         }
-
         setContent {
             val nav = rememberNavController()
             // v12: deep-link dari notifikasi approval (cold start).
@@ -207,8 +204,12 @@ class MainActivity : ComponentActivity() {
                         onBrief = { nav.navigate(Nav.BRIEF) },
                         onReflection = { nav.navigate(Nav.REFLECTION) },
                         onActivity = { nav.navigate(Nav.ACTIVITY) },
-                        onWarehouse = { nav.navigate(Nav.WAREHOUSE) }
+                        onWarehouse = { nav.navigate(Nav.WAREHOUSE) },
+                        onManus = { nav.navigate(Nav.MANUS) }
                     )
+                }
+                composable(Nav.MANUS) {
+                    ManusScreen(onBack = { nav.popBackStack() })
                 }
                 composable(Nav.APPROVAL) {
                     ApprovalScreen(onBack = { nav.popBackStack() })
@@ -242,8 +243,6 @@ class MainActivity : ComponentActivity() {
                     }
         composable("chatv3preview") { V3PreviewScreen(onBack = { nav.popBackStack() }) }
             composable("health") { HealthScreen(onBack = { nav.popBackStack() }) }
-    
-                }
                 }
             }
         }
