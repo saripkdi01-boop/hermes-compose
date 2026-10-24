@@ -1,5 +1,4 @@
 package id.sukiapps.hermes.net
-
 import id.sukiapps.hermes.data.SettingsRepository
 import id.sukiapps.hermes.tool.ToolCall
 import id.sukiapps.hermes.tool.ToolLoop
@@ -7,7 +6,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-
 /**
  * Satu-satunya sumber kebenaran untuk request chat.
  * Membaca config dari SettingsRepository, streaming via SseClient.
@@ -17,9 +15,7 @@ class ChatRepository(
     private val sse: SseClient,
     private val logger: ActivityLogger? = null
 ) {
-
     data class ChatMessage(val role: String, val content: String)
-
     sealed interface SendResult {
         data object Ok : SendResult
         /** baseUrl kosong — UI harus tampilkan banner ke settings. */
@@ -28,7 +24,6 @@ class ChatRepository(
         data object NeedApiKey : SendResult
         data class Failed(val message: String, val retryable: Boolean) : SendResult
     }
-
     /**
      * Kirim pesan dengan streaming.
      * @param systemPrompt digabung sebagai messages[0] role=system
@@ -45,21 +40,17 @@ class ChatRepository(
         if (baseUrl.isEmpty()) {
             return@withContext SendResult.NeedBaseUrl
         }
-
         val apiKey = settings.getApiKey()
         if (apiKey.isEmpty()) {
             return@withContext SendResult.NeedApiKey
         }
-
         val model = settings.model.value.modelId.ifEmpty { "gpt-4o-mini" }
         val params = settings.parameters.value
-
         val body = buildBody(messages, systemPrompt, soulExtra, model, params)
         val url = "$baseUrl/chat/completions"
         val t0 = System.currentTimeMillis()
         var failed: SendResult.Failed? = null
         var firstToken = true
-
         sse.stream(
             url = url,
             apiKey = apiKey,
@@ -78,7 +69,6 @@ class ChatRepository(
                 }
             )
         )
-
         val ms = System.currentTimeMillis() - t0
         logger?.log(
             ActivityLogger.ActivityEvent.ChatRequest(
@@ -90,7 +80,6 @@ class ChatRepository(
         )
         failed ?: SendResult.Ok
     }
-
     private fun buildBody(
         messages: List<ChatMessage>,
         systemPrompt: String,
@@ -128,7 +117,6 @@ class ChatRepository(
             .put("top_p", params.topP.toDouble())
             .put("max_tokens", params.maxTokens)
     }
-
     /**
      * Kirim dengan tool-loop web_fetch (ADITIF — sendStreaming tidak diubah).
      *
@@ -160,15 +148,17 @@ class ChatRepository(
         val params = settings.parameters.value
         val url = "$baseUrl/chat/completions"
         val t0 = System.currentTimeMillis()
-
+        // Clamp keras: ToolLoop.HARD_MAX_ITERATIONS adalah batas resmi
+        // tool-loop. Sebelumnya konstanta itu dead code — pemanggil bisa
+        // mengirim maxIterations = 9999 dan loop tidak pernah berhenti
+        // sampai server menutup koneksi.
+        val iters = maxIterations.coerceIn(1, ToolLoop.HARD_MAX_ITERATIONS)
         // Riwayat yang berkembang tiap iterasi (mulai dari body standar).
         val history = buildBody(messages, systemPrompt, soulExtra, model, params)
             .getJSONArray("messages")
-
         var iteration = 0
         var failed: SendResult.Failed? = null
-
-        while (iteration < maxIterations) {
+        while (iteration < iters) {
             iteration++
             val body = JSONObject()
                 .put("model", model)
@@ -179,7 +169,6 @@ class ChatRepository(
                 .put("max_tokens", params.maxTokens)
                 .put("tools", ToolLoop.toolsArray())
                 .put("tool_choice", "auto")
-
             val pending = mutableMapOf<Int, ToolCall>()
             sse.stream(
                 url = url,
@@ -204,7 +193,15 @@ class ChatRepository(
             )
             if (failed != null) break
             if (pending.isEmpty()) break
-
+            // Banyak provider OpenAI-compatible mengirim "id" hanya di
+            // chunk tool_call PERTAMA; chunk lanjutan hanya index +
+            // fragment. Kalau id tidak pernah datang, slot.id tetap ""
+            // dan pesan role=tool terkirim dengan "tool_call_id": "" —
+            // ditolak HTTP 400 oleh server ketat, tool-loop mati total.
+            // Sintesis id deterministik unik per (iterasi, index).
+            pending.forEach { (idx, c) ->
+                if (c.id.isBlank()) c.id = "call_${iteration}_$idx"
+            }
             // 1. Append pesan assistant berisi tool_calls.
             history.put(
                 JSONObject()
@@ -229,7 +226,6 @@ class ChatRepository(
                         },
                     ),
             )
-
             // 2. Eksekusi tiap tool, append hasilnya sebagai role=tool.
             for ((_, call) in pending.entries.sortedBy { it.key }) {
                 val tTool = System.currentTimeMillis()
@@ -252,7 +248,6 @@ class ChatRepository(
                 )
             }
         }
-
         val ms = System.currentTimeMillis() - t0
         logger?.log(
             ActivityLogger.ActivityEvent.ChatRequest(
@@ -265,5 +260,4 @@ class ChatRepository(
         failed ?: SendResult.Ok
     }
 }
-
 /* Catatan: SettingsRepository.getApiKey() sudah tersedia sebagai method publik. */
