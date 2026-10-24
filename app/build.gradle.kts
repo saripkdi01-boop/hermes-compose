@@ -13,8 +13,8 @@ android {
         applicationId = "id.sukiapps.hermes"
         minSdk = 30
         targetSdk = 34
-        versionCode = 34
-        versionName = "14.10"
+        versionCode = 35
+        versionName = "14.11"
     }
     buildTypes {
         release {
@@ -59,20 +59,25 @@ dependencies {
     implementation(libs.compose.material.icons.extended)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.navigation.compose)
-    // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
-    // Room
+    // Data
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
-    // Network
-    implementation(libs.retrofit)
-    implementation(libs.retrofit.converter.kotlinx)
-    implementation(libs.okhttp)
+    implementation(libs.datastore.preferences)
     implementation(libs.kotlinx.serialization.json)
-    implementation(libs.kotlinx.coroutines.core)
-    implementation(libs.kotlinx.coroutines.android)
-    // Unit test JVM
+    // Network
+    implementation(libs.okhttp)
+    implementation(libs.okhttp.sse)
+    // Image
+    implementation(libs.coil.compose)
+    // Testing
     testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.espresso.core)
+    androidTestImplementation(platform(libs.compose.bom))
+    androidTestImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.tooling)
+    debugImplementation(libs.compose.ui.test.manifest)
 }
