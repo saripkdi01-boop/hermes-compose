@@ -1,5 +1,4 @@
 package id.sukiapps.hermes.data.remote
-
 import id.sukiapps.hermes.domain.AIHttpException
 import id.sukiapps.hermes.domain.ChatRequest
 import kotlinx.coroutines.channels.awaitClose
@@ -20,11 +19,11 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import id.sukiapps.hermes.tool.ToolCall
 import id.sukiapps.hermes.tool.ToolLoop
+import id.sukiapps.hermes.tool.fallbackToolCallId
 import java.io.IOException
 import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
-
 /**
  * Streaming SSE /chat/completions via OkHttp.
  * Body identik legacy: {model, messages:[system + 20 terakhir + user],
@@ -37,7 +36,6 @@ class SseClient @Inject constructor(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
     private val mediaType = "application/json; charset=utf-8".toMediaType()
-
     fun stream(baseUrl: String, req: ChatRequest): Flow<String> = callbackFlow {
         val bodyJson = buildBody(req).toString()
         val request = Request.Builder()
@@ -90,7 +88,6 @@ class SseClient @Inject constructor(
         }
         awaitClose { call.cancel() }
     }
-
     /** Susun body OpenAI-style — 1:1 dengan legacy buildBody(). */
     internal fun buildBody(req: ChatRequest): JsonObject {
         val msgs = buildJsonArray {
@@ -143,8 +140,6 @@ class SseClient @Inject constructor(
             req.maxTokens?.let { if (it > 0) put("max_tokens", it) }
         }
     }
-
-
     /**
      * Sprint 1 Gate 2 — streaming DENGAN tool-loop (web_fetch).
      *
@@ -155,6 +150,10 @@ class SseClient @Inject constructor(
      * di-clamp 1..[ToolLoop.HARD_MAX_ITERATIONS]).
      * Hasil tool TIDAK disimpan ke DB — hanya hidup selama request ini;
      * yang dipersistensi UI tetap jawaban akhir asisten.
+     *
+     * v14.14: `tool_call_id` dinormalkan lewat [fallbackToolCallId] bila
+     * provider tak mengirim `id` pada chunk lanjutan — sebelumnya id kosong
+     * dikirim apa adanya dan server ketat membalas HTTP 400.
      */
     fun streamWithTools(
         baseUrl: String,
@@ -262,6 +261,15 @@ class SseClient @Inject constructor(
                 if (pending.isEmpty()) {
                     finished = true
                 } else {
+                    // Id final per slot: id asli bila ada, sintetis per index
+                    // bila tidak — dipakai konsisten di tool_calls & tool_call_id.
+                    val callIds = pending.mapValues { (_, tc) ->
+                        tc.id.ifBlank { "" }
+                    }
+                    val resolved = pending.keys.associateWith { idx ->
+                        val tc = pending.getValue(idx)
+                        tc.id.ifBlank { fallbackToolCallId(idx) }
+                    }
                     val assistantMsg = buildJsonObject {
                         put("role", "assistant")
                         if (iterText.isEmpty()) {
@@ -270,9 +278,9 @@ class SseClient @Inject constructor(
                             put("content", iterText.toString())
                         }
                         put("tool_calls", buildJsonArray {
-                            for ((_, tc) in pending) {
+                            for ((idx, tc) in pending) {
                                 add(buildJsonObject {
-                                    put("id", tc.id)
+                                    put("id", resolved.getValue(idx))
                                     put("type", "function")
                                     put("function", buildJsonObject {
                                         put("name", tc.name)
@@ -283,16 +291,20 @@ class SseClient @Inject constructor(
                         })
                     }
                     messages.add(assistantMsg)
-                    for ((_, tc) in pending) {
+                    for ((idx, tc) in pending) {
                         val t0 = System.currentTimeMillis()
                         val res = ToolLoop.execute(tc.name, tc.argsJson())
                         val ms = System.currentTimeMillis() - t0
                         onToolEvent(tc.name, !res.isError, ms)
                         messages.add(buildJsonObject {
                             put("role", "tool")
-                            put("tool_call_id", tc.id)
+                            put("tool_call_id", resolved.getValue(idx))
                             put("content", res.content)
                         })
+                    }
+                    // callIds dipertahankan agar jelas id mentah belum tentu terisi.
+                    if (callIds.values.any { it.isBlank() }) {
+                        // id kosong dari provider → sudah dinormalkan di atas.
                     }
                 }
             }
@@ -306,7 +318,6 @@ class SseClient @Inject constructor(
         }
         awaitClose { call?.cancel() }
     }
-
     /** Mapping error HTTP → pesan Indonesia (dipertahankan dari legacy). */
     internal fun mapHttpError(code: Int, errBody: String): String = when (code) {
         401 -> "API key salah atau kedaluwarsa (401). Perbarui di Pengaturan."
