@@ -155,26 +155,35 @@ object LlmPlanner {
                 .url(provider.baseUrl.trimEnd('/') + "/chat/completions")
                 .post(body.toRequestBody(mediaType))
             if (key != null) reqBuilder.addHeader("Authorization", "Bearer $key")
+            // Penanda retry: continue tidak boleh duduk di dalam lambda
+            // inline .use { } (fitur eksperimental) — jadi keputusan retry
+            // dicatat di sini, continue-nya dieksekusi di badan loop.
+            var shouldRetry = false
             try {
                 callClient.newCall(reqBuilder.build()).execute().use { resp ->
                     if (!resp.isSuccessful) {
                         lastError = "LLM HTTP ${resp.code}"
                         // Hanya 5xx yang di-retry; 4xx (key/model salah)
                         // tidak akan membaik dengan mengulang.
-                        if (resp.code in 500..599 && tryIndex == 0) continue
-                        return ProviderAttempt.Failed(lastError)
+                        if (resp.code in 500..599 && tryIndex == 0) {
+                            shouldRetry = true
+                        } else {
+                            return ProviderAttempt.Failed(lastError)
+                        }
+                    } else {
+                        val text = resp.body?.string().orEmpty()
+                        if (text.isBlank()) {
+                            return ProviderAttempt.Failed("respons LLM kosong")
+                        }
+                        return ProviderAttempt.Ok(text)
                     }
-                    val text = resp.body?.string().orEmpty()
-                    if (text.isBlank()) {
-                        return ProviderAttempt.Failed("respons LLM kosong")
-                    }
-                    return ProviderAttempt.Ok(text)
                 }
             } catch (e: Exception) {
                 return ProviderAttempt.Failed(
                     "LLM gagal: ${(e.message ?: e.javaClass.simpleName).take(40)}"
                 )
             }
+            if (shouldRetry) continue
         }
         return ProviderAttempt.Failed(lastError)
     }
