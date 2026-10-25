@@ -17,12 +17,18 @@ import id.sukiapps.hermes.data.local.AppPrefs
 import id.sukiapps.hermes.domain.AIProvider
 import id.sukiapps.hermes.domain.PersonaPreset
 import id.sukiapps.hermes.util.BackupManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.LocalTime
@@ -33,6 +39,10 @@ data class SettingsUiState(
     val model: String = "",
     val models: List<String> = emptyList(),
     val modelsLoading: Boolean = false,
+    // Status per model (titik di ModelPickerDialog). Bertahan selama
+    // ViewModel hidup — buka-tutup dialog dalam waktu singkat tidak
+    // mengulang probe untuk model yang sudah ONLINE/DEAD.
+    val modelStatuses: Map<String, ModelStatus> = emptyMap(),
     val modelsRefreshedAt: String = "",
     val temperature: Float = 1.0f,
     val topP: Float = 1.0f,
@@ -174,6 +184,63 @@ class SettingsViewModel @Inject constructor(
      * (POST /chat/completions minimal). Model tetap tersimpan walau
      * validasi gagal — user diberi pesan error yang jelas, tanpa crash.
      */
+    // Job pengecekan status model (dialog "Pilih model"). Dibatalkan saat
+    // dialog ditutup agar tidak bocor coroutine / request berjalan liar.
+    private var statusCheckJob: Job? = null
+
+    /**
+     * Cek status OTOMATIS untuk semua model yang belum punya status sesi
+     * ini (UNKNOWN). Model yang sudah ONLINE/DEAD tidak dicek ulang bila
+     * dialog dibuka-tutup dalam waktu singkat — hemat 1 ping/model.
+     * Konkurensi dibatasi 3 paralel agar daftar panjang tidak menghantam
+     * provider sekaligus (risiko 429). Hasil masuk satu per satu via state.
+     */
+    fun startModelStatusChecks() {
+        val pending = _state.value.models.filter {
+            (_state.value.modelStatuses[it]?.state ?: ModelStatusState.UNKNOWN) ==
+                ModelStatusState.UNKNOWN
+        }
+        if (pending.isEmpty()) return
+        statusCheckJob?.cancel()
+        statusCheckJob = viewModelScope.launch {
+            val semaphore = Semaphore(3)
+            pending.map { m ->
+                async(Dispatchers.IO) {
+                    semaphore.withPermit {
+                        val t0 = System.currentTimeMillis()
+                        try {
+                            ai.validateModel(m)
+                            val ms = System.currentTimeMillis() - t0
+                            _state.update {
+                                it.copy(
+                                    modelStatuses = it.modelStatuses +
+                                        (m to ModelStatus(ModelStatusState.ONLINE, ms))
+                                )
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            _state.update {
+                                it.copy(
+                                    modelStatuses = it.modelStatuses +
+                                        (m to ModelStatus(
+                                            ModelStatusHelper.classifyError(e.message),
+                                            null
+                                        ))
+                                )
+                            }
+                        }
+                    }
+                }
+            }.awaitAll()
+        }
+    }
+
+    fun stopModelStatusChecks() {
+        statusCheckJob?.cancel()
+        statusCheckJob = null
+    }
+
     fun selectModel(m: String) {
         prefs.model = m
         _state.update { it.copy(model = m, busyMessage = "Memvalidasi model…") }

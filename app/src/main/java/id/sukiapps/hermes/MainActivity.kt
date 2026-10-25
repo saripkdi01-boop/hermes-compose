@@ -3,6 +3,7 @@ package id.sukiapps.hermes
 import id.sukiapps.hermes.diagnostics.HealthScreen
 import android.Manifest
 import android.content.Context
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -11,6 +12,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -104,17 +106,44 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(pendingRoute) {
                 if (pendingRoute != null) runCatching { nav.navigate(pendingRoute) }
             }
-            // Baca ulang tema setiap kali destinasi berubah (mis. kembali
-            // dari Settings setelah ganti tema). v14.18: mode tiga nilai
-            // ("system" mengikuti sistem; nilai lama "dark"/"light" tetap
-            // berlaku) dan aksen dari pref yang sama.
+            // Tema REAKTIF: sebelumnya tema hanya dibaca ulang saat
+            // backstack berubah, sehingga memilih Sistem/Terang/Gelap di
+            // Settings tidak mengubah layar Settings itu sendiri sampai
+            // pindah tab/restart. Sekarang nilai pref dipegang State dan
+            // diperbarui listener SharedPreferences — perubahan pref
+            // langsung me-recompose HermesTheme di tempat, tanpa restart.
+            // Arti kode tidak berubah ("system"/"light"/"dark", aksen sama).
             val backStack by nav.currentBackStackEntryAsState()
-            val themePrefs = getSharedPreferences(Prefs.FILE, Context.MODE_PRIVATE)
-            val themeMode = themePrefs.getString(Prefs.KEY_THEME, "dark") ?: "dark"
-            val accentPref =
-                themePrefs.getString(Prefs.KEY_ACCENT_COLOR, "coral") ?: "coral"
-            // Dihitung tiap komposisi (bukan remember): kembali dari
-            // Settings atau ganti tema sistem langsung terlihat.
+            val themePrefs =
+                remember { getSharedPreferences(Prefs.FILE, Context.MODE_PRIVATE) }
+            var themeMode by remember {
+                mutableStateOf(themePrefs.getString(Prefs.KEY_THEME, "dark") ?: "dark")
+            }
+            var accentPref by remember {
+                mutableStateOf(
+                    themePrefs.getString(Prefs.KEY_ACCENT_COLOR, "coral") ?: "coral"
+                )
+            }
+            DisposableEffect(themePrefs) {
+                val listener =
+                    SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+                        if (key == Prefs.KEY_THEME) {
+                            themeMode =
+                                themePrefs.getString(Prefs.KEY_THEME, "dark") ?: "dark"
+                        }
+                        if (key == Prefs.KEY_ACCENT_COLOR) {
+                            accentPref = themePrefs.getString(
+                                Prefs.KEY_ACCENT_COLOR, "coral"
+                            ) ?: "coral"
+                        }
+                    }
+                themePrefs.registerOnSharedPreferenceChangeListener(listener)
+                onDispose {
+                    themePrefs.unregisterOnSharedPreferenceChangeListener(listener)
+                }
+            }
+            // v14.18: mode tiga nilai ("system" mengikuti sistem; nilai
+            // lama "dark"/"light" tetap berlaku) dan aksen dari pref sama.
             val darkTheme = when (themeMode) {
                 "light" -> false
                 "system" -> isSystemInDarkTheme()

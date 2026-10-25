@@ -263,6 +263,9 @@ fun SettingsScreen(
                     ModelPickerDialog(
                         models = state.models,
                         current = state.model,
+                        statuses = state.modelStatuses,
+                        onStartStatusChecks = { vm.startModelStatusChecks() },
+                        onStopStatusChecks = { vm.stopModelStatusChecks() },
                         onPick = { m ->
                             showModelPicker = false
                             vm.selectModel(m)
