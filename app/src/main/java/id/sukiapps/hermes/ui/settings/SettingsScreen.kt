@@ -78,6 +78,8 @@ import id.sukiapps.hermes.data.connectors.ServerlessConnector
 import id.sukiapps.hermes.data.connectors.TermuxConnector
 import id.sukiapps.hermes.data.connectors.UpinConnector
 import id.sukiapps.hermes.domain.PersonaPreset
+import id.sukiapps.hermes.domain.manus.ProviderChain
+import id.sukiapps.hermes.KeyVault
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -528,6 +530,95 @@ fun SettingsScreen(
                         vm.resetBaseUrl()
                         baseUrlEdit = id.sukiapps.hermes.domain.Prefs.DEFAULT_BASE
                     }) { Text("Reset") }
+                }
+                // 14.26 (B3): key cadangan per provider untuk rantai fallback
+                // agen. Provider terpilih memakai key utama — kolomnya boleh
+                // kosong. Cadangan tanpa key TIDAK dicoba (bukan dicoba
+                // tanpa auth, bukan memakai key provider lain). Kosongkan
+                // + Simpan = hapus key cadangan itu.
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Key cadangan provider (fallback agen)",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "Bila provider terpilih gagal, agen mencoba cadangan " +
+                        "berurutan (Jerouter → OpenRouter → DCompute). " +
+                        "Kunci disimpan terenkripsi di KeyVault.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                var fallbackMsg by remember { mutableStateOf<String?>(null) }
+                val saveFallbackKey: (String, String) -> Unit = { secret, value ->
+                    fallbackMsg = runCatching {
+                        if (value.isBlank()) {
+                            KeyVault.clearSecret(ctx, secret)
+                            "Key cadangan dihapus."
+                        } else {
+                            KeyVault.putSecret(ctx, secret, value)
+                            "Key cadangan tersimpan."
+                        }
+                    }.getOrElse { "Gagal menyimpan key cadangan: ${it.message}" }
+                }
+                var jerouterKeyEdit by remember {
+                    mutableStateOf(KeyVault.getSecret(ctx, ProviderChain.JEROUTER.keySecret))
+                }
+                var openRouterKeyEdit by remember {
+                    mutableStateOf(KeyVault.getSecret(ctx, ProviderChain.OPENROUTER.keySecret))
+                }
+                var dcomputeKeyEdit by remember {
+                    mutableStateOf(KeyVault.getSecret(ctx, ProviderChain.DCOMPUTE.keySecret))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = jerouterKeyEdit,
+                        onValueChange = { jerouterKeyEdit = it },
+                        label = { Text("Key Jerouter") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation()
+                    )
+                    OutlinedButton(onClick = {
+                        saveFallbackKey(ProviderChain.JEROUTER.keySecret, jerouterKeyEdit)
+                    }) { Text("Simpan") }
+                }
+                Spacer(Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = openRouterKeyEdit,
+                        onValueChange = { openRouterKeyEdit = it },
+                        label = { Text("Key OpenRouter") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation()
+                    )
+                    OutlinedButton(onClick = {
+                        saveFallbackKey(ProviderChain.OPENROUTER.keySecret, openRouterKeyEdit)
+                    }) { Text("Simpan") }
+                }
+                Spacer(Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = dcomputeKeyEdit,
+                        onValueChange = { dcomputeKeyEdit = it },
+                        label = { Text("Key DCompute") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation()
+                    )
+                    OutlinedButton(onClick = {
+                        saveFallbackKey(ProviderChain.DCOMPUTE.keySecret, dcomputeKeyEdit)
+                    }) { Text("Simpan") }
+                }
+                if (fallbackMsg != null) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        fallbackMsg!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 

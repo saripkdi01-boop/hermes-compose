@@ -16,6 +16,7 @@ import id.sukiapps.hermes.domain.manus.ManusToolPlanner
 import id.sukiapps.hermes.domain.manus.ManusUiState
 import id.sukiapps.hermes.domain.manus.PlanValidator
 import id.sukiapps.hermes.domain.manus.PlannedStep
+import id.sukiapps.hermes.domain.manus.ProviderChain
 import id.sukiapps.hermes.domain.manus.StepStatus
 import id.sukiapps.hermes.domain.manus.TaskStatus
 import id.sukiapps.hermes.domain.manus.ToolCall
@@ -132,11 +133,23 @@ class ManusViewModel @Inject constructor(
         dispatch(ManusEvent.SubmitGoal(goal, listOf("Merencanakan langkah…")))
         val taskId = _state.value.activeTaskId ?: return
         viewModelScope.launch {
+            // 14.26: kunci cadangan per provider (KeyVault, nama secret
+            // dari ProviderChain). Hanya provider yang punya kunci
+            // tersimpan yang dicoba sebagai cadangan — tanpa kunci,
+            // provider itu dilewati, bukan dicoba tanpa auth.
+            val providerKeys = ProviderChain.ALL
+                .filter { it.baseUrl != appPrefs.baseUrl.trimEnd('/') }
+                .mapNotNull { provider ->
+                    val key = id.sukiapps.hermes.KeyVault.getSecret(appCtx, provider.keySecret)
+                    if (key.isNotBlank()) provider.baseUrl to key else null
+                }
+                .toMap()
             val llm = LlmPlanner.plan(
                 goal = goal,
                 model = appPrefs.model,
                 baseUrl = appPrefs.baseUrl,
-                client = httpClient
+                client = httpClient,
+                providerKeys = providerKeys
             )
             // Nama tool runtime dari ToolLoop.toolsArray() (struktur
             // OpenAI: entry.type=function, entry.function.name). Bila
@@ -158,12 +171,23 @@ class ManusViewModel @Inject constructor(
             val label: String
             if (validated != null && validated.steps.isNotEmpty()) {
                 plan = validated.steps
-                label = if (validated.dropped.isEmpty()) "LLM"
-                else "LLM (${validated.dropped.size} langkah dibuang validator)"
+                // 14.26: bila rencana datang dari provider cadangan,
+                // label menyebutnya — kartu tidak boleh mengklaim
+                // rencana provider terpilih padahal cadangan yang jalan.
+                val via = if (llm is LlmPlanResult.Success && llm.fallback) {
+                    "LLM via ${llm.providerUsed} (fallback)"
+                } else {
+                    "LLM"
+                }
+                label = if (validated.dropped.isEmpty()) via
+                else "$via (${validated.dropped.size} langkah dibuang validator)"
             } else {
                 plan = ManusToolPlanner.plan(goal)
                 val why = when (llm) {
-                    is LlmPlanResult.Failure -> llm.reason.take(80)
+                    // 14.26: alasan gabungan per provider bisa panjang
+                    // (3 provider) — 200 karakter supaya rantai kegagalan
+                    // tetap terbaca di kartu, bukan terpotong di tengah.
+                    is LlmPlanResult.Failure -> llm.reason.take(200)
                     else -> "rencana LLM kosong / semua langkah ditolak validator"
                 }
                 label = "rencana fallback — tanpa LLM ($why)"

@@ -11,23 +11,53 @@ import org.json.JSONObject
 
 /** Hasil perencanaan LLM: langkah mentah, atau alasan gagal yang jujur. */
 sealed interface LlmPlanResult {
-    data class Success(val steps: List<RawStep>) : LlmPlanResult
+    /**
+     * @param providerUsed nama provider yang akhirnya berhasil.
+     * @param fallback true bila provider yang berhasil BUKAN provider
+     *   terpilih user (rantai cadangan dipakai).
+     */
+    data class Success(
+        val steps: List<RawStep>,
+        val providerUsed: String = "",
+        val fallback: Boolean = false
+    ) : LlmPlanResult
+
     data class Failure(val reason: String) : LlmPlanResult
 }
 
 /**
- * LlmPlanner — otak agen tunggal (14.22).
+ * LlmPlanner — otak agen tunggal (14.22, rantai fallback 14.26).
  *
  * Satu panggilan /chat/completions NON-STREAMING memakai model + base URL
- * yang sudah dipilih user di Pengaturan (AuthInterceptor sudah memasang
- * Bearer dari KeyVault — key tidak pernah dibaca di sini). LLM diminta
- * mengembalikan HANYA array JSON langkah; hasilnya TIDAK langsung
- * dieksekusi — [PlanValidator] memvalidasi dulu, langkah tak valid dibuang.
+ * yang sudah dipilih user di Pengaturan. LLM diminta mengembalikan HANYA
+ * array JSON langkah; hasilnya TIDAK langsung dieksekusi — [PlanValidator]
+ * memvalidasi dulu, langkah tak valid dibuang.
  *
- * Gagal apa pun (model kosong, base URL kosong, HTTP error, respons kosong,
- * format tak dikenali) → [LlmPlanResult.Failure] dengan alasan. Pemanggil
- * (ManusViewModel) lalu memakai fallback planner kata kunci BERLABEL,
- * bukan gagal diam-diam dan bukan mengeksekusi rencana setengah jadi.
+ * 14.26 (B3): bila provider terpilih gagal (DNS, HTTP error, respons
+ * kosong, format tak dikenali), planner mencoba provider cadangan
+ * BERURUTAN (Jerouter → OpenRouter → DCompute, provider terpilih selalu
+ * pertama) — BUKAN langsung jatuh ke planner kata kunci. Aturan kunci:
+ * - Provider terpilih memakai [client] apa adanya (AuthInterceptor
+ *   memasang Bearer kunci utama — key tidak pernah dibaca di sini).
+ * - Provider cadangan HANYA dicoba bila ada kunci tersimpan untuknya di
+ *   [providerKeys] (baseUrl → key, dari KeyVault). Tanpa kunci, provider
+ *   itu dilewati dengan alasan "tanpa key tersimpan" — tidak pernah
+ *   dicoba tanpa kunci, dan kunci provider lain tidak pernah dipakai
+ *   silang (itu kebocoran kunci + 401 sia-sia).
+ * - Provider cadangan memakai klien TANPA interceptor auth (supaya
+ *   header Authorization eksplisitnya tidak dobel dengan kunci utama)
+ *   dan header Authorization eksplisit dari kunci cadangannya.
+ * - HTTP 5xx (termasuk 504) mendapat 1x retry dengan jeda sebelum
+ *   pindah provider; kegagalan jaringan (DNS dsb.) langsung pindah.
+ * - Semua gagal → [LlmPlanResult.Failure] dengan alasan GABUNGAN per
+ *   provider ("semua provider gagal (Jerouter: …; OpenRouter: …; …)").
+ *   Pemanggil (ManusViewModel) lalu memakai fallback planner kata kunci
+ *   BERLABEL dengan alasan gabungan itu, bukan gagal diam-diam.
+ *
+ * Batas jujur: model yang sama dipakai di semua provider. Bila model
+ * terpilih tidak ada di provider cadangan, provider itu gagal (mis.
+ * HTTP 404) dan dicatat — model per provider adalah pekerjaan lanjutan,
+ * bukan bagian PR ini.
  *
  * Tidak ada dependensi Android di sini selain OkHttp (sudah dipakai app);
  * pemanggilan jaringan selalu di Dispatchers.IO.
@@ -36,11 +66,16 @@ object LlmPlanner {
 
     private val mediaType = "application/json; charset=utf-8".toMediaType()
 
+    /** Jeda retry untuk HTTP 5xx sebelum pindah provider. */
+    private const val RETRY_DELAY_MS = 800L
+
     suspend fun plan(
         goal: String,
         model: String,
         baseUrl: String,
-        client: OkHttpClient
+        client: OkHttpClient,
+        /** Kunci cadangan per baseUrl (dari KeyVault). Kosong = tanpa cadangan. */
+        providerKeys: Map<String, String> = emptyMap()
     ): LlmPlanResult = withContext(Dispatchers.IO) {
         if (model.isBlank()) return@withContext LlmPlanResult.Failure(
             "model belum dipilih di Pengaturan"
@@ -58,24 +93,104 @@ object LlmPlanner {
                     .put(JSONObject().put("role", "user").put("content", goal))
             )
             .toString()
-        val req = Request.Builder()
-            .url(baseUrl.trimEnd('/') + "/chat/completions")
-            .post(body.toRequestBody(mediaType))
-            .build()
-        try {
-            client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) {
-                    return@withContext LlmPlanResult.Failure("LLM HTTP ${resp.code}")
+        val chain = ProviderChain.ordered(baseUrl)
+        val failures = ArrayList<String>()
+        for ((index, provider) in chain.withIndex()) {
+            val isSelected = index == 0
+            val key: String?
+            val callClient: OkHttpClient
+            if (isSelected) {
+                // Provider terpilih: kunci utama lewat AuthInterceptor.
+                key = null
+                callClient = client
+            } else {
+                key = providerKeys[provider.baseUrl].orEmpty()
+                if (key.isBlank()) {
+                    failures += "${provider.name}: tanpa key tersimpan"
+                    continue
                 }
-                val text = resp.body?.string().orEmpty()
-                if (text.isBlank()) {
-                    return@withContext LlmPlanResult.Failure("respons LLM kosong")
-                }
-                return@withContext parse(text)
+                callClient = withoutAuth(client)
             }
-        } catch (e: Exception) {
-            LlmPlanResult.Failure("LLM gagal: ${(e.message ?: e.javaClass.simpleName).take(80)}")
+            val attempt = attemptProvider(provider, key, body, callClient)
+            when (attempt) {
+                is ProviderAttempt.Ok -> {
+                    val parsed = parse(attempt.body)
+                    if (parsed is LlmPlanResult.Success) {
+                        return@withContext parsed.copy(
+                            providerUsed = provider.name,
+                            fallback = !isSelected
+                        )
+                    }
+                    // Isi respons tidak bisa diparse sebagai rencana:
+                    // provider ini gagal, lanjut ke cadangan.
+                    failures += "${provider.name}: ${(parsed as LlmPlanResult.Failure).reason}"
+                }
+                is ProviderAttempt.Failed -> failures += "${provider.name}: ${attempt.reason}"
+            }
         }
+        LlmPlanResult.Failure("semua provider gagal (${failures.joinToString("; ")})")
+    }
+
+    /** Hasil satu percobaan provider: body mentah, atau alasan gagal. */
+    private sealed interface ProviderAttempt {
+        data class Ok(val body: String) : ProviderAttempt
+        data class Failed(val reason: String) : ProviderAttempt
+    }
+
+    /**
+     * Satu provider, dengan 1x retry untuk HTTP 5xx. Mengembalikan body
+     * mentah bila HTTP sukses (parse dilakukan pemanggil), atau alasan.
+     */
+    private suspend fun attemptProvider(
+        provider: LlmProvider,
+        key: String?,
+        body: String,
+        callClient: OkHttpClient
+    ): ProviderAttempt {
+        var lastError = ""
+        // Percobaan 0 = utama, 1 = retry khusus 5xx.
+        for (tryIndex in 0..1) {
+            if (tryIndex == 1) kotlinx.coroutines.delay(RETRY_DELAY_MS)
+            val reqBuilder = Request.Builder()
+                .url(provider.baseUrl.trimEnd('/') + "/chat/completions")
+                .post(body.toRequestBody(mediaType))
+            if (key != null) reqBuilder.addHeader("Authorization", "Bearer $key")
+            try {
+                callClient.newCall(reqBuilder.build()).execute().use { resp ->
+                    if (!resp.isSuccessful) {
+                        lastError = "LLM HTTP ${resp.code}"
+                        // Hanya 5xx yang di-retry; 4xx (key/model salah)
+                        // tidak akan membaik dengan mengulang.
+                        if (resp.code in 500..599 && tryIndex == 0) continue
+                        return ProviderAttempt.Failed(lastError)
+                    }
+                    val text = resp.body?.string().orEmpty()
+                    if (text.isBlank()) {
+                        return ProviderAttempt.Failed("respons LLM kosong")
+                    }
+                    return ProviderAttempt.Ok(text)
+                }
+            } catch (e: Exception) {
+                return ProviderAttempt.Failed(
+                    "LLM gagal: ${(e.message ?: e.javaClass.simpleName).take(40)}"
+                )
+            }
+        }
+        return ProviderAttempt.Failed(lastError)
+    }
+
+    /**
+     * Klien turunan tanpa interceptor auth apa pun, supaya request
+     * cadangan tidak membawa DUA header Authorization (kunci utama dari
+     * interceptor + kunci cadangan eksplisit). Dideteksi dari nama kelas
+     * supaya layer domain tidak bergantung ke modul DI.
+     */
+    private fun withoutAuth(client: OkHttpClient): OkHttpClient {
+        val builder = client.newBuilder()
+        builder.interceptors().removeAll {
+            it.javaClass.simpleName == "AuthInterceptor"
+        }
+        return builder.build()
     }
 
     /** Parse konten message LLM menjadi daftar langkah mentah. */
