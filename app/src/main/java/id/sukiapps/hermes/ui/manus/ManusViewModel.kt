@@ -15,6 +15,7 @@ import id.sukiapps.hermes.domain.manus.ManusStateEngine
 import id.sukiapps.hermes.domain.manus.ManusToolPlanner
 import id.sukiapps.hermes.domain.manus.ManusUiState
 import id.sukiapps.hermes.domain.manus.PlanValidator
+import id.sukiapps.hermes.domain.manus.PlannedStep
 import id.sukiapps.hermes.domain.manus.StepStatus
 import id.sukiapps.hermes.domain.manus.TaskStatus
 import id.sukiapps.hermes.domain.manus.ToolCall
@@ -153,7 +154,7 @@ class ManusViewModel @Inject constructor(
                 )
                 is LlmPlanResult.Failure -> null
             }
-            val plan: List<ManusToolPlanner.PlannedStep>
+            val plan: List<PlannedStep>
             val label: String
             if (validated != null && validated.steps.isNotEmpty()) {
                 plan = validated.steps
