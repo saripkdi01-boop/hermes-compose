@@ -106,8 +106,18 @@ object ToolLoop {
     private fun prop(type: String, description: String): JSONObject =
         JSONObject().put("type", type).put("description", description)
 
-    /** Rakit blok tools[] untuk request OpenAI-compatible. */
-    fun toolsArray(): JSONArray {
+    /**
+     * Rakit blok tools[] untuk request OpenAI-compatible.
+     *
+     * 14.25 (B5): jalur CHAT tidak pernah menerima definisi selfupgrade_*.
+     * Pemanggil chat (ChatRepository, SseClient.streamWithTools) WAJIB
+     * memakai `includeSelfUpgrade = false`; jalur agen Manus (validator +
+     * eksekusi lewat reducer) memakai default true. Ini gerbang lapis
+     * pertama — lapis kedua adalah [chatRefusal] di titik eksekusi chat,
+     * yang menolak panggilan selfupgrade_* hasil halusinasi model sekalipun
+     * namanya tidak ada di tools[].
+     */
+    fun toolsArray(includeSelfUpgrade: Boolean = true): JSONArray {
         val arr = JSONArray()
         arr.put(
             toolDef(
@@ -300,6 +310,10 @@ object ToolLoop {
                 ),
             ),
         )
+        // 14.25: definisi upgrade-diri hanya untuk jalur agen. Jalur chat
+        // memanggil toolsArray(includeSelfUpgrade = false) sehingga model
+        // chat tidak pernah ditawari tool ini.
+        if (includeSelfUpgrade) {
         arr.put(
             toolDef(
                 "selfupgrade_branch",
@@ -382,6 +396,7 @@ object ToolLoop {
                 ),
             ),
         )
+        } // if (includeSelfUpgrade)
         arr.put(
             toolDef(
                 "memory_save",
@@ -408,6 +423,27 @@ object ToolLoop {
         )
         return arr
     }
+
+    /** True bila tool termasuk keluarga upgrade-diri (hanya jalur agen). */
+    fun isSelfUpgradeTool(name: String): Boolean = name.startsWith("selfupgrade_")
+
+    /**
+     * 14.25, lapis kedua gating chat: pesan penolakan bila tool
+     * upgrade-diri dipanggil dari jalur chat biasa, null bila boleh.
+     * Dipakai ChatRepository + SseClient.streamWithTools SEBELUM execute(),
+     * sehingga model yang menghalusinasikan panggilan selfupgrade_* tetap
+     * ditolak tanpa pernah mengeksekusi — dan penolakan itu tercatat di
+     * Aktivitas Live lewat jalur log pemanggil (decision=error).
+     * Jalur agen Manus TIDAK memakai fungsi ini: di sana selfupgrade_*
+     * dijaga reducer (kartu izin HIGH/CRITICAL) + kill switch.
+     */
+    fun chatRefusal(name: String): String? =
+        if (isSelfUpgradeTool(name)) {
+            "Error: tool '$name' tidak tersedia di chat biasa — upgrade-diri " +
+                "hanya lewat Mode Agen (kartu izin HIGH/CRITICAL tetap " +
+                "berlaku; toggle Upgrade Diri Otomatis saja tidak cukup). " +
+                "Minta user mengaktifkan Mode Agen bila memang bermaksud upgrade diri."
+        } else null
 
     /** Jalankan tool yang diminta model. Argumen dinormalisasi & di-clamp. Tidak pernah throw. */
     suspend fun execute(name: String, args: JSONObject): ToolResult = when (name) {
