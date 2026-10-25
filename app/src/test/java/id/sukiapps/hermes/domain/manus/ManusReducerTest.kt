@@ -233,6 +233,15 @@ class ManusReducerTest {
             ManusEvent.ToolFinished(doneId, "$doneId-s1", "ok"),
             clock
         )
+        // 14.22: langkah habis -> VERIFYING (masih aktif, belum selesai),
+        // jadi ClearHistory belum membuangnya; baru setelah gerbang lolos.
+        assertEquals(TaskStatus.VERIFYING, state.task(doneId).status)
+        state = ManusReducer.reduce(
+            state,
+            ManusEvent.VerificationPassed(doneId, "Terverifikasi"),
+            clock
+        )
+        assertEquals(TaskStatus.COMPLETED, state.task(doneId).status)
         state = ManusReducer.reduce(state, submit(listOf("b")), clock)
         assertEquals(2, state.tasks.size)
         state = ManusReducer.reduce(state, ManusEvent.ClearHistory, clock)
