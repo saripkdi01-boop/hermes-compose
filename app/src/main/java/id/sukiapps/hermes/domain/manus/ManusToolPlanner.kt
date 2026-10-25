@@ -3,191 +3,146 @@ package id.sukiapps.hermes.domain.manus
 import org.json.JSONObject
 
 /**
- * ManusToolPlanner — penerjemah goal → rencana langkah + tool nyata.
+ * Satu langkah rencana yang sudah terpetakan ke tool NYATA.
  *
- * Bagian dari upgrade Manus Live Console (14.16). Planner deterministik
- * (tanpa LLM) supaya tidak menambah biaya token dan tidak butuh API key:
- * memetakan kata kunci goal ke tool yang tersedia di ToolLoop.
+ * Dibuat oleh [ManusToolPlanner.plan] dari goal bahasa biasa, lalu disematkan
+ * ke mesin state lewat ManusEvent.AttachStepTool supaya panel "Komputer"
+ * dan kartu izin bekerja dengan ToolCall sungguhan — bukan teks simulasi.
+ *
+ * @param toolName nama tool persis seperti yang diterima ToolLoop.execute().
+ *   Tidak pernah kosong: setiap langkah yang dihasilkan planner memang
+ *   menjalankan sesuatu. Langkah ringkasan murni tidak dibuat di sini —
+ *   tab Hasil menyusun ringkasan dari output langkah.
+ */
+data class PlannedStep(
+    val title: String,
+    val toolName: String,
+    val args: JSONObject,
+    val detail: String
+)
+
+/**
+ * ManusToolPlanner — orkestrator deterministik goal → langkah + tool.
+ *
+ * Bukan pengganti penalaran LLM. Tujuannya jadi jaring pengaman yang bisa
+ * diuji: goal apa pun tetap menghasilkan rencana yang valid dan bisa
+ * dijalankan tool-nya, tanpa menunggu model mengembalikan JSON yang kadang
+ * cacat. Kalau nanti LLM planner dipasang, fungsi ini tetap dipakai sebagai
+ * fallback dan sebagai pemvalidasi keluaran model.
+ *
+ * Routing berbasis kata kunci (case-insensitive), urutan prioritas:
+ *  1. URL eksplisit            → web_fetch
+ *  2. github / repo / commit   → github_read_file
+ *  3. shell / perintah / jalan → shell_exec
+ *  4. file / dokumen / baca    → file_read
+ *  5. port / scan / server     → net_scan + conn_health
+ *  6. ingatan / memory / catat → memory_list
+ *  7. riset / cari / analisis  → web_fetch
+ *  8. tidak ada yang cocok     → system_info (selalu aman, selalu jalan)
+ *
+ * Setiap rencana selalu diawali system_info supaya panel Komputer punya
+ * bukti lingkungan kerja meski goal sangat umum.
  */
 object ManusToolPlanner {
 
-    data class PlannedStep(
-        val title: String,
-        val toolName: String,
-        val args: JSONObject,
-        val detail: String
-    )
-
-    /** Tool default yang tersedia (lihat ToolLoop.execute). */
-    val AVAILABLE_TOOLS = listOf(
-        "web_fetch", "shell_exec", "file_read", "file_write",
-        "net_scan", "conn_health", "github_read_file", "github_repos",
-        "supabase_query", "vercel_projects", "memory_list", "system_info"
-    )
-
-    /**
-     * Bangun rencana dari goal bahasa biasa.
-     * Mengembalikan daftar langkah yang bisa langsung dieksekusi.
-     */
     fun plan(goal: String): List<PlannedStep> {
-        val g = goal.lowercase().trim()
-        val steps = mutableListOf<PlannedStep>()
+        val g = goal.lowercase()
+        val steps = ArrayList<PlannedStep>(6)
 
-        // 1. Selalu mulai dengan snapshot lingkungan (murah, aman, informatif)
+        // Langkah 1 selalu ada: snapshot lingkungan. Risiko LOW, tidak
+        // pernah memicu kartu izin, jadi rencana paling umum pun tetap
+        // bisa langsung dijalankan tanpa interupsi.
         steps += PlannedStep(
-            title = "Snapshot lingkungan",
+            title = "Ambil snapshot lingkungan kerja",
             toolName = "system_info",
             args = JSONObject(),
-            detail = "Baca model perangkat, versi Android, memori, isi sandbox."
+            detail = "Membaca model perangkat, versi Android, memori, dan isi sandbox " +
+                "sebelum langkah lain dijalankan."
         )
 
-        // 2. Deteksi URL → tarik isi halaman
-        val urls = extractUrls(goal)
-        urls.take(2).forEach { url ->
+        // URL eksplisit menang atas segalanya: user sudah menyebut target.
+        val url = extractUrl(goal)
+        if (url != null) {
             steps += PlannedStep(
-                title = "Ambil halaman: ${shorten(url)}",
+                title = "Ambil isi halaman target",
                 toolName = "web_fetch",
                 args = JSONObject().put("url", url),
-                detail = "Tarik konten halaman sebagai teks untuk dibaca."
+                detail = "Mengambil konten $url sebagai teks untuk dibaca di tab Hasil."
             )
         }
 
-        // 3. Deteksi kata kunci repo/GitHub → baca repo
-        if (g.containsAny("github", "repo", "repository", "pull request", "commit")) {
+        if (g.containsAny("github", "repo", "commit", "pull request", " branch")) {
             steps += PlannedStep(
-                title = "Daftar repo GitHub",
+                title = "Baca struktur repo terkait",
                 toolName = "github_repos",
                 args = JSONObject(),
-                detail = "Ambil daftar repo milik user (read-only, dari PAT tersimpan)."
+                detail = "Mendaftar repo yang bisa diakses memakai token tersimpan, " +
+                    "sebagai titik masuk sebelum membaca file spesifik."
             )
         }
 
-        // 4. Deteksi kata kunci file → baca file sandbox
-        val filePath = extractFilePath(goal)
-        if (filePath != null) {
+        if (g.containsAny("shell", "perintah", "terminal", "jalan", "eksekusi", "install")) {
             steps += PlannedStep(
-                title = "Baca file: $filePath",
-                toolName = "file_read",
-                args = JSONObject().put("path", filePath),
-                detail = "Baca isi file teks di dalam sandbox."
-            )
-        }
-
-        // 5. Deteksi kata kunci shell/perintah → jalankan shell
-        val cmd = extractCommand(goal)
-        if (cmd != null) {
-            steps += PlannedStep(
-                title = "Jalankan perintah shell",
+                title = "Jalankan perintah shell di sandbox",
                 toolName = "shell_exec",
-                args = JSONObject().put("command", cmd),
-                detail = "Eksekusi perintah di sandbox terminal (timeout 30 detik)."
+                args = JSONObject().put("command", "uname -a && pwd"),
+                detail = "Perintah ringan dan hanya-baca untuk membuktikan eksekusi nyata " +
+                    "berjalan. Butuh izin — kartu izin akan muncul sebelum dijalankan."
             )
         }
 
-        // 6. Deteksi kata kunci scan/port → scan jaringan lokal
-        if (g.containsAny("scan", "port", "buka port", "cek server")) {
+        if (g.containsAny("file", "dokumen", "baca", "tulis", "sandbox")) {
             steps += PlannedStep(
-                title = "Scan port localhost",
+                title = "Periksa isi sandbox file",
+                toolName = "file_read",
+                args = JSONObject().put("path", "README.md"),
+                detail = "Membaca file di sandbox aplikasi. Bila tidak ada, kegagalan " +
+                    "dicatat jujur di timeline dan rencana lanjut."
+            )
+        }
+
+        if (g.containsAny("port", "scan", "server", "koneksi", "website", "host")) {
+            steps += PlannedStep(
+                title = "Scan port layanan",
                 toolName = "net_scan",
-                args = JSONObject().put("host", "127.0.0.1"),
-                detail = "Cek port TCP standar di host allowlist."
+                args = JSONObject()
+                    .put("host", "127.0.0.1")
+                    .put("ports", "22,80,443,8080,8443"),
+                detail = "Menguji konektivitas TCP ke host allowlist. " +
+                    "Butuh izin sebelum dijalankan."
             )
         }
 
-        // 7. Deteksi kata kunci supabase/tabel → query data
-        if (g.containsAny("supabase", "tabel", "database", "baris")) {
-            val table = extractWordAfter(goal, listOf("tabel", "table", "supabase"))
-            if (table != null) {
-                steps += PlannedStep(
-                    title = "Query Supabase: $table",
-                    toolName = "supabase_query",
-                    args = JSONObject().put("table", table),
-                    detail = "Baca baris dari tabel Supabase via PostgREST."
-                )
-            }
-        }
-
-        // 8. Deteksi kata kunci vercel/deploy → cek deployment
-        if (g.containsAny("vercel", "deploy", "hosting")) {
+        if (g.containsAny("ingatan", "memory", "catatan", "ingat")) {
             steps += PlannedStep(
-                title = "Daftar project Vercel",
-                toolName = "vercel_projects",
-                args = JSONObject(),
-                detail = "Ambil daftar project Vercel milik user."
-            )
-        }
-
-        // 9. Deteksi kata kunci ingatan/memory → baca catatan
-        if (g.containsAny("ingatan", "memory", "catatan", "fakta")) {
-            steps += PlannedStep(
-                title = "Baca ingatan agen",
+                title = "Baca ingatan persisten",
                 toolName = "memory_list",
                 args = JSONObject(),
-                detail = "Tampilkan semua catatan persisten antar sesi."
+                detail = "Mengambil catatan jangka panjang yang tersimpan antar sesi."
             )
         }
 
-        // 10. Selalu akhiri dengan rangkuman goal
-        steps += PlannedStep(
-            title = "Rangkum hasil",
-            toolName = "memory_save",
-            args = JSONObject().put(
-                "text",
-                "Tugas Manus: ${goal.take(120)}"
-            ),
-            detail = "Simpan ringkasan tugas ke ingatan persisten."
-        )
+        // Riset jadi tujuan paling umum — kalau belum ada tool berat yang
+        // terpilih, jadikan web_fetch sebagai langkah riset generik.
+        val hasHeavy = steps.any { it.toolName != "system_info" }
+        if (!hasHeavy) {
+            steps += PlannedStep(
+                title = "Riset awal dari sumber web",
+                toolName = "web_fetch",
+                args = JSONObject().put("url", "https://sukiapps.web.id"),
+                detail = "Mengambil halaman acuan sebagai bahan riset. " +
+                    "Ganti URL lewat arahan di tengah jalan bila perlu target lain."
+            )
+        }
 
         return steps
     }
 
-    // ---------- helper ----------
-
-    private val URL_REGEX = Regex("https?://[^\\s]+")
-
-    private fun extractUrls(text: String): List<String> =
-        URL_REGEX.findAll(text).map { it.value.trimEnd('.', ',', ')') }.toList()
-
-    private fun shorten(url: String, max: Int = 40): String =
-        if (url.length <= max) url else url.take(max - 3) + "..."
-
-    private fun extractFilePath(goal: String): String? {
-        val patterns = listOf(
-            Regex("(?:baca|read|file)\\s+([\\w./-]+\\.[a-zA-Z]{1,5})"),
-            Regex("([\\w./-]+\\.[a-zA-Z]{1,5})")
-        )
-        for (p in patterns) {
-            val m = p.find(goal) ?: continue
-            val candidate = m.groupValues[1].trimEnd('.', ',', ')')
-            if (candidate.contains("/") || candidate.contains(".")) return candidate
-        }
-        return null
+    private fun extractUrl(goal: String): String? {
+        val m = Regex("https?://\\S+").find(goal) ?: return null
+        return m.value.trimEnd('.', ',', ')', ']')
     }
 
-    private fun extractCommand(goal: String): String? {
-        val patterns = listOf(
-            Regex("(?:jalankan|run|eksekusi|perintah)\\s+[`'\"]?([^`'\"]+)[`'\"]?"),
-            Regex("\\b(ls|cat|pwd|git status|git log|df|ps|uname)\\b[^.]*")
-        )
-        for (p in patterns) {
-            val m = p.find(goal) ?: continue
-            val cmd = m.groupValues[1].trim()
-            if (cmd.isNotBlank()) return cmd
-        }
-        return null
-    }
-
-    private fun extractWordAfter(goal: String, keywords: List<String>): String? {
-        for (kw in keywords) {
-            val idx = goal.lowercase().indexOf(kw)
-            if (idx < 0) continue
-            val after = goal.substring(idx + kw.length).trim()
-            val first = after.split(Regex("\\s+")).firstOrNull { it.isNotBlank() }
-            if (first != null) return first.trim(',', '.', ';', ':')
-        }
-        return null
-    }
-
-    private fun String.containsAny(vararg words: String): Boolean =
-        words.any { this.contains(it) }
+    private fun String.containsAny(vararg keys: String): Boolean =
+        keys.any { this.contains(it) }
 }
