@@ -26,6 +26,61 @@ object Markdown {
         data class Code(val language: String, val code: String) : Block
         data class ListBlock(val items: List<AnnotatedString>, val ordered: Boolean) : Block
         data class Quote(val text: AnnotatedString) : Block
+        /** Tabel GFM: header + baris data. Sel dirender via [inline]. */
+        data class Table(
+            val headers: List<AnnotatedString>,
+            val rows: List<List<AnnotatedString>>
+        ) : Block
+    }
+
+    /** Pecah satu baris tabel menjadi sel (buang '|' tepi yang kosong). */
+    private fun splitRow(line: String): List<String> {
+        val trimmed = line.trim()
+        val inner = trimmed
+            .removePrefix("|").removeSuffix("|")
+        return inner.split("|").map { it.trim() }
+    }
+
+    /** Baris pemisah GFM: tiap sel `---` dengan ':' opsional di tepi. */
+    private fun isSeparatorRow(line: String): Boolean {
+        val cells = splitRow(line)
+        if (cells.isEmpty()) return false
+        return cells.all { it.matches(Regex("^:?-+:?$")) }
+    }
+
+    /**
+     * Coba parse tabel mulai baris [start]: baris header + baris pemisah +
+     * ≥1 baris data. Gagal (tanpa pemisah, kolom tak cocok, tanpa baris
+     * data) → null, dan pemanggil membiarkan baris jadi paragraf biasa
+     * (fallback teks mentah, bukan tabel setengah jadi). Saat streaming,
+     * tabel yang pemisahnya belum tiba juga jatuh ke paragraf — begitu
+     * pemisah tiba, parse berikutnya merendernya sebagai tabel.
+     */
+    private fun tryParseTable(
+        lines: List<String>,
+        start: Int
+    ): Pair<Block.Table, Int>? {
+        if (start + 1 >= lines.size) return null
+        val headerLine = lines[start].trim()
+        if (!headerLine.contains("|")) return null
+        if (!isSeparatorRow(lines[start + 1])) return null
+        val headers = splitRow(headerLine)
+        if (headers.isEmpty() || headers.any { it.isEmpty() }) return null
+        val rows = mutableListOf<List<AnnotatedString>>()
+        var i = start + 2
+        while (i < lines.size) {
+            val rowLine = lines[i].trim()
+            if (rowLine.isBlank() || !rowLine.contains("|")) break
+            val cells = splitRow(rowLine)
+            if (cells.size != headers.size) break
+            rows.add(cells.map { inline(it) })
+            i++
+        }
+        if (rows.isEmpty()) return null
+        return Block.Table(
+            headers.map { inline(it) },
+            rows
+        ) to i
     }
 
     fun parseBlocks(src: String): List<Block> {
@@ -98,6 +153,18 @@ object Markdown {
                     continue
                 }
                 t.isBlank() -> flushPara()
+                t.contains("|") -> {
+                    val parsed = tryParseTable(lines, i)
+                    if (parsed != null) {
+                        flushPara()
+                        blocks.add(parsed.first)
+                        i = parsed.second
+                        continue
+                    }
+                    // Bukan tabel valid → jatuh ke paragraf biasa.
+                    if (para.isNotEmpty()) para.append(' ')
+                    para.append(t)
+                }
                 else -> {
                     if (para.isNotEmpty()) para.append(' ')
                     para.append(t)

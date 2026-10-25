@@ -41,11 +41,21 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import id.sukiapps.hermes.ui.theme.UserBubbleShape
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * v15 — Bubble ala Muse: pesan assistant FLAT dengan avatar bulat sparkle
  * di atas nama, pesan user dalam bubble hangat rata kanan (maksi 320dp).
  * Tekan lama → menu aksi (salin/edit/regenerate).
+ *
+ * 14.23 — kepadatan: padding bubble dipadatkan (user 16/10 → 12/8 dp,
+ * kolom assistant 6 → 4 dp); area sentuh TIDAK dipadatkan (tombol aksi
+ * tetap 32 dp seperti sebelumnya, tombol kirim/FAB 48 dp). Footer waktu
+ * per bubble (HH:mm) dari [UiMessage.timestamp]; kutipan balasan,
+ * lencana reaksi, kartu opsi, dan kotak metadata berkas dirender bila
+ * datanya ada di pesan.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -58,34 +68,88 @@ fun MessageBubble(
     onCopy: () -> Unit = {},
     onEdit: () -> Unit = {},
     onRegenerate: () -> Unit = {},
+    onJumpToReply: (Long) -> Unit = {},
+    onOptionSelect: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val isUser = message.role == "user"
     var menuOpen by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
+    val timeLabel = remember(message.timestamp) {
+        if (message.timestamp > 0L) {
+            SimpleDateFormat("HH:mm", Locale("id", "ID")).format(
+                Date(message.timestamp)
+            )
+        } else {
+            null
+        }
+    }
     if (isUser) {
         // ---- Pesan user: bubble hangat rata kanan ----
         Column(
             modifier = modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.End
         ) {
-            Surface(
-                shape = UserBubbleShape,
-                color = MaterialTheme.colorScheme.surfaceVariant,
+            if (message.replyToSnippet != null) {
+                ReplyQuote(
+                    snippet = message.replyToSnippet,
+                    onJump = { message.replyToId?.let(onJumpToReply) },
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp)
+                        .widthIn(max = 320.dp)
+                )
+                Spacer(Modifier.height(4.dp))
+            }
+            Box(
                 modifier = Modifier
                     .padding(horizontal = 12.dp)
                     .widthIn(max = 320.dp)
-                    .combinedClickable(onClick = {}, onLongClick = { menuOpen = true })
-                    .clip(UserBubbleShape)
             ) {
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-                    AttachmentSummary(message)
-                    Text(
-                        text = message.content,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface
+                Surface(
+                    shape = UserBubbleShape,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier
+                        .combinedClickable(
+                            onClick = {},
+                            onLongClick = { menuOpen = true }
+                        )
+                        .clip(UserBubbleShape)
+                ) {
+                    Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                        AttachmentSummary(message)
+                        Text(
+                            text = message.content,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        if (message.fileMeta != null) {
+                            Spacer(Modifier.height(6.dp))
+                            FileMetaBox(meta = message.fileMeta)
+                        }
+                        if (message.options != null) {
+                            Spacer(Modifier.height(6.dp))
+                            ChatOptionCard(
+                                options = message.options,
+                                selectedIndex = message.selectedOption,
+                                onSelect = { onOptionSelect(message.options[it]) }
+                            )
+                        }
+                    }
+                }
+                if (message.reaction != null) {
+                    ReactionBadge(
+                        reaction = message.reaction,
+                        modifier = Modifier.align(Alignment.BottomEnd)
                     )
                 }
+            }
+            if (timeLabel != null) {
+                Text(
+                    text = timeLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(end = 16.dp, top = 2.dp)
+                )
             }
         }
     } else {
@@ -93,7 +157,7 @@ fun MessageBubble(
         Column(
             modifier = modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp)
+                .padding(horizontal = 16.dp, vertical = 4.dp)
                 .combinedClickable(onClick = {}, onLongClick = { menuOpen = true })
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -119,11 +183,30 @@ fun MessageBubble(
                 )
             }
             Spacer(Modifier.height(4.dp))
+            if (message.replyToSnippet != null) {
+                ReplyQuote(
+                    snippet = message.replyToSnippet,
+                    onJump = { message.replyToId?.let(onJumpToReply) }
+                )
+                Spacer(Modifier.height(4.dp))
+            }
             AttachmentSummary(message)
             MarkdownText(
                 text = message.content,
                 modifier = Modifier.fillMaxWidth()
             )
+            if (message.fileMeta != null) {
+                Spacer(Modifier.height(6.dp))
+                FileMetaBox(meta = message.fileMeta)
+            }
+            if (message.options != null) {
+                Spacer(Modifier.height(6.dp))
+                ChatOptionCard(
+                    options = message.options,
+                    selectedIndex = message.selectedOption,
+                    onSelect = { onOptionSelect(message.options[it]) }
+                )
+            }
             Spacer(Modifier.height(6.dp))
             Row(
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -169,6 +252,18 @@ fun MessageBubble(
                         )
                     }
                 }
+                if (message.reaction != null) {
+                    Spacer(Modifier.weight(1f))
+                    ReactionBadge(reaction = message.reaction)
+                }
+            }
+            if (timeLabel != null) {
+                Text(
+                    text = timeLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
             }
         }
     }

@@ -119,7 +119,10 @@ fun InputBar(
         }
         Surface(
             // Container tunggal ala Muse — border halus, cincin aksen saat fokus.
+            // 14.23: elevasi bayangan supaya composer terbaca "melayang"
+            // di atas daftar (perilaku suara/lampiran tidak diubah).
             tonalElevation = 0.dp,
+            shadowElevation = 3.dp,
             shape = ComposerShape,
             border = BorderStroke(
                 1.dp,
