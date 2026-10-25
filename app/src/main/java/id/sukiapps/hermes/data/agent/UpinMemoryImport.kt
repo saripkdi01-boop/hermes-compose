@@ -62,13 +62,17 @@ object UpinMemoryImport {
     fun parse(text: String): ImportPlan =
         parse(text, DEFAULT_MAX_TOTAL_CHARS, DEFAULT_MAX_FILES)
 
+    /** Baca string JSON secara aman: nilai non-string jadi null, bukan lempar. */
+    private fun JsonObject.str(key: String): String? =
+        runCatching { this[key]?.jsonPrimitive?.contentOrNull }.getOrNull()
+
     /** maxChars/maxFiles sebagai parameter agar bisa diuji tanpa file 40 MB. */
     internal fun parse(text: String, maxChars: Int, maxFiles: Int): ImportPlan {
         if (text.isBlank()) return ImportPlan(false, error = "File kosong.")
         val root: JsonObject = runCatching {
             json.parseToJsonElement(text).jsonObject
         }.getOrNull() ?: return ImportPlan(false, error = "Bukan JSON yang valid.")
-        val format = root["format"]?.jsonPrimitive?.contentOrNull
+        val format = root.str("format")
         if (format != FORMAT) {
             return ImportPlan(
                 false,
@@ -76,8 +80,11 @@ object UpinMemoryImport {
                     "Yang diterima: '$FORMAT' atau 'hermes-memory-v1'."
             )
         }
-        val arr: JsonArray = root["files"]?.jsonArray
-            ?: return ImportPlan(false, error = "Field 'files' tidak ditemukan.")
+        val arr: JsonArray = runCatching { root["files"]?.jsonArray }.getOrNull()
+            ?: return ImportPlan(
+                false,
+                error = "Field 'files' tidak ditemukan atau bukan daftar."
+            )
         if (arr.isEmpty()) {
             return ImportPlan(false, error = "Field 'files' kosong.")
         }
@@ -96,13 +103,13 @@ object UpinMemoryImport {
                 skipped.add("entri #$i: bukan objek")
                 continue
             }
-            val path = o["path"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val path = o.str("path").orEmpty()
             val reason = validatePath(path)
             if (reason != null) {
                 skipped.add("$path: $reason")
                 continue
             }
-            val content = o["content"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val content = o.str("content").orEmpty()
             total += content.length
             if (total > maxChars) {
                 return ImportPlan(

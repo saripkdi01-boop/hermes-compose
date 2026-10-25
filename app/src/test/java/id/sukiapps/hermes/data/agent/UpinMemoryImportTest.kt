@@ -16,8 +16,14 @@ class UpinMemoryImportTest {
     private fun exportJson(files: String): String =
         """{"format":"upin-memory-export","file_count":3,"files":[$files]}"""
 
+    // JSON-escape dulu: tanpa ini, backslash di path ("a\b.md") dibaca
+    // JSON sebagai escape \b (backspace) sehingga path-nya lolos validasi
+    // dan test traversal gagal — padahal parser-nya benar.
+    private fun jsonEscape(raw: String): String =
+        raw.replace("\\", "\\\\").replace("\"", "\\\"")
+
     private fun fileEntry(path: String, content: String): String =
-        """{"path":"$path","content":"$content"}"""
+        """{"path":"${jsonEscape(path)}","content":"${jsonEscape(content)}"}"""
 
     @Test
     fun parsesRealExportShape_andFindsSummary() {
