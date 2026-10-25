@@ -69,8 +69,8 @@ jobs:
         if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: v${{ steps.ver.outputs.name }}
-        run: |
+        AG: v${{ steps.ver.outputs.name }}
+    run: |
             # Pitfall 2026-10-25 (run #145): langkah ini jalan di bash -e, jadi bila rilis $TAG belum ada, gh gagal dan shell mati SEBELUM mencapai cabang skip di bawah. || echo "" membuat rilis yang hilang = IS_DRAFT kosong = skip.
             IS_DRAFT=$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null || echo "")
           if [ "$IS_DRAFT" != "true" ]; then
