@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -461,6 +462,44 @@ class ChatViewModel @Inject constructor(
         _state.update { it.copy(agentMode = on, agentStatus = null) }
     }
 
+    // ---------- Manus di chat utama (14.20) ----------
+    //
+    // Jalur ini SENGAJA tidak memakai LLM sama sekali: goal diteruskan ke
+    // mesin Manus (submitAndRun di ManusViewModel, milik layar), jadi tidak
+    // ada gate "Pilih model dulu" di sini — tugas Manus tidak butuh model
+    // chat. Yang dilakukan fungsi ini hanya mencatat goal sebagai pesan
+    // user di percakapan yang sedang dibuka (atau percakapan baru), supaya
+    // kartu timeline dan hasil akhir punya konteks percakapan.
+    // Membatalkan/mematikan Mode Manus di tengah tugas TIDAK membatalkan
+    // tugas: pelaksana Manus terus berjalan sampai selesai/dibatalkan
+    // lewat tombol Batal di kartu; saklar hanya mengatur kiriman BARU.
+    fun recordManusGoal(text: String, onRecorded: (Long) -> Unit) {
+        val goal = text.trim()
+        if (goal.isEmpty()) return
+        viewModelScope.launch {
+            var convId = _state.value.convId
+            if (convId <= 0) {
+                convId = withContext(Dispatchers.IO) {
+                    repo.newConversation(repo.makeTitle(goal), prefs.persona)
+                }
+                prefs.currentConvId = convId
+                openConversation(convId)
+            }
+            withContext(Dispatchers.IO) {
+                repo.addMessage(convId, "user", goal, null)
+            }
+            onRecorded(convId)
+        }
+    }
+
+    /** Tempel hasil akhir tugas Manus sebagai pesan asisten di [convId]. */
+    fun recordManusResult(convId: Long, summary: String) {
+        if (convId <= 0 || summary.isBlank()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            repo.addMessage(convId, "assistant", summary, null)
+        }
+    }
+
     /**
      * Sesi agen: ulangi langkah chat+tool menuju [goal] sampai model
      * menandai SELESAI, atau batas AgentLimits tercapai (iterasi /
@@ -622,6 +661,24 @@ class ChatViewModel @Inject constructor(
                             _state.update { it.copy(error = msg) }
                             ExecutionLog.log("error", "LLM gagal", msg, "fail")
                             postErrorNotif(msg)
+                        }
+                    }
+                    // 14.21: stream yang selesai NORMAL tapi tanpa satu token
+                    // pun tidak boleh hilang tanpa jejak lagi (gejala Jerouter:
+                    // loading lalu hilang, tanpa error). Tampilkan error +
+                    // biarkan tombol Coba lagi (regenerate) bekerja. Cause
+                    // non-null = dibatalkan user (tombol stop) → jangan
+                    // tampilkan error, itu penghentian yang disengaja.
+                    .onCompletion { cause ->
+                        if (cause == null && acc.isEmpty()) {
+                            withContext(Dispatchers.Main) {
+                                if (_state.value.error == null) {
+                                    val msg = "Server tidak mengirim jawaban. " +
+                                        "Coba lagi atau ganti model."
+                                    _state.update { it.copy(error = msg) }
+                                    ExecutionLog.log("error", "LLM gagal", msg, "fail")
+                                }
+                            }
                         }
                     }
                     .collect { token ->

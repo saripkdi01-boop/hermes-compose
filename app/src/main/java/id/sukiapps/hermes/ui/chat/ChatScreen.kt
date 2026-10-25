@@ -12,6 +12,7 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.widget.Toast
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -84,6 +85,8 @@ import id.sukiapps.hermes.ui.history.HistoryViewModel
 import id.sukiapps.hermes.ui.live.LiveActivityBar
 import id.sukiapps.hermes.ui.live.LiveStatus
 import id.sukiapps.hermes.ui.live.LiveStatusBus
+import id.sukiapps.hermes.ui.manus.ManusPermissionDialog
+import id.sukiapps.hermes.ui.manus.ManusViewModel
 import id.sukiapps.hermes.ui.theme.PillShape
 import kotlinx.coroutines.launch
 import java.io.File
@@ -109,10 +112,39 @@ fun HermesChatScreen(
     onOpenAudit: () -> Unit,
     chatVm: ChatViewModel = hiltViewModel(),
     historyVm: HistoryViewModel = hiltViewModel(),
-    webVm: WebFetchViewModel = hiltViewModel()
+    webVm: WebFetchViewModel = hiltViewModel(),
+    // 14.20: SATU instance ManusViewModel dengan tab Agent (activity-scope),
+    // sehingga tugas Manus yang dimulai dari chat terlihat di tab Agent dan
+    // sebaliknya — bukan dua mesin dengan dua state.
+    manusVm: ManusViewModel = hiltViewModel(
+        viewModelStoreOwner = LocalContext.current as ComponentActivity
+    ),
+    onOpenManus: () -> Unit = onOpenV12Hub
 ) {
     val ctx = LocalContext.current
     val state by chatVm.state.collectAsStateWithLifecycle()
+    val manusState by manusVm.state.collectAsStateWithLifecycle()
+    // Mode Manus di chat utama: default MATI tiap buka layar, supaya chat
+    // biasa tidak berubah perilaku. Saklar hanya mengatur kiriman BARU.
+    var manusMode by remember { mutableStateOf(false) }
+    // Percakapan tempat goal Manus terakhir dikirim — hasil akhir ditempel
+    // ke percakapan itu, bukan ke percakapan yang sedang dibuka belakangan.
+    var manusConvId by remember { mutableStateOf(-1L) }
+    // Tugas Manus yang hasil akhirnya sudah ditempel sebagai pesan asisten.
+    var postedManusTaskIds by remember { mutableStateOf(setOf<String>()) }
+    var dismissedManusTaskId by remember { mutableStateOf<String?>(null) }
+    // Hasil akhir tugas Manus → pesan asisten di riwayat chat (sekali saja
+    // per tugas, tidak diulang saat recompose/pindah tab).
+    val manusTask = manusState.activeTask
+    LaunchedEffect(manusTask?.id, manusTask?.status) {
+        val task = manusTask
+        if (task != null && task.isFinished && task.id !in postedManusTaskIds &&
+            manusConvId > 0
+        ) {
+            chatVm.recordManusResult(manusConvId, manusSummary(task))
+            postedManusTaskIds = postedManusTaskIds + task.id
+        }
+    }
     val attachments by chatVm.attachmentsFlow.collectAsStateWithLifecycle()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -379,8 +411,30 @@ fun HermesChatScreen(
                     onValueChange = { input = it },
                     isStreaming = state.isStreaming,
                     onSend = {
-                        chatVm.send(input)
+                        val text = input
                         input = ""
+                        if (manusMode && text.isNotBlank()) {
+                            // Mode Manus: goal TIDAK lewat LLM chat sama sekali.
+                            // Tugas aktif yang belum selesai memblokir goal baru
+                            // supaya dua pelaksana Manus tidak berebut state.
+                            val active = manusState.activeTask
+                            if (active != null && active.status.isActive) {
+                                scope.launch {
+                                    snack.showSnackbar(
+                                        "Tugas Manus masih berjalan — " +
+                                            "selesaikan atau batalkan dulu."
+                                    )
+                                }
+                                input = text
+                            } else {
+                                chatVm.recordManusGoal(text) { convId ->
+                                    manusConvId = convId
+                                    manusVm.submitAndRun(text)
+                                }
+                            }
+                        } else {
+                            chatVm.send(text)
+                        }
                     },
                     onStop = { chatVm.stopStream() },
                     attachments = attachments,
@@ -431,12 +485,34 @@ fun HermesChatScreen(
                         modifier = Modifier.padding(start = 16.dp, top = 2.dp)
                     )
                 }
-                // Mode Agen — pil kompak.
+                // Mode Agen — pil kompak (loop LLM lama, tidak diubah).
                 AgentModePill(
                     checked = state.agentMode,
                     status = state.agentStatus,
                     onCheckedChange = { chatVm.setAgentMode(it) }
                 )
+                // 14.20: Mode Manus — saklar TERPISAH dari Mode Agen di atas.
+                // Aktif = kiriman berikutnya dijalankan mesin Manus (rencana +
+                // tool nyata), bukan chat LLM. Default mati.
+                AgentModePill(
+                    checked = manusMode,
+                    status = manusState.activeTask?.let {
+                        "Mode Manus • ${it.status}"
+                    } ?: "Mode Manus",
+                    onCheckedChange = { manusMode = it }
+                )
+                // Kartu timeline tugas Manus inline (aktif, atau selesai yang
+                // belum ditutup) — state yang sama dengan tab Agent.
+                val manusCardTask = manusState.activeTask
+                if (manusCardTask != null && manusCardTask.id != dismissedManusTaskId) {
+                    ManusTaskCard(
+                        task = manusCardTask,
+                        onCancel = { manusVm.cancelTask(manusCardTask.id) },
+                        onOpenAgent = onOpenManus,
+                        onDismissFinished = { dismissedManusTaskId = manusCardTask.id },
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    )
+                }
                 if (showEmpty) {
                     ChatEmptyState(
                         onSuggestion = { input = it },
@@ -504,6 +580,15 @@ fun HermesChatScreen(
                 }
             }
         }
+    }
+    // Kartu izin Manus — SAMA dengan tab Agent (langkah HIGH/CRITICAL
+    // berhenti di sini, tidak auto-jalan dari chat utama).
+    manusState.pendingPermission?.let { req ->
+        ManusPermissionDialog(
+            request = req,
+            onGrant = { manusVm.grantPermission(req.taskId) },
+            onDeny = { manusVm.denyPermission(req.taskId) }
+        )
     }
     // Dialog edit pesan.
     editingMsg?.let { m ->

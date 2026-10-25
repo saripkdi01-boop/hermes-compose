@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ElevatedCard
@@ -31,6 +30,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.activity.ComponentActivity
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import id.sukiapps.hermes.domain.manus.StepStatus
 import id.sukiapps.hermes.domain.manus.TaskStatus
@@ -59,7 +60,13 @@ import java.util.Locale
 @Composable
 fun ManusScreen(
     onBack: () -> Unit,
-    vm: ManusViewModel = hiltViewModel()
+    // Activity-scope: SATU instance ManusViewModel untuk tab Agent DAN chat
+    // utama, sehingga tugas yang dimulai dari chat terlihat di sini (dan
+    // sebaliknya) lewat StateFlow yang sama, bukan hanya lewat file
+    // "manus_state" saat layar dibuat ulang.
+    vm: ManusViewModel = hiltViewModel(
+        viewModelStoreOwner = LocalContext.current as ComponentActivity
+    )
 ) {
     val state by vm.state.collectAsState()
     var goalInput by remember { mutableStateOf("") }
@@ -499,33 +506,12 @@ fun ManusScreen(
             }
         }
     }
+    // Dialog izin bersama dengan chat utama (satu kontrak, satu komponen).
     state.pendingPermission?.let { req ->
-        AlertDialog(
-            onDismissRequest = { vm.denyPermission(req.taskId) },
-            title = { Text("Izin Diperlukan — Risiko ${req.risk}") },
-            text = {
-                Column {
-                    Text("Perintah persis: ${req.tool.summary()}")
-                    Text("Alasan: ${req.reason}")
-                    Text("Target: ${req.targets.joinToString("; ")}")
-                    Text("Scope: Sekali saja — hanya langkah ini, tidak berlaku untuk langkah lain.")
-                    Text("Rollback: ${req.rollback ?: "-"}")
-                    Text(
-                        "Menutup dialog = Tolak. Langkah ini dilewati dan tugas lanjut ke langkah berikutnya; tool di atas TIDAK dijalankan.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            },
-            confirmButton = {
-                Button(onClick = { vm.grantPermission(req.taskId) }) {
-                    Text("Izinkan sekali")
-                }
-            },
-            dismissButton = {
-                OutlinedButton(onClick = { vm.denyPermission(req.taskId) }) {
-                    Text("Tolak (lewati langkah)")
-                }
-            }
+        ManusPermissionDialog(
+            request = req,
+            onGrant = { vm.grantPermission(req.taskId) },
+            onDeny = { vm.denyPermission(req.taskId) }
         )
     }
 }
