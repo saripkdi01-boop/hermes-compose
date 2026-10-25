@@ -1,5 +1,4 @@
 package id.sukiapps.hermes.ui.manus
-
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -39,7 +38,6 @@ import id.sukiapps.hermes.domain.manus.risk
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-
 /**
  * Layar Manus — workspace agent gaya Manus, diadaptasi ke HP:
  *
@@ -49,10 +47,9 @@ import java.util.Locale
  * - Rencana: checklist langkah HIDUP — klik langkah untuk melihat detailnya,
  *   pill aksi melompat ke bukti di tab Komputer.
  * - Komputer: sub-tab Browser / Terminal / File untuk langkah yang dipilih.
- *   JUJUR: panel ini menampilkan bukti dari data langkah (detail, sumber,
- *   output, artifacts). Tangkapan browser live & eksekusi tool nyata BELUM
- *   tersambung — tombol "Selesai Langkah" adalah simulasi pelaksana, dan
- *   label itu ditulis eksplisit di UI.
+ *   EKSEKUSI NYATA SUDAH TERSAMBUNG: output di tab Terminal berasal dari
+ *   tool asli (web_fetch, shell_exec, file_read, github_read_file, dll)
+ *   yang dipanggil AgentRunner — bukan simulasi.
  * - Hasil: deliverable, sumber, dan riwayat yang bisa dibuka ulang (replay)
  *   karena state tersimpan di perangkat (lihat ManusViewModel).
  * - Kartu izin: dialog blocking dengan perintah persis, target persis,
@@ -73,14 +70,12 @@ fun ManusScreen(
     val task = state.activeTask
     var selectedStepId by remember(task?.id) { mutableStateOf<String?>(null) }
     val timeFmt = remember { SimpleDateFormat("HH:mm:ss", Locale.US) }
-
     val tabs = listOf("Rencana", "Komputer", "Hasil")
     val compTabs = listOf("Browser", "Terminal", "File")
     val selectedStep = task?.steps?.firstOrNull { it.id == selectedStepId }
         ?: task?.steps?.firstOrNull { it.status == StepStatus.RUNNING }
         ?: task?.steps?.firstOrNull { it.status == StepStatus.PENDING }
         ?: task?.steps?.firstOrNull()
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -123,6 +118,14 @@ fun ManusScreen(
                                 "Sedang: ${current?.title ?: "Semua langkah selesai / dilewati"}",
                                 style = MaterialTheme.typography.bodySmall
                             )
+                            // Indikator eksekusi nyata: tampil hanya kalau langkah RUNNING punya tool asli.
+                            if (current != null && current.status == StepStatus.RUNNING && current.tool != null) {
+                                Text(
+                                    "⚙ Menjalankan tool: ${current.tool.summary()}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.tertiary
+                                )
+                            }
                             LinearProgressIndicator(
                                 progress = { t.progress },
                                 modifier = Modifier
@@ -149,7 +152,7 @@ fun ManusScreen(
                             if (t.status == TaskStatus.RUNNING) {
                                 Row(modifier = Modifier.padding(top = 8.dp)) {
                                     OutlinedButton(onClick = { vm.finishActiveStep() }) {
-                                        Text("Selesai Langkah (simulasi pelaksana)")
+                                        Text("Selesai Langkah (manual)")
                                     }
                                 }
                             }
@@ -183,12 +186,25 @@ fun ManusScreen(
                         OutlinedTextField(
                             value = planInput,
                             onValueChange = { planInput = it },
-                            label = { Text("Rencana — satu langkah per baris") },
+                            label = { Text("Rencana — satu langkah per baris (opsional)") },
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
                     item {
                         Button(
+                            onClick = {
+                                if (goalInput.isNotBlank()) {
+                                    vm.submitAndRun(goalInput)
+                                    goalInput = ""
+                                    planInput = ""
+                                }
+                            },
+                            enabled = goalInput.isNotBlank(),
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Kirim & Jalankan — auto-plan + eksekusi tool nyata") }
+                    }
+                    item {
+                        OutlinedButton(
                             onClick = {
                                 val plan = planInput.lines().filter { it.isNotBlank() }
                                 if (goalInput.isNotBlank() && plan.isNotEmpty()) {
@@ -197,8 +213,9 @@ fun ManusScreen(
                                     planInput = ""
                                 }
                             },
+                            enabled = goalInput.isNotBlank() && planInput.isNotBlank(),
                             modifier = Modifier.fillMaxWidth()
-                        ) { Text("Kirim Goal") }
+                        ) { Text("Kirim Goal (rencana manual)") }
                     }
                     if (task != null) {
                         items(task.steps, key = { it.id }) { step ->
@@ -322,9 +339,10 @@ fun ManusScreen(
                             style = MaterialTheme.typography.titleSmall
                         )
                         Text(
-                            "Panel ini menampilkan bukti dari data langkah. Tangkapan " +
-                                "browser live dan eksekusi tool nyata belum tersambung — " +
-                                "jangan anggap panel ini sebagai screenshot browser nyata.",
+                            "Eksekusi tool NYATA sudah tersambung. Output di tab Terminal " +
+                                "berasal dari tool asli (web_fetch, shell_exec, file_read, " +
+                                "github_read_file, dan lainnya) yang dipanggil AgentRunner — " +
+                                "bukan simulasi.",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -336,7 +354,12 @@ fun ManusScreen(
                                     Text("Belum ada langkah. Buat goal dulu di tab Rencana.")
                                 } else when (compTab) {
                                     0 -> {
-                                        if (step.tool?.name == "web_search") {
+                                        if (step.tool?.name == "web_fetch") {
+                                            Text(
+                                                "Ambil halaman: ${step.tool.args["url"] ?: step.tool.summary()}",
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                        } else if (step.tool?.name == "web_search") {
                                             Text(
                                                 "Pencarian: ${step.tool.args["q"] ?: step.tool.summary()}",
                                                 style = MaterialTheme.typography.bodyMedium
@@ -370,7 +393,7 @@ fun ManusScreen(
                                             )
                                         }
                                         Text(
-                                            "Output: ${step.output ?: "Belum ada output. Tekan 'Selesai Langkah (simulasi pelaksana)' di strip atas untuk menandai langkah ini selesai."}",
+                                            "Output: ${step.output ?: "Belum ada output. Langkah ini akan dieksekusi otomatis saat task berjalan; tekan 'Selesai Langkah (manual)' di strip atas untuk menandai selesai tanpa tool."}",
                                             style = MaterialTheme.typography.bodySmall
                                         )
                                         step.error?.let {
