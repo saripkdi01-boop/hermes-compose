@@ -722,9 +722,11 @@ fun SettingsScreen(
                     icon = Icons.Filled.SmartToy,
                     title = "Upgrade Diri Otomatis",
                     subtitle = "Agen boleh branch, tulis, merge, dan buat " +
-                        "rilis draft TANPA popup. Matikan untuk " +
-                        "menghentikan loop (kill switch). Signing + " +
-                        "lampir APK tetap oleh maintainer.",
+                        "rilis draft HANYA lewat Mode Agen (kartu izin " +
+                        "HIGH/CRITICAL tetap berlaku; tidak tersedia di " +
+                        "chat biasa). Matikan untuk menghentikan loop " +
+                        "(kill switch). Signing + lampir APK tetap oleh " +
+                        "maintainer.",
                     checked = suOn,
                     onCheckedChange = {
                         suOn = it

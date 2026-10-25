@@ -20,6 +20,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import id.sukiapps.hermes.tool.ToolCall
 import id.sukiapps.hermes.tool.ToolLoop
+import id.sukiapps.hermes.tool.ToolResult
 import java.io.IOException
 import org.json.JSONObject
 import javax.inject.Inject
@@ -163,7 +164,7 @@ class SseClient @Inject constructor(
         maxIterations: Int = ToolLoop.DEFAULT_ITERATIONS
     ): Flow<String> = callbackFlow {
         val toolsJson: JsonArray =
-            json.parseToJsonElement(ToolLoop.toolsArray().toString()).jsonArray
+            json.parseToJsonElement(ToolLoop.toolsArray(includeSelfUpgrade = false).toString()).jsonArray
         val messages = mutableListOf<kotlinx.serialization.json.JsonElement>()
         messages.add(buildJsonObject {
             put("role", "system")
@@ -322,7 +323,9 @@ class SseClient @Inject constructor(
                     messages.add(assistantMsg)
                     for ((_, tc) in pending) {
                         val t0 = System.currentTimeMillis()
-                        val res = ToolLoop.execute(tc.name, tc.argsJson())
+                        // 14.25: selfupgrade_* tidak pernah dieksekusi dari chat.
+                        val res = ToolLoop.chatRefusal(tc.name)?.let { ToolResult(it, true) }
+                            ?: ToolLoop.execute(tc.name, tc.argsJson())
                         val ms = System.currentTimeMillis() - t0
                         onToolEvent(tc.name, !res.isError, ms)
                         messages.add(buildJsonObject {

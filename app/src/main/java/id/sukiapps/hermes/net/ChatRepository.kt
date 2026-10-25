@@ -2,6 +2,7 @@ package id.sukiapps.hermes.net
 import id.sukiapps.hermes.data.SettingsRepository
 import id.sukiapps.hermes.tool.ToolCall
 import id.sukiapps.hermes.tool.ToolLoop
+import id.sukiapps.hermes.tool.ToolResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -167,7 +168,7 @@ class ChatRepository(
                 .put("temperature", params.temperature.toDouble())
                 .put("top_p", params.topP.toDouble())
                 .put("max_tokens", params.maxTokens)
-                .put("tools", ToolLoop.toolsArray())
+                .put("tools", ToolLoop.toolsArray(includeSelfUpgrade = false))
                 .put("tool_choice", "auto")
             val pending = mutableMapOf<Int, ToolCall>()
             sse.stream(
@@ -227,9 +228,11 @@ class ChatRepository(
                     ),
             )
             // 2. Eksekusi tiap tool, append hasilnya sebagai role=tool.
+            // 14.25: selfupgrade_* tidak pernah dieksekusi dari chat.
             for ((_, call) in pending.entries.sortedBy { it.key }) {
                 val tTool = System.currentTimeMillis()
-                val res = ToolLoop.execute(call.name, call.argsJson())
+                val res = ToolLoop.chatRefusal(call.name)?.let { ToolResult(it, true) }
+                    ?: ToolLoop.execute(call.name, call.argsJson())
                 val ms = System.currentTimeMillis() - tTool
                 onToolEvent(call.name, !res.isError, ms)
                 logger?.log(
