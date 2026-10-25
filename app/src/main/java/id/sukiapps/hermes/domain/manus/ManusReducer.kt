@@ -64,6 +64,23 @@ sealed interface ManusEvent {
     data class ResumeTask(val taskId: String) : ManusEvent
     data class CancelTask(val taskId: String, val reason: String = "dibatalkan user") : ManusEvent
     data class RetryStep(val taskId: String, val stepId: String) : ManusEvent
+    /**
+     * 14.22: ganti daftar langkah tugas yang masih IDLE (dipakai jalur
+     * agen tunggal: task dibuat dulu dengan langkah "Merencanakan…",
+     * lalu diganti rencana LLM / fallback begitu rencana siap).
+     * Tidak boleh mengubah langkah yang sudah settled.
+     */
+    data class ReplacePlan(
+        val taskId: String,
+        val plan: List<String>,
+        val planLabel: String = ""
+    ) : ManusEvent
+    /** 14.22: gerbang verifikasi lolos — hanya dari VERIFYING. */
+    data class VerificationPassed(val taskId: String, val evidence: String) : ManusEvent
+    /** 14.22: gerbang verifikasi gagal — hanya dari VERIFYING → STOPPED. */
+    data class VerificationFailed(val taskId: String, val reason: String) : ManusEvent
+    /** 14.22: lanjutkan tugas STOPPED (verifikasi ulang / langkah tersisa). */
+    data class ResumeStopped(val taskId: String) : ManusEvent
     /** Bersihkan riwayat task yang sudah selesai. */
     data object ClearHistory : ManusEvent
 }
@@ -129,6 +146,10 @@ object ManusReducer {
         is ManusEvent.ResumeTask -> resumeTask(state, event, clock)
         is ManusEvent.CancelTask -> cancelTask(state, event, clock)
         is ManusEvent.RetryStep -> retryStep(state, event, clock)
+        is ManusEvent.ReplacePlan -> replacePlan(state, event, clock)
+        is ManusEvent.VerificationPassed -> verificationPassed(state, event, clock)
+        is ManusEvent.VerificationFailed -> verificationFailed(state, event, clock)
+        is ManusEvent.ResumeStopped -> resumeStopped(state, event, clock)
         ManusEvent.ClearHistory -> clearHistory(state)
     }
     // --- transisi per event -------------------------------------------------
@@ -211,7 +232,10 @@ object ManusReducer {
      * Setelah sebuah langkah selesai, tentukan langkah berikutnya. Bila langkah
      * berikutnya memakai tool berisiko -> catat pendingPermission dan berhenti.
      * Bila tidak -> tandai langkah itu RUNNING dan biarkan pelaksana melapor.
-     * Bila tidak ada langkah tersisa -> task COMPLETED.
+     * Bila tidak ada langkah tersisa -> task VERIFYING (14.22): COMPLETED
+     * HANYA boleh keluar dari gerbang verifikasi (VerificationPassed),
+     * bukan langsung dari sini. Ini yang membedakan "tool tidak error"
+     * dengan "tujuan tercapai dengan bukti".
      */
     private fun advance(
         state: ManusUiState,
@@ -221,13 +245,13 @@ object ManusReducer {
         val now = clock()
         val next = task.nextStep
         return if (next == null) {
-            val done = task.copy(
-                status = TaskStatus.COMPLETED,
+            val waiting = task.copy(
+                status = TaskStatus.VERIFYING,
                 updatedAt = now
             )
-            replaceTask(state, done)
+            replaceTask(state, waiting)
                 .copy(pendingPermission = null)
-                .log(now, LogLevel.INFO, "manus", "task ${task.id} selesai: ${task.doneCount}/${task.steps.size} langkah")
+                .log(now, LogLevel.INFO, "manus", "task ${task.id} menunggu verifikasi bukti: ${task.doneCount}/${task.steps.size} langkah")
         } else {
             val risk = next.tool?.risk() ?: RiskLevel.LOW
             if (risk.requiresApproval) {
@@ -470,6 +494,96 @@ object ManusReducer {
         )
         return advance(replaceTask(state, updated), updated, clock)
     }
+    /**
+     * 14.22: ganti rencana tugas IDLE. Hanya bila belum ada langkah yang
+     * settled (belum ada eksekusi) — rencana yang sudah berjalan tidak
+     * boleh ditimpa diam-diam. ID langkah dihitung ulang dari urutan baru.
+     */
+    private fun replacePlan(
+        state: ManusUiState,
+        event: ManusEvent.ReplacePlan,
+        clock: () -> Long
+    ): ManusUiState {
+        val now = clock()
+        val task = state.tasks.firstOrNull { it.id == event.taskId } ?: return state
+        if (task.status != TaskStatus.IDLE) return state
+        if (task.steps.any { it.isSettled }) return state
+        val steps = event.plan.mapIndexed { index, title ->
+            AgentStep(id = "${task.id}-s${index + 1}", title = title)
+        }
+        val updated = task.copy(
+            steps = steps,
+            planLabel = event.planLabel,
+            updatedAt = now
+        )
+        return replaceTask(state, updated)
+            .log(now, LogLevel.INFO, "manus", "rencana ${task.id} diganti: ${steps.size} langkah (${event.planLabel})")
+    }
+
+    /** 14.22: hanya dari VERIFYING — bukti lolos, tugas sah COMPLETED. */
+    private fun verificationPassed(
+        state: ManusUiState,
+        event: ManusEvent.VerificationPassed,
+        clock: () -> Long
+    ): ManusUiState {
+        val now = clock()
+        val task = state.tasks.firstOrNull { it.id == event.taskId } ?: return state
+        if (task.status != TaskStatus.VERIFYING) return state
+        val done = task.copy(
+            status = TaskStatus.COMPLETED,
+            verificationEvidence = event.evidence,
+            updatedAt = now
+        )
+        return replaceTask(state, done)
+            .log(now, LogLevel.INFO, "manus", "task ${task.id} selesai TERVERIFIKASI: ${event.evidence}")
+    }
+
+    /** 14.22: hanya dari VERIFYING — bukti gagal, tugas TERHENTI (STOPPED). */
+    private fun verificationFailed(
+        state: ManusUiState,
+        event: ManusEvent.VerificationFailed,
+        clock: () -> Long
+    ): ManusUiState {
+        val now = clock()
+        val task = state.tasks.firstOrNull { it.id == event.taskId } ?: return state
+        if (task.status != TaskStatus.VERIFYING) return state
+        val stopped = task.copy(
+            status = TaskStatus.STOPPED,
+            stopReason = event.reason,
+            updatedAt = now
+        )
+        return replaceTask(state, stopped)
+            .log(now, LogLevel.WARN, "manus", "task ${task.id} TERHENTI: ${event.reason}")
+    }
+
+    /**
+     * 14.22: lanjutkan tugas STOPPED. Tugas STOPPED selalu tanpa langkah
+     * PENDING (VERIFYING hanya tercapai bila tidak ada langkah tersisa),
+     * jadi advance() kembali ke VERIFYING — verifikasi ulang. Ini berguna
+     * bila user sudah memperbaiki bukti secara manual (mis. menulis file
+     * yang tadi gagal dibaca balik), lalu menekan "Lanjutkan".
+     * Alasan berhenti + bukti lama dibersihkan untuk percobaan baru.
+     * (Bila di masa depan STOPPED bisa punya langkah PENDING, advance()
+     * yang sama akan memulai langkah itu / meminta izin bila berisiko.)
+     */
+    private fun resumeStopped(
+        state: ManusUiState,
+        event: ManusEvent.ResumeStopped,
+        clock: () -> Long
+    ): ManusUiState {
+        val now = clock()
+        val task = state.tasks.firstOrNull { it.id == event.taskId } ?: return state
+        if (task.status != TaskStatus.STOPPED) return state
+        val updated = task.copy(
+            status = TaskStatus.RUNNING,
+            stopReason = null,
+            verificationEvidence = null,
+            updatedAt = now
+        )
+        return advance(replaceTask(state, updated), updated, clock)
+            .log(now, LogLevel.INFO, "manus", "task ${task.id} dilanjutkan dari TERHENTI")
+    }
+
     private fun clearHistory(state: ManusUiState): ManusUiState =
         state.copy(tasks = state.tasks.filter { !it.isFinished })
     // --- util ----------------------------------------------------------------

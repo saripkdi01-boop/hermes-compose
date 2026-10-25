@@ -363,7 +363,7 @@ fun SettingsAccentRow(
     val options = listOf(
         Triple("coral", "Aksen coral", MaterialTheme.colorScheme.primary),
         Triple("teal", "Aksen teal", Color(0xFF0E7C86)),
-        Triple("sand", "Aksen pasir", Color(0xFF8A7A5F)),
+        Triple("sand", "Aksen pasir", Color(0xFF6F5F45)),
     )
     Row(
         modifier = modifier.fillMaxWidth(),

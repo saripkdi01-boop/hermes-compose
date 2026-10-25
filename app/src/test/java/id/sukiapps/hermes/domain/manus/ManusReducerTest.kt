@@ -48,6 +48,14 @@ class ManusReducerTest {
             ManusEvent.ToolFinished(taskId, "$taskId-s2", "ringkasan"),
             clock
         )
+        // 14.22: langkah habis -> VERIFYING dulu, BUKAN langsung COMPLETED.
+        // COMPLETED hanya keluar dari gerbang verifikasi.
+        assertEquals(TaskStatus.VERIFYING, state.task(taskId).status)
+        state = ManusReducer.reduce(
+            state,
+            ManusEvent.VerificationPassed(taskId, "Terverifikasi: 2/2 langkah tool lolos"),
+            clock
+        )
         val done = state.task(taskId)
         assertEquals(TaskStatus.COMPLETED, done.status)
         assertEquals(1f, done.progress, 0.001f)
@@ -83,11 +91,19 @@ class ManusReducerTest {
         state = ManusReducer.reduce(state, ManusEvent.PermissionDenied(taskId, "tidak boleh"), clock)
         val denied = state.task(taskId)
         // Penolakan = langkah dilewati, BUKAN task gagal (kontrak masterprompt).
-        // Satu-satunya langkah dilewati -> tidak ada sisa langkah -> COMPLETED.
-        assertEquals(TaskStatus.COMPLETED, denied.status)
+        // Satu-satunya langkah dilewati -> tidak ada sisa langkah -> VERIFYING
+        // (14.22), lalu gerbang meloloskan (tidak ada langkah tool yang gagal).
+        assertEquals(TaskStatus.VERIFYING, denied.status)
+        state = ManusReducer.reduce(
+            state,
+            ManusEvent.VerificationPassed(taskId, "Terverifikasi (tanpa langkah tool)"),
+            clock
+        )
+        val verified = state.task(taskId)
+        assertEquals(TaskStatus.COMPLETED, verified.status)
         assertNull(state.pendingPermission)
         assertEquals(StepStatus.SKIPPED, denied.steps[0].status)
-        assertEquals(1f, denied.progress, 0.001f)
+        assertEquals(1f, verified.progress, 0.001f)
     }
 
     @Test
@@ -122,6 +138,13 @@ class ManusReducerTest {
         val taskId = state.tasks.single().id
         state = ManusReducer.reduce(state, ManusEvent.StartTask(taskId), clock)
         state = ManusReducer.reduce(state, ManusEvent.ToolFinished(taskId, "$taskId-s1", "ok"), clock)
+        // 14.22: langkah habis -> VERIFYING, lalu VerificationPassed -> COMPLETED.
+        assertEquals(TaskStatus.VERIFYING, state.task(taskId).status)
+        state = ManusReducer.reduce(
+            state,
+            ManusEvent.VerificationPassed(taskId, "Terverifikasi"),
+            clock
+        )
         assertEquals(TaskStatus.COMPLETED, state.task(taskId).status)
         state = ManusReducer.reduce(state, ManusEvent.SubmitGoal("kedua", listOf("b")), clock)
         val keduaId = state.tasks.last().id

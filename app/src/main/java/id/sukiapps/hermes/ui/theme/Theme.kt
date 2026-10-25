@@ -105,8 +105,8 @@ private fun accentColors(
             )
         } else {
             AccentColors(
-                Color(0xFF8A7A5F), Color.White,
-                Color(0xFF8A7A5F).copy(alpha = 0.16f), Color(0xFF8A7A5F),
+                Color(0xFF6F5F45), Color.White,
+                Color(0xFF6F5F45).copy(alpha = 0.16f), Color(0xFF6F5F45),
             )
         }
         else -> if (darkTheme) {

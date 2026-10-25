@@ -11,7 +11,6 @@ import id.sukiapps.hermes.data.store.ExecutionLog
 import id.sukiapps.hermes.data.agent.MemoryWriter
 import id.sukiapps.hermes.data.agent.SoulPrompt
 import id.sukiapps.hermes.data.audit.DangerLevel
-import id.sukiapps.hermes.data.agent.AgentLimits
 import id.sukiapps.hermes.data.audit.PermissionGate
 import id.sukiapps.hermes.data.connectors.UpinConnector
 import id.sukiapps.hermes.data.local.AppPrefs
@@ -72,10 +71,10 @@ data class ChatUiState(
     // v9.4: Upin sedang ditanya (polling jawaban)
     val upinBusy: Boolean = false,
     // Sprint 1 Gate 2: ringkasan event tool terakhir (chip di layar chat)
-    val toolEvent: String? = null,
-    // Sprint 1 Gate 4: Mode Agen (sesi multi-langkah terbatas)
-    val agentMode: Boolean = false,
-    val agentStatus: String? = null
+    val toolEvent: String? = null
+    // 14.22: Mode Agen lama (agentMode/agentStatus + runAgentSession)
+    // DIHAPUS — satu-satunya Mode Agen kini saklar di ChatScreen yang
+    // mengarah ke mesin agen tunggal (ManusViewModel.submitAndRun).
 )
 
 @HiltViewModel
@@ -141,9 +140,6 @@ class ChatViewModel @Inject constructor(
     val attachmentsFlow: StateFlow<List<AttachmentItem>> = _attachmentsFlow.asStateFlow()
 
     private var streamJob: Job? = null
-    // Sprint 1 Gate 4: sesi agen
-    private var agentJob: Job? = null
-    @Volatile private var agentStopRequested = false
     private var collectJob: Job? = null
     // v9.4: job polling jawaban Upin (dibatalkan saat kirim lain/keluar layar)
     private var upinJob: Job? = null
@@ -294,7 +290,6 @@ class ChatViewModel @Inject constructor(
     }
 
     fun stopStream() {
-        agentStopRequested = true
         streamJob?.cancel()
         streamJob = null
         if (_state.value.isStreaming) {
@@ -448,21 +443,13 @@ class ChatViewModel @Inject constructor(
                 memoryWriter.maybeWriteBack(snapshot)
             }
         }
-        // Sprint 1 Gate 4: Mode Agen aktif (tanpa gambar) -> sesi agen.
-        if (_state.value.agentMode && imageB64s.isEmpty()) {
-            runAgentSession(convId, fullPrompt)
-        } else {
-            streamReply(convId, fullPrompt, imageB64s)
-        }
+        // 14.22: chat biasa SELALU lewat streamReply. Mode Agen tidak lagi
+        // bercabang di sini — kiriman agen ditangani ChatScreen langsung
+        // ke ManusViewModel.submitAndRun (mesin agen tunggal).
+        streamReply(convId, fullPrompt, imageB64s)
     }
 
-    // ---------- Sprint 1 Gate 4: Mode Agen ----------
-
-    fun setAgentMode(on: Boolean) {
-        _state.update { it.copy(agentMode = on, agentStatus = null) }
-    }
-
-    // ---------- Manus di chat utama (14.20) ----------
+    // ---------- Agen di chat utama (14.22: mesin tunggal) ----------
     //
     // Jalur ini SENGAJA tidak memakai LLM sama sekali: goal diteruskan ke
     // mesin Manus (submitAndRun di ManusViewModel, milik layar), jadi tidak
@@ -497,89 +484,6 @@ class ChatViewModel @Inject constructor(
         if (convId <= 0 || summary.isBlank()) return
         viewModelScope.launch(Dispatchers.IO) {
             repo.addMessage(convId, "assistant", summary, null)
-        }
-    }
-
-    /**
-     * Sesi agen: ulangi langkah chat+tool menuju [goal] sampai model
-     * menandai SELESAI, atau batas AgentLimits tercapai (iterasi /
-     * waktu / budget token ESTIMASI), atau user menekan stop.
-     * Langkah lanjutan hanya hidup sebagai pesan user [SISTEM AGEN]
-     * di percakapan ini (transparan & tercatat di Room sebagai pesan
-     * biasa — BUKAN perubahan skema).
-     */
-    private fun runAgentSession(convId: Long, goal: String) {
-        agentStopRequested = false
-        val baseLimits = AgentLimits.get(appCtx)
-        // 14.11: sesi upgrade-diri memakai batas MAKSIMUM (25 iterasi
-        // / 30 menit / 500rb token). Default 10 iterasi / 5 menit
-        // tidak muat untuk resep upgrade-diri — dan itulah yang
-        // membuat loop branch kosong 25 Okt 00:20 (sesi mati
-        // sebelum sempat menulis file).
-        val limits = if (goal.contains("upgrade diri", ignoreCase = true)) {
-            AgentLimits.Limits(
-                maxIterations = 25,
-                timeoutMinutes = 30,
-                tokenBudget = 500_000
-            )
-        } else {
-            baseLimits
-        }
-        val startMs = System.currentTimeMillis()
-        var step = 0
-        agentJob = viewModelScope.launch {
-            var reason = "selesai"
-            var currentPrompt = goal
-            while (true) {
-                step++
-                _state.update {
-                    it.copy(agentStatus = "🤖 Agen langkah $step/${limits.maxIterations}…")
-                }
-                val instruction = if (goal.contains("upgrade diri", ignoreCase = true)) {
-                    AGENT_INSTRUCTION + SELFUPGRADE_INSTRUCTION
-                } else {
-                    AGENT_INSTRUCTION
-                }
-                streamReply(convId, currentPrompt, emptyList(), instruction)
-                // streamReply berjalan di streamJob sendiri; tunggu selesai.
-                _state.first { s -> !s.isStreaming }
-                if (agentStopRequested) { reason = "dihentikan user"; break }
-                if (_state.value.error != null) { reason = "error pada langkah $step"; break }
-                val last = _state.value.messages
-                    .lastOrNull { it.role == "assistant" }?.content.orEmpty()
-                val est = _state.value.tokenEstimate
-                val elapsed = System.currentTimeMillis() - startMs
-                _state.update {
-                    it.copy(
-                        agentStatus = "🤖 Langkah $step/${limits.maxIterations} · " +
-                            "±$est token · ${elapsed / 1000} dtk"
-                    )
-                }
-                when {
-                    last.trimStart().startsWith("SELESAI") -> {
-                        reason = "tujuan tercapai"; break
-                    }
-                    step >= limits.maxIterations -> {
-                        reason = "batas iterasi (${limits.maxIterations}) tercapai"; break
-                    }
-                    elapsed >= limits.timeoutMs -> {
-                        reason = "batas waktu (${limits.timeoutMinutes} menit) tercapai"; break
-                    }
-                    est >= limits.tokenBudget -> {
-                        reason = "budget token (${limits.tokenBudget}) tercapai"; break
-                    }
-                }
-                currentPrompt = "[SISTEM AGEN] Lanjutkan langkah berikutnya menuju " +
-                    "tujuan: $goal — bila tujuan sudah tercapai, awali jawabanmu " +
-                    "dengan kata SELESAI diikuti ringkasan hasil akhir."
-                withContext(Dispatchers.IO) {
-                    repo.addMessage(convId, "user", currentPrompt, null)
-                }
-            }
-            ExecutionLog.log("agent", "Sesi agen", "$reason · $step langkah", "ok")
-            _state.update {
-                it.copy(agentStatus = "🤖 Sesi agen berhenti: $reason ($step langkah)")
-            }
         }
     }
 
@@ -706,53 +610,6 @@ class ChatViewModel @Inject constructor(
                 }
             }
         }
-    }
-
-    companion object {
-        private const val AGENT_INSTRUCTION =
-            "MODE AGEN AKTIF: kamu bekerja mandiri menuju tujuan user dengan " +
-                "tool yang tersedia. Kerjakan SATU langkah bermakna per giliran, " +
-                "jelaskan singkat hasil langkahmu. Bila tujuan SUDAH tercapai, " +
-                "awali jawaban akhirmu dengan kata SELESAI diikuti ringkasan " +
-                "hasil. Bila belum, akhiri dengan langkah berikutnya yang akan " +
-                "kamu ambil."
-
-        /**
-         * Resep Upgrade Diri (14.8, diperbaiki 14.11: pakai-ulang
-         * branch/PR + batas sesi maksimum) — ditempel ke AGENT_INSTRUCTION
-         * hanya bila tujuan sesi menyebut "upgrade diri". Urutan
-         * wajib: baca -> branch -> tulis -> PR -> CI success ->
-         * merge -> draft rilis -> lapor. Signing + lampir APK +
-         * publish tetap oleh maintainer (bukan oleh agen).
-         */
-        private const val SELFUPGRADE_INSTRUCTION =
-            " RESEP UPGRADE DIRI: target repo saripkdi01-boop/" +
-                "hermes-compose. Langkah: 1) baca file yang diubah via " +
-                "github_read_file; 2) buat branch via selfupgrade_branch " +
-                "(nama berawalan selfupgrade/) — bila branch sudah ada, " +
-                "PAKAI ULANG branch itu, JANGAN membuat nama baru " +
-                "(v2/v3/modern); satu tugas = satu branch; 3) tulis " +
-                "file LENGKAP " +
-                "via selfupgrade_write_file — kontrak full-file, JANGAN " +
-                "unified diff; bump versionCode +1 dan versionName di " +
-                "app/build.gradle.kts; file lama yang diubah WAJIB " +
-                "dibackup <nama>.bak; JANGAN ubah skema Room; JANGAN " +
-                "hardcode secret; 4) buat PR via selfupgrade_pr — bila " +
-                "PR dari branch ini sudah terbuka, PAKAI ULANG nomornya; " +
-                "5) cek " +
-                "CI via selfupgrade_ci sampai state success — JANGAN " +
-                "merge bila pending atau failure; 6) merge via " +
-                "selfupgrade_merge; 7) buat DRAFT rilis via " +
-                "selfupgrade_release — tag v<versionName>, body WAJIB " +
-                "memuat baris versionCode:NN; 8) laporkan URL draft " +
-                "rilis dan perintah berikut: maintainer sign APK dari " +
-                "artifact CI, lampirkan ke draft, lalu publish. Sesi " +
-                "upgrade-diri memakai batas 25 iterasi / 30 menit — " +
-                "kerjakan sampai tuntas dalam branch yang SAMA, jangan " +
-                "berhenti di tengah lalu mengulang dari branch baru. " +
-                "setelah publish, update bisa diunduh dari Cek update. " +
-                "Bila tool menolak karena toggle nonaktif, suruh user " +
-                "mengaktifkannya di Pengaturan > Agen."
     }
 
     private fun updateTokenEstimate() {

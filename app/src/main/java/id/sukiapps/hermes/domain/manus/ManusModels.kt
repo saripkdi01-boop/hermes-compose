@@ -13,13 +13,22 @@ enum class TaskStatus {
     RUNNING,
     WAITING_PERMISSION,
     PAUSED,
+    /** Semua langkah habis, menunggu gerbang verifikasi bukti (14.22). */
+    VERIFYING,
     COMPLETED,
     FAILED,
-    CANCELLED;
+    CANCELLED,
+    /**
+     * 14.22: verifikasi bukti GAGAL. Terminal, tapi bukan FAILED biasa:
+     * capaian tetap tercatat dan user bisa menekan "Lanjutkan" untuk
+     * mencoba lagi (verifikasi ulang / langkah tersisa).
+     */
+    STOPPED;
 
     /** True bila agent masih boleh menerima event baru. */
     val isActive: Boolean
-        get() = this == PLANNING || this == RUNNING || this == WAITING_PERMISSION || this == PAUSED
+        get() = this == PLANNING || this == RUNNING || this == WAITING_PERMISSION ||
+            this == PAUSED || this == VERIFYING
 }
 
 @Serializable
@@ -97,7 +106,18 @@ data class AgentTask(
     val createdAt: Long = 0L,
     val updatedAt: Long = 0L,
     /** True hanya untuk tugas contoh bawaan (seed) — UI menandainya CONTOH. */
-    val isDemo: Boolean = false
+    val isDemo: Boolean = false,
+    /**
+     * 14.22: asal rencana, ditampilkan di UI supaya user tahu apakah
+     * rencana dibuat LLM atau fallback kata kunci. Contoh: "LLM",
+     * "rencana fallback — tanpa LLM (alasan)". Kosong = rencana lama /
+     * manual (kompatibel dengan simpanan sebelum 14.22).
+     */
+    val planLabel: String = "",
+    /** 14.22: bukti verifikasi, hanya diisi bila COMPLETED lewat gerbang. */
+    val verificationEvidence: String? = null,
+    /** 14.22: alasan verifikasi gagal, hanya diisi bila STOPPED. */
+    val stopReason: String? = null
 ) {
     /** Progress 0f..1f dari langkah yang sudah selesai. */
     val progress: Float
@@ -114,7 +134,8 @@ data class AgentTask(
     val isFinished: Boolean
         get() = status == TaskStatus.COMPLETED ||
             status == TaskStatus.FAILED ||
-            status == TaskStatus.CANCELLED
+            status == TaskStatus.CANCELLED ||
+            status == TaskStatus.STOPPED
 }
 
 /**
