@@ -75,4 +75,5 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     // Unit test JVM
     testImplementation(libs.junit)
+    testImplementation(libs.org.json)
 }
