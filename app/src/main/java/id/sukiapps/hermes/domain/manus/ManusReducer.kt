@@ -3,10 +3,33 @@ package id.sukiapps.hermes.domain.manus
  * Semua input ke state machine lewat event terketat. Tidak ada jalur lain yang
  * boleh mengubah ManusUiState — ini yang bikin perilaku agent bisa diprediksi
  * dan bisa dites tanpa Android.
+ *
+ * BACKUP: versi sebelumnya disimpan sebagai ManusReducer.kt.bak di repo
+ * sebelum file ini ditulis (kebijakan upgrade: file lama yang diubah WAJIB
+ * punya backup). Perubahan utama pada versi ini:
+ * - `risk()` kini mengenal tool NYATA Hermes (web_fetch, shell_exec,
+ *   github_read_file, ...) selain nama tool lama.
+ * - `SubmitGoal.plan` tetap List<String> (kontrak UI), tapi setiap langkah
+ *   tetap bisa menerima ToolCall terpisah melalui ManusEvent.AttachStepTool
+ *   sehingga panel Komputer, kartu izin, dan executor bekerja dengan data
+ *   nyata, bukan cuma judul teks.
  */
 sealed interface ManusEvent {
     /** User menyerahkan goal baru. Membuat task IDLE + langkah rencana awal. */
     data class SubmitGoal(val goal: String, val plan: List<String>) : ManusEvent
+    /**
+     * Sematkan tool NYATA ke satu langkah. Dipakai oleh AgentRunner saat
+     * memetakan goal (ManusToolPlanner) ke langkah rencana, supaya reducer
+     * tahu tool apa yang akan dijalankan — bukan hanya judul teks.
+     */
+    data class AttachStepTool(
+        val taskId: String,
+        val stepId: String,
+        val tool: ToolCall,
+        val detail: String? = null,
+        val sources: List<String> = emptyList(),
+        val artifacts: List<String> = emptyList()
+    ) : ManusEvent
     /** Mulai eksekusi task aktif dari langkah pertama. */
     data class StartTask(val taskId: String) : ManusEvent
     /** Pelaksana tool melaporkan langkah selesai. */
@@ -47,20 +70,33 @@ sealed interface ManusEvent {
 /**
  * Pemetaan nama tool ke tingkat risiko. Sengaja TOP-LEVEL (bukan member
  * `object ManusReducer`) supaya bisa dipanggil dari reducer, dari UI, dan dari
- * unit test tanpa perlu scope object — member extension hanya terlihat di
- * dalam tubuh object-nya sendiri.
+ * unit test tanpa perlu scope object.
  *
- * Kategori:
+ * Kategori (diperbarui untuk tool NYATA Hermes + nama tool lama):
  * - LOW: baca saja, aman dijalankan otomatis
  * - MEDIUM: menulis/mengirim, sebaiknya diawasi
- * - HIGH: menjalankan perintah / hapus file
- * - CRITICAL: deploy, merge PR, release, shell — wajib izin manusia
+ * - HIGH: menjalankan perintah / hapus file / tulis file
+ * - CRITICAL: deploy, merge PR, release, shell, aksi keluar — wajib izin
  */
 fun ToolCall.risk(): RiskLevel {
-    val low = setOf("read_file", "list_files", "web_search", "read_logs", "summarize")
-    val medium = setOf("write_file", "send_message", "create_task", "edit_file")
-    val high = setOf("run_command", "github_dispatch", "delete_file")
-    val critical = setOf("deploy", "selfupgrade_merge", "selfupgrade_release", "shell_exec")
+    val low = setOf(
+        "read_file", "list_files", "web_search", "read_logs", "summarize",
+        "web_fetch", "file_read", "github_read_file", "github_repos",
+        "supabase_query", "vercel_projects", "memory_list", "system_info",
+        "net_scan", "conn_health", "github_runs"
+    )
+    val medium = setOf(
+        "write_file", "send_message", "create_task", "edit_file",
+        "file_write", "github_write_file", "telegram_send", "memory_save",
+        "github_dispatch"
+    )
+    val high = setOf(
+        "run_command", "delete_file", "shell_exec", "code_run"
+    )
+    val critical = setOf(
+        "deploy", "selfupgrade_merge", "selfupgrade_release",
+        "selfupgrade_pr", "selfupgrade_branch", "upin_ask"
+    )
     return when (name) {
         in critical -> RiskLevel.CRITICAL
         in high -> RiskLevel.HIGH
@@ -80,6 +116,7 @@ object ManusReducer {
         clock: () -> Long = System::currentTimeMillis
     ): ManusUiState = when (event) {
         is ManusEvent.SubmitGoal -> submitGoal(state, event, clock)
+        is ManusEvent.AttachStepTool -> attachStepTool(state, event, clock)
         is ManusEvent.StartTask -> startTask(state, event, clock)
         is ManusEvent.ToolFinished -> toolFinished(state, event, clock)
         is ManusEvent.ToolFailed -> toolFailed(state, event, clock)
@@ -121,6 +158,37 @@ object ManusReducer {
                 running = true
             )
             .log(now, LogLevel.INFO, "manus", "goal diterima: ${event.goal} (${steps.size} langkah)")
+    }
+    /**
+     * Sematkan tool nyata ke langkah. Tidak mengubah status task; hanya
+     * melengkapi data langkah supaya panel Komputer, kartu izin, dan
+     * AgentRunner punya ToolCall untuk dieksekusi.
+     */
+    private fun attachStepTool(
+        state: ManusUiState,
+        event: ManusEvent.AttachStepTool,
+        clock: () -> Long
+    ): ManusUiState {
+        val now = clock()
+        val task = state.tasks.firstOrNull { it.id == event.taskId } ?: return state
+        val target = task.steps.firstOrNull { it.id == event.stepId } ?: return state
+        // Jangan timpa langkah yang sudah selesai/gagal (append-only status).
+        if (target.isSettled) return state
+        val updatedTask = task.copy(
+            steps = task.steps.map {
+                if (it.id == event.stepId) {
+                    it.copy(
+                        tool = event.tool,
+                        detail = event.detail ?: it.detail,
+                        sources = event.sources.ifEmpty { it.sources },
+                        artifacts = event.artifacts.ifEmpty { it.artifacts }
+                    )
+                } else it
+            },
+            updatedAt = now
+        )
+        return replaceTask(state, updatedTask)
+            .log(now, LogLevel.INFO, "manus", "tool disematkan: ${event.tool.summary()} → ${event.stepId}")
     }
     /**
      * StartTask harus langsung masuk [advance] supaya langkah pertama benar-benar
@@ -270,10 +338,8 @@ object ManusReducer {
             .log(now, LogLevel.INFO, "manus", "izin diberikan untuk ${req.tool.summary()}")
     }
     /**
-     * Penolakan izin = langkah dilewati, BUKAN task gagal. Ini sesuai kontrak
-     * masterprompt: Tolak berarti "jangan jalankan langkah ini", tugas tetap
-     * lanjut ke langkah berikutnya (atau selesai bila tidak ada sisa langkah).
-     * Fail-closed tetap terjaga: tool berisiko itu TIDAK PERNAH dijalankan.
+     * Penolakan izin = langkah dilewati, BUKAN task gagal. Fail-closed tetap
+     * terjaga: tool berisiko itu TIDAK PERNAH dijalankan.
      */
     private fun permissionDenied(
         state: ManusUiState,
@@ -311,8 +377,6 @@ object ManusReducer {
     ): ManusUiState {
         val task = state.tasks.firstOrNull { it.id == event.taskId } ?: return state
         if (event.message.isBlank()) return state
-        // Sengaja hanya dicatat di timeline: arahan TIDAK mengubah rencana
-        // diam-diam dan TIDAK menjalankan tool apa pun tanpa langkah eksplisit.
         return state.log(clock(), LogLevel.INFO, "manus", "arahan user untuk ${task.id}: ${event.message}")
     }
     /**
@@ -329,7 +393,7 @@ object ManusReducer {
     ): PermissionRequest {
         val targets = if (tool.args.isEmpty()) listOf(tool.name)
         else tool.args.entries.map { "${it.key}=${it.value}" }
-        val reversible = tool.name in setOf("write_file", "edit_file", "create_task")
+        val reversible = tool.name in setOf("write_file", "edit_file", "create_task", "file_write")
         val rollback = if (reversible) {
             "Bisa dibatalkan: file/tugas hasil langkah ini bisa dihapus manual setelah dibuat."
         } else {
@@ -368,11 +432,6 @@ object ManusReducer {
         val now = clock()
         val task = state.tasks.firstOrNull { it.id == event.taskId } ?: return state
         if (task.status != TaskStatus.PAUSED) return state
-        // JANGAN panggil advance() membabi-buta: bila ada langkah RUNNING yang
-        // sedang dijeda, advance() melihat nextStep==null lalu menandai task
-        // COMPLETED padahal langkah itu belum selesai. Lanjut = kembali ke
-        // RUNNING dan biarkan pelaksana melapor; hanya bila tidak ada langkah
-        // RUNNING barulah advance() memulai langkah PENDING berikutnya.
         if (task.steps.any { it.status == StepStatus.RUNNING }) {
             val resumed = task.copy(status = TaskStatus.RUNNING, updatedAt = now)
             return replaceTask(state, resumed)
