@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -660,6 +661,24 @@ class ChatViewModel @Inject constructor(
                             _state.update { it.copy(error = msg) }
                             ExecutionLog.log("error", "LLM gagal", msg, "fail")
                             postErrorNotif(msg)
+                        }
+                    }
+                    // 14.21: stream yang selesai NORMAL tapi tanpa satu token
+                    // pun tidak boleh hilang tanpa jejak lagi (gejala Jerouter:
+                    // loading lalu hilang, tanpa error). Tampilkan error +
+                    // biarkan tombol Coba lagi (regenerate) bekerja. Cause
+                    // non-null = dibatalkan user (tombol stop) → jangan
+                    // tampilkan error, itu penghentian yang disengaja.
+                    .onCompletion { cause ->
+                        if (cause == null && acc.isEmpty()) {
+                            withContext(Dispatchers.Main) {
+                                if (_state.value.error == null) {
+                                    val msg = "Server tidak mengirim jawaban. " +
+                                        "Coba lagi atau ganti model."
+                                    _state.update { it.copy(error = msg) }
+                                    ExecutionLog.log("error", "LLM gagal", msg, "fail")
+                                }
+                            }
                         }
                     }
                     .collect { token ->

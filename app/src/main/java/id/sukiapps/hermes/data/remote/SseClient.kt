@@ -181,6 +181,11 @@ class SseClient @Inject constructor(
         })
         val limit = maxIterations.coerceIn(1, ToolLoop.HARD_MAX_ITERATIONS)
         var call: okhttp3.Call? = null
+        // Fallback non-streaming hanya SEKALI per pengiriman: Tes Koneksi
+        // (non-streaming) terbukti lolos pada kasus Jerouter yang stream-nya
+        // kosong, jadi satu percobaan ulang tanpa stream lebih berguna
+        // daripada error langsung — tapi tidak boleh berulang tanpa henti.
+        var fallbackAttempted = false
         try {
             var iteration = 0
             var finished = false
@@ -235,6 +240,18 @@ class SseClient @Inject constructor(
                     if (data == "[DONE]") break
                     val chunk = runCatching { JSONObject(data) }.getOrNull()
                         ?: continue
+                    // 14.21: payload error DI DALAM SSE (HTTP 200) sebelumnya
+                    // hanya di-continue diam-diam sampai stream habis tanpa
+                    // token dan tanpa error — sumber "loading lalu hilang".
+                    // Sekarang error itu diteruskan ke UI sebagai exception.
+                    val sseError = chunk.optJSONObject("error")
+                    if (sseError != null) {
+                        val msg = sseError.optString("message", "")
+                            .ifBlank { sseError.toString().take(200) }
+                        resp.close()
+                        close(AIHttpException("Server menolak: $msg"))
+                        return@callbackFlow
+                    }
                     val delta = chunk.optJSONArray("choices")
                         ?.optJSONObject(0)
                         ?.optJSONObject("delta")
@@ -260,7 +277,27 @@ class SseClient @Inject constructor(
                 }
                 resp.close()
                 if (pending.isEmpty()) {
-                    finished = true
+                    if (iterText.isNotEmpty()) {
+                        finished = true
+                    } else if (!fallbackAttempted) {
+                        // 14.21: stream selesai dengan NOL token dan tanpa
+                        // tool_call — jangan diam. Sekali saja, ulangi
+                        // request yang sama TANPA stream (jalur yang dipakai
+                        // Tes Koneksi dan terbukti lolos) dan tampilkan
+                        // hasilnya sebagai token biasa.
+                        fallbackAttempted = true
+                        val text = fetchNonStreamingText(baseUrl, req, messages)
+                        trySend(text)
+                        finished = true
+                    } else {
+                        close(
+                            AIHttpException(
+                                "Server tidak mengirim jawaban. " +
+                                    "Coba lagi atau ganti model."
+                            )
+                        )
+                        return@callbackFlow
+                    }
                 } else {
                     val assistantMsg = buildJsonObject {
                         put("role", "assistant")
@@ -305,6 +342,61 @@ class SseClient @Inject constructor(
             }
         }
         awaitClose { call?.cancel() }
+    }
+
+    /**
+     * 14.21: satu request non-streaming dengan konteks pesan yang sama
+     * (tanpa tools). Dipakai SEKALI sebagai fallback saat stream selesai
+     * tanpa token — jalur ini identik dengan yang dipakai Tes Koneksi
+     * (validateModel), sehingga bila server memang menolak streaming untuk
+     * model tersebut, user tetap mendapat jawaban, bukan layar kosong.
+     * Melempar [AIHttpException] bila HTTP gagal atau isi tetap kosong.
+     */
+    private fun fetchNonStreamingText(
+        baseUrl: String,
+        req: ChatRequest,
+        messages: List<kotlinx.serialization.json.JsonElement>
+    ): String {
+        val body = buildJsonObject {
+            put("model", req.model)
+            put("messages", buildJsonArray { addAll(messages) })
+            put("stream", false)
+            req.temperature?.let { put("temperature", it) }
+            req.topP?.let { put("top_p", it) }
+            req.maxTokens?.let { if (it > 0) put("max_tokens", it) }
+        }
+        val request = Request.Builder()
+            .url(baseUrl.trimEnd('/') + "/chat/completions")
+            .post(body.toString().toRequestBody(mediaType))
+            .build()
+        client.newCall(request).execute().use { resp ->
+            if (!resp.isSuccessful) {
+                val errBody = try {
+                    resp.body?.string()?.take(300) ?: ""
+                } catch (_: Exception) {
+                    ""
+                }
+                throw AIHttpException(mapHttpError(resp.code, errBody))
+            }
+            val text = try {
+                resp.body?.string().orEmpty()
+            } catch (_: Exception) {
+                ""
+            }
+            val content = runCatching { JSONObject(text) }
+                .getOrNull()
+                ?.optJSONArray("choices")
+                ?.optJSONObject(0)
+                ?.optJSONObject("message")
+                ?.optString("content", "")
+                .orEmpty()
+            if (content.isBlank()) {
+                throw AIHttpException(
+                    "Server tidak mengirim jawaban. Coba lagi atau ganti model."
+                )
+            }
+            return content
+        }
     }
 
     /** Mapping error HTTP → pesan Indonesia (dipertahankan dari legacy). */
