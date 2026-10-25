@@ -230,7 +230,9 @@ class MainActivity : ComponentActivity() {
                             onOpenAktivitas = { nav.navigate(Nav.AKTIVITAS) },
                             onOpenMintaFitur = { nav.navigate(Nav.MINTA_FITUR) },
                             onOpenAudit = { nav.navigate(Nav.AUDIT) },
-                    onOpenV12Hub = { nav.navigate(Nav.V12_HUB) }
+                    onOpenV12Hub = { nav.navigate(Nav.V12_HUB) },
+                    // 14.20: kartu Manus di chat membuka layar Manus langsung.
+                    onOpenManus = { nav.navigate(Nav.MANUS) }
                         )
                     }
                     composable(Nav.SETTINGS) {
