@@ -55,7 +55,18 @@ data class UiMessage(
     val timestamp: Long = 0L,
     val role: String, // "user" | "assistant"
     val content: String,
-    val attachmentSummary: String? = null
+    val attachmentSummary: String? = null,
+    // 14.23 — bubble chat: semua opsional, default null supaya pemetaan
+    // lama (ChatViewModel baris ~183) tetap kompilasi tanpa perubahan.
+    // Produsennya bertahap: kartu persetujuan sudah terhubung penuh di
+    // ChatScreen; kutipan, reaksi, opsi, dan metadata berkas dirender
+    // bila datanya ada (produsen balasan/reaksi/file-share menyusul).
+    val replyToId: Long? = null,
+    val replyToSnippet: String? = null,
+    val reaction: String? = null,
+    val options: List<String>? = null,
+    val selectedOption: Int? = null,
+    val fileMeta: FileMeta? = null
 )
 
 data class ChatUiState(

@@ -18,6 +18,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,11 +42,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -62,6 +65,7 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -86,7 +90,6 @@ import id.sukiapps.hermes.ui.history.HistoryViewModel
 import id.sukiapps.hermes.ui.live.LiveActivityBar
 import id.sukiapps.hermes.ui.live.LiveStatus
 import id.sukiapps.hermes.ui.live.LiveStatusBus
-import id.sukiapps.hermes.ui.manus.ManusPermissionDialog
 import id.sukiapps.hermes.ui.manus.ManusViewModel
 import id.sukiapps.hermes.ui.theme.PillShape
 import kotlinx.coroutines.launch
@@ -459,18 +462,65 @@ fun HermesChatScreen(
         ) { pad ->
             val listState = rememberLazyListState()
             val all = state.messages
-            // Auto-scroll ke bawah saat pesan/stream bertambah.
+            val pendingPermission = manusState.pendingPermission
+            // 14.23: daftar tampil = pesan + pemisah tanggal per hari.
+            val displayItems = remember(all) { buildChatListItems(all) }
+            // Indeks item terakhir di LazyColumn (termasuk streaming/upin).
+            fun lastIndex(): Int {
+                var n = displayItems.size
+                if (state.isStreaming) n += 1
+                if (state.upinBusy) n += 1
+                return n - 1
+            }
+            // Posisi bawah: item terakhir terlihat == item terakhir daftar.
+            val atBottom by remember {
+                derivedStateOf {
+                    val info = listState.layoutInfo
+                    val last = info.visibleItemsInfo.lastOrNull()?.index
+                    last != null && last >= info.totalItemsCount - 1
+                }
+            }
+            var unreadCount by remember { mutableStateOf(0) }
+            var firstLoadDone by remember { mutableStateOf(false) }
+            var prevSize by remember { mutableStateOf(0) }
+            // 14.23: auto-scroll BERGATING (pengganti tanpa syarat).
+            // Muat pertama selalu ke bawah (perilaku chat standar).
+            // Setelah itu: scroll hanya bila sudah di bawah; bila sedang
+            // membaca di atas, pesan baru menambah hitungan pil, bukan
+            // merebut scroll. Berlaku juga untuk streaming.
             LaunchedEffect(all.size, state.streamingText.length, state.upinBusy) {
-                if (all.isNotEmpty() || state.streamingText.isNotEmpty()) {
-                    val target = if (state.streamingText.isNotEmpty()) all.size else all.size - 1
-                    if (target >= 0) listState.animateScrollToItem(target)
+                val oldSize = prevSize
+                prevSize = all.size
+                val grew = all.size - oldSize
+                val target = lastIndex()
+                if (target < 0) return@LaunchedEffect
+                if (!firstLoadDone) {
+                    firstLoadDone = true
+                    unreadCount = 0
+                    listState.animateScrollToItem(target)
+                } else if (atBottom) {
+                    unreadCount = 0
+                    listState.animateScrollToItem(target)
+                } else if (grew > 0) {
+                    unreadCount += grew
                 }
             }
             val showEmpty = all.isEmpty() &&
                 state.streamingText.isEmpty() &&
                 !state.upinBusy
-            Column(
+            fun jumpToMessage(id: Long) {
+                val index = displayItems.indexOfFirst {
+                    it is ChatListItem.Message && it.message.id == id
+                }
+                if (index >= 0) {
+                    scope.launch { listState.animateScrollToItem(index) }
+                }
+            }
+            Box(
                 modifier = Modifier.fillMaxSize().padding(pad)
+            ) {
+            Column(
+                modifier = Modifier.fillMaxSize()
             ) {
                 Box(
                     modifier = Modifier.fillMaxWidth(),
@@ -493,9 +543,16 @@ fun HermesChatScreen(
                 // Default mati; status tugas aktif ditampilkan jujur.
                 AgentModePill(
                     checked = agentMode,
-                    status = manusState.activeTask?.let {
-                        "Mode Agen • ${agentTaskStatusLabel(it.status)}"
-                    } ?: "Mode Agen",
+                    status = when {
+                        pendingPermission != null ->
+                            "Mode Agen • Butuh persetujuan"
+                        manusState.activeTask != null ->
+                            "Mode Agen • " +
+                                agentTaskStatusLabel(
+                                    manusState.activeTask!!.status
+                                )
+                        else -> "Mode Agen"
+                    },
                     onCheckedChange = { agentMode = it }
                 )
                 // Kartu timeline tugas agen inline — RINGKAS (goal, progres,
@@ -533,26 +590,80 @@ fun HermesChatScreen(
                             .weight(1f)
                             .padding(vertical = 8.dp)
                     ) {
-                        items(all, key = { it.id }) { m ->
-                            val isLastAssistant = !state.isStreaming &&
-                                m.role == "assistant" &&
-                                all.lastOrNull { it.role == "assistant" }?.id == m.id
-                            MessageBubble(
-                                message = m,
-                                isLastAssistant = isLastAssistant,
-                                isSpeaking = speakingId == m.id && tts.isSpeaking,
-                                onSpeak = { speak(m) },
-                                onStopSpeak = {
-                                    tts.stop()
-                                    speakingId = null
-                                },
-                                onEdit = {
-                                    editingMsg = m
-                                    editText = m.content
-                                },
-                                onRegenerate = { chatVm.regenerate() },
-                                modifier = Modifier.padding(vertical = 4.dp)
-                            )
+                        items(displayItems, key = { it.key }) { item ->
+                            when (item) {
+                                is ChatListItem.DateSeparator -> {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 8.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Surface(
+                                            shape = PillShape,
+                                            color = MaterialTheme.colorScheme.surfaceVariant
+                                        ) {
+                                            Text(
+                                                text = item.label,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(
+                                                    horizontal = 12.dp,
+                                                    vertical = 4.dp
+                                                )
+                                            )
+                                        }
+                                    }
+                                }
+                                is ChatListItem.Message -> {
+                                    val m = item.message
+                                    val isLastAssistant = !state.isStreaming &&
+                                        m.role == "assistant" &&
+                                        all.lastOrNull {
+                                            it.role == "assistant"
+                                        }?.id == m.id
+                                    MessageBubble(
+                                        message = m,
+                                        isLastAssistant = isLastAssistant,
+                                        isSpeaking = speakingId == m.id &&
+                                            tts.isSpeaking,
+                                        onSpeak = { speak(m) },
+                                        onStopSpeak = {
+                                            tts.stop()
+                                            speakingId = null
+                                        },
+                                        onEdit = {
+                                            editingMsg = m
+                                            editText = m.content
+                                        },
+                                        onRegenerate = { chatVm.regenerate() },
+                                        onJumpToReply = { jumpToMessage(it) },
+                                        onOptionSelect = { chatVm.send(it) },
+                                        modifier = Modifier.padding(vertical = 3.dp)
+                                    )
+                                }
+                            }
+                        }
+                        // 14.23: kartu persetujuan agen INLINE di alur chat
+                        // (menggantikan dialog modal di chat utama; tab
+                        // Agent tetap memakai dialog). Callback dan teks
+                        // kontrak keamanan sama dengan dialog.
+                        pendingPermission?.let { req ->
+                            item(key = "approval:${req.taskId}") {
+                                ChatApprovalCard(
+                                    request = req,
+                                    onGrant = {
+                                        manusVm.grantPermission(req.taskId)
+                                    },
+                                    onDeny = {
+                                        manusVm.denyPermission(req.taskId)
+                                    },
+                                    modifier = Modifier.padding(
+                                        horizontal = 16.dp,
+                                        vertical = 4.dp
+                                    )
+                                )
+                            }
                         }
                         if (state.isStreaming) {
                             item(key = "streaming") {
@@ -586,18 +697,75 @@ fun HermesChatScreen(
                         }
                     }
                 }
+                // 14.23: pil pesan-baru di atas composer — hanya saat ada
+                // pesan baru dan pengguna sedang membaca di atas.
+                if (!showEmpty && unreadCount > 0 && !atBottom) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Surface(
+                            shape = PillShape,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier
+                                .clip(PillShape)
+                                .clickable {
+                                    unreadCount = 0
+                                    scope.launch {
+                                        val target = lastIndex()
+                                        if (target >= 0) {
+                                            listState.animateScrollToItem(target)
+                                        }
+                                    }
+                                }
+                        ) {
+                            Text(
+                                text = "↓ $unreadCount pesan baru",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onTertiary,
+                                modifier = Modifier.padding(
+                                    horizontal = 16.dp,
+                                    vertical = 8.dp
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+            // 14.23: FAB scroll ke bawah — hanya saat tidak di bawah.
+            // Aksen Pasir (tertiary): kontras ≥4,5:1 di terang (6,18:1
+            // vs putih) maupun gelap; sentuh 56 dp (≥48 dp).
+            if (!showEmpty && !atBottom) {
+                FloatingActionButton(
+                    onClick = {
+                        unreadCount = 0
+                        scope.launch {
+                            val target = lastIndex()
+                            if (target >= 0) {
+                                listState.animateScrollToItem(target)
+                            }
+                        }
+                    },
+                    containerColor = MaterialTheme.colorScheme.tertiary,
+                    contentColor = MaterialTheme.colorScheme.onTertiary,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 16.dp, bottom = 16.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.ArrowDownward,
+                        contentDescription = "Gulir ke bawah"
+                    )
+                }
+            }
             }
         }
     }
-    // Kartu izin Manus — SAMA dengan tab Agent (langkah HIGH/CRITICAL
-    // berhenti di sini, tidak auto-jalan dari chat utama).
-    manusState.pendingPermission?.let { req ->
-        ManusPermissionDialog(
-            request = req,
-            onGrant = { manusVm.grantPermission(req.taskId) },
-            onDeny = { manusVm.denyPermission(req.taskId) }
-        )
-    }
+    // 14.23: kartu izin agen kini INLINE di daftar chat (item approval
+    // di atas); dialog modal di chat utama dihapus. Tab Agent tetap
+    // memakai ManusPermissionDialog seperti sebelumnya.
     // Dialog edit pesan.
     editingMsg?.let { m ->
         AlertDialog(
