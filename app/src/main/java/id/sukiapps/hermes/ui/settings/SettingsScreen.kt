@@ -760,8 +760,12 @@ fun SettingsScreen(
                     }
                 }
                 Text(
-                    "Batas sesi Mode Agen (chat). Token = estimasi atas isi " +
-                        "percakapan (provider tidak mengirim usage asli).",
+                    "Batas sesi Mode Agen (chat). Batas ini DITEGAKKAN " +
+                        "di jalur agen: tugas berhenti dengan alasan " +
+                        "batas bila iterasi/timeout/budget terlampaui. " +
+                        "Token: bila provider mengirim usage, angka asli " +
+                        "itu yang dipakai; bila tidak, estimasi kasar " +
+                        "(panjang ÷ 4).",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -68,7 +68,28 @@ enum class RiskLevel {
         get() = this != LOW
 }
 
-/** Satu pemanggilan tool beserta argumennya. Argumen sengaja flat string. */
+/**
+ * Batas sesi Mode Agen (14.27, B6+B8): nilai murni tanpa Android supaya
+ * [AgentRunner] bisa menegakkannya — [AgentLimits] (SharedPreferences)
+ * hanya dibaca di ViewModel lalu diteruskan ke sini sebagai nilai.
+ * Satu "iterasi" = satu eksekusi langkah; timeout dihitung dari
+ * dimulainya satu pemanggilan runTask (jeda tidak dihitung, karena
+ * pelaksana memang tidak berjalan saat dijeda).
+ */
+data class SessionLimits(
+    val maxIterations: Int = 10,
+    val timeoutMs: Long = 5 * 60_000L,
+    val tokenBudget: Int = 100_000
+)
+
+/**
+ * Estimasi token kasar untuk jalur agen (14.27): panjang teks / 4.
+ * Sengaja diduplikasi dari Markdown.estimateTokens (jalur chat) karena
+ * modul domain tidak boleh bergantung ke renderer Compose — rumusnya
+ * sama, dan keduanya didokumentasikan sebagai ESTIMASI, bukan usage
+ * asli. Dipakai hanya bila provider tidak mengirim field `usage`.
+ */
+fun estimateSessionTokens(text: String): Int = (text.length / 4).coerceAtLeast(0)
 @Serializable
 data class ToolCall(
     val name: String,
@@ -139,8 +160,44 @@ data class AgentTask(
     /** 14.24: alasan status PARTIAL (verifikasi jujur). */
     val partialReason: String? = null,
     /** 14.24: daftar yang kurang agar tugas PARTIAL bisa disebut selesai. */
-    val missingItems: List<String> = emptyList()
+    val missingItems: List<String> = emptyList(),
+    /**
+     * 14.27 (B8): usage planner dari respons provider — total/prompt/
+     * completion dari field `usage` OpenAI-compatible. null = provider
+     * tidak mengirim usage (saat itu angka token adalah estimasi kasar).
+     */
+    val plannerUsageTotal: Int? = null,
+    val plannerUsagePrompt: Int? = null,
+    val plannerUsageCompletion: Int? = null,
+    /**
+     * 14.27 (B6): pemakaian token berjalan sesi ini — diawali usage
+     * planner bila ada (asli), lalu ditambah estimasi output tiap
+     * langkah. Dipakai penegakan budget DAN tampilan kartu.
+     */
+    val tokensUsed: Int = 0,
+    /** 14.27: true bila angka awal tokensUsed berasal dari usage asli. */
+    val tokensReal: Boolean = false
 ) {
+    /**
+     * 14.27: satu baris usage untuk kartu/ringkasan, atau null bila
+     * belum ada angka sama sekali. Jujur soal asal angka: usage asli
+     * provider disebut "asli", sisanya "estimasi kasar" — tidak pernah
+     * tampil seolah presisi.
+     */
+    fun usageLine(): String? {
+        if (tokensUsed <= 0 && plannerUsageTotal == null) return null
+        return if (tokensReal && plannerUsageTotal != null) {
+            val parts = StringBuilder("Token: $tokensUsed")
+            parts.append(" (planner asli: $plannerUsageTotal")
+            if (plannerUsagePrompt != null && plannerUsageCompletion != null) {
+                parts.append(", prompt $plannerUsagePrompt + completion $plannerUsageCompletion")
+            }
+            parts.append(")")
+            parts.toString()
+        } else {
+            "Token: ~$tokensUsed (estimasi kasar)"
+        }
+    }
     /** Progress 0f..1f dari langkah yang sudah selesai. */
     val progress: Float
         get() = if (steps.isEmpty()) 0f

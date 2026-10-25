@@ -85,6 +85,16 @@ fun ManusTaskCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            // 14.27 (B8): baris usage — asli bila provider mengirim
+            // usage, estimasi kasar bila tidak. Tidak pernah tampil
+            // seolah presisi.
+            task.usageLine()?.let { usage ->
+                Text(
+                    text = usage,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             Text(
                 text = countText,
                 style = MaterialTheme.typography.bodySmall

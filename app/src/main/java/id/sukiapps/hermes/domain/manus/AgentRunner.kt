@@ -87,14 +87,39 @@ class AgentRunner(
      * [requestStop] dipanggil. State dibaca ulang setiap iterasi melalui
      * [stateProvider] supaya keputusan (pause, batal, langkah baru) selalu
      * berbasis snapshot terbaru, bukan state basi saat loop dimulai.
+     *
+     * 14.27 (B6): batas sesi [limits] DITEGAKKAN di sini — bukan hanya
+     * ditampilkan di Pengaturan. Sebelum tiap langkah: iterasi sesi
+     * (langkah yang sudah settled saat loop dimulai + yang dieksekusi
+     * loop ini), timeout sejak loop dimulai, dan budget token
+     * (task.tokensUsed berjalan). Batas apa pun yang terlampaui →
+     * [ManusEvent.LimitReached] (STOPPED + alasan eksplisit) dan loop
+     * berhenti. Pemeriksaan timeout/budget juga jalan di jalur tunggu
+     * (tidak ada langkah RUNNING) supaya tugas yang menggantung tetap
+     * berhenti di batasnya, bukan jalan selamanya.
+     * Setelah tiap langkah selesai, estimasi outputnya ditambahkan ke
+     * tokensUsed lewat [ManusEvent.UsageUpdated] (estimasi kasar —
+     * angka asli hanya datang dari usage planner, lihat B8).
      */
-    suspend fun runTask(taskId: String, stateProvider: () -> ManusUiState?) {
+    suspend fun runTask(
+        taskId: String,
+        stateProvider: () -> ManusUiState?,
+        limits: SessionLimits = SessionLimits()
+    ) {
         if (running) {
             Log.w(TAG, "runTask ditolak: runner sudah menjalankan tugas lain.")
             return
         }
         running = true
         stopRequested = false
+        val runStartMs = System.currentTimeMillis()
+        var executedThisRun = 0
+        // Langkah yang sudah settled sebelum loop ini = eksekusi sesi
+        // sebelumnya (relevan saat resume: batas iterasi bersifat
+        // per sesi, bukan per pemanggilan runTask).
+        val settledAtStart = stateProvider()?.tasks
+            ?.firstOrNull { it.id == taskId }
+            ?.steps?.count { it.isSettled } ?: 0
         try {
             while (true) {
                 if (stopRequested) {
@@ -103,6 +128,25 @@ class AgentRunner(
                 }
                 val snapshot = stateProvider() ?: break
                 val task = snapshot.tasks.firstOrNull { it.id == taskId } ?: break
+
+                // 14.27: penegakan batas sesi (berlaku untuk semua
+                // jalur tunggu/eksekusi di bawah, kecuali VERIFYING —
+                // tugas yang langkahnya sudah habis tetap boleh
+                // diverifikasi meski batas baru saja terlampaui).
+                if (task.status != TaskStatus.VERIFYING) {
+                    val now = System.currentTimeMillis()
+                    val limitReason = when {
+                        now - runStartMs > limits.timeoutMs ->
+                            "Timeout sesi tercapai (${limits.timeoutMs / 60_000} menit)"
+                        task.tokensUsed >= limits.tokenBudget ->
+                            "Budget token tercapai (${task.tokensUsed}/${limits.tokenBudget})"
+                        else -> null
+                    }
+                    if (limitReason != null) {
+                        onEvent(ManusEvent.LimitReached(taskId, limitReason))
+                        break
+                    }
+                }
 
                 // 14.22: gerbang bukti. Semua langkah habis (VERIFYING):
                 // runner memverifikasi, lalu dispatch hasil; loop berhenti
@@ -148,8 +192,30 @@ class AgentRunner(
                     continue
                 }
 
+                // 14.27: batas iterasi dicek tepat sebelum eksekusi.
+                if (settledAtStart + executedThisRun >= limits.maxIterations) {
+                    onEvent(
+                        ManusEvent.LimitReached(
+                            taskId,
+                            "Batas iterasi tercapai (${settledAtStart + executedThisRun}/${limits.maxIterations})"
+                        )
+                    )
+                    break
+                }
                 val ok = executeStep(taskId, runningStep.id, runningStep.tool)
                 if (!ok) break // gagal: reducer sudah menandai task FAILED
+                executedThisRun++
+                // 14.27: tambah estimasi output langkah ke tokensUsed.
+                val fresh = stateProvider()?.tasks?.firstOrNull { it.id == taskId }
+                val out = fresh?.steps?.firstOrNull { it.id == runningStep.id }?.output
+                if (!out.isNullOrBlank() && fresh != null) {
+                    onEvent(
+                        ManusEvent.UsageUpdated(
+                            taskId,
+                            fresh.tokensUsed + estimateSessionTokens(out)
+                        )
+                    )
+                }
 
                 // Jeda kecil supaya timeline terasa hidup dan tidak membanjiri
                 // device entry-level.

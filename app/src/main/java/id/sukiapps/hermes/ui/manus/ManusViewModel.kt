@@ -17,7 +17,9 @@ import id.sukiapps.hermes.domain.manus.ManusUiState
 import id.sukiapps.hermes.domain.manus.PlanValidator
 import id.sukiapps.hermes.domain.manus.PlannedStep
 import id.sukiapps.hermes.domain.manus.ProviderChain
+import id.sukiapps.hermes.domain.manus.SessionLimits
 import id.sukiapps.hermes.domain.manus.StepStatus
+import id.sukiapps.hermes.domain.manus.estimateSessionTokens
 import id.sukiapps.hermes.domain.manus.TaskStatus
 import id.sukiapps.hermes.domain.manus.ToolCall
 import id.sukiapps.hermes.tool.ToolLoop
@@ -197,11 +199,21 @@ class ManusViewModel @Inject constructor(
                 return@launch
             }
             // Ganti placeholder dengan rencana nyata, lalu sematkan tool.
+            // 14.27 (B8): usage planner asli (bila provider mengirimnya)
+            // dicatat di task; token awal sesi = usage asli itu, atau
+            // estimasi kasar atas goal + judul rencana bila tidak ada.
+            val plannerUsage = llm as? LlmPlanResult.Success
+            val planText = goal + "\n" + plan.joinToString("\n") { it.title }
             dispatch(
                 ManusEvent.ReplacePlan(
                     taskId = taskId,
                     plan = plan.map { it.title },
-                    planLabel = label
+                    planLabel = label,
+                    usageTotal = plannerUsage?.usageTotal,
+                    usagePrompt = plannerUsage?.usagePrompt,
+                    usageCompletion = plannerUsage?.usageCompletion,
+                    initialTokens = plannerUsage?.usageTotal
+                        ?: estimateSessionTokens(planText)
                 )
             )
             plan.forEachIndexed { index, step ->
@@ -244,13 +256,22 @@ class ManusViewModel @Inject constructor(
      * Dipanggil setelah StartTask, PermissionGranted, ResumeTask, dan setiap
      * kali ToolFinished memicu advance() — supaya loop pelaksana selalu
      * bekerja dari snapshot terbaru, bukan state basi.
+     * 14.27 (B6): batas sesi dibaca SEGAR dari Pengaturan tiap kali
+     * runner dimulai, lalu ditegakkan di dalam runTask — bukan hanya
+     * ditampilkan di Settings.
      */
     private fun ensureRunner(taskId: String?) {
         if (taskId == null) return
         val task = _state.value.tasks.firstOrNull { it.id == taskId } ?: return
         if (task.status != TaskStatus.RUNNING && task.status != TaskStatus.VERIFYING) return
+        val limitsNow = id.sukiapps.hermes.data.agent.AgentLimits.get(appCtx)
+        val limits = SessionLimits(
+            maxIterations = limitsNow.maxIterations,
+            timeoutMs = limitsNow.timeoutMs,
+            tokenBudget = limitsNow.tokenBudget
+        )
         viewModelScope.launch {
-            runner.runTask(taskId) { _state.value }
+            runner.runTask(taskId, { _state.value }, limits)
         }
     }
 

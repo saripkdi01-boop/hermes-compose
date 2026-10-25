@@ -38,6 +38,11 @@ fun manusSummary(task: AgentTask): String {
     if (prep > 0) head.append(" (+ $prep persiapan)")
     val extra = ArrayList<String>()
     if (task.planLabel.isNotBlank()) extra += "Rencana: ${task.planLabel}"
+    // 14.27 (B8): usage di ringkasan — asli bila provider mengirimnya.
+    task.usageLine()?.let { extra += it }
+    if (task.status == TaskStatus.STOPPED && !task.stopReason.isNullOrBlank()) {
+        extra += "Alasan berhenti: ${task.stopReason}"
+    }
     if (task.status == TaskStatus.COMPLETED && task.isFallbackPlan) {
         extra += "⚠ Rencana fallback (tanpa LLM) — hasil belum tentu tuntas, periksa kembali."
     }
