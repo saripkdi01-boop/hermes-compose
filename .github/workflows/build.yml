@@ -73,7 +73,7 @@ jobs:
     run: |
           # Pitfall 2026-10-25 (run #145): langkah ini jalan di bash -e, jadi bila rilis $TAG belum ada, gh gagal dan shell mati SEBELUM mencapai cabang skip di bawah. || echo "" membuat rilis yang hilang = IS_DRAFT kosong = skip.
           IS_DRAFT=$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null || echo "")
-        if [ "$IS_DRAFT" != "true" ]; then
+          if [ "$IS_DRAFT" != "true" ]; then
             echo "Draft release $TAG belum ada atau sudah publish — skip upload."
             exit 0
           fi
