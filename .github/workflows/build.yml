@@ -5,6 +5,8 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -48,3 +50,33 @@ jobs:
           name: unit-test-reports
           path: app/build/reports/tests/testReleaseUnitTest/
           if-no-files-found: warn
+      # Pipeline tanda tangan dipisah: CI hanya memproduksi APK unsigned
+      # lalu menempelkannya ke draft release. Tanda tangan dilakukan
+      # maintainer di Muse dengan keystore lokal — kunci tidak pernah
+      # masuk CI, tidak jadi secret, tidak bisa bocor lewat log runner.
+      - name: Resolve versi
+        id: ver
+        run: |
+          VNAME=$(sed -n 's/.*versionName[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' app/build.gradle.kts | head -1)
+          VCODE=$(sed -n 's/.*versionCode[[:space:]]*=[[:space:]]*\([0-9]*\).*/\1/p' app/build.gradle.kts | head -1)
+          if [ -z "$VNAME" ] || [ -z "$VCODE" ]; then
+            echo "::error::gagal baca versionName/versionCode dari app/build.gradle.kts"
+            exit 1
+          fi
+          echo "name=$VNAME" >> "$GITHUB_OUTPUT"
+          echo "code=$VCODE" >> "$GITHUB_OUTPUT"
+      - name: Tempel APK unsigned ke draft release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ steps.ver.outputs.name }}
+        run: |
+          IS_DRAFT=$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null)
+          if [ "$IS_DRAFT" != "true" ]; then
+            echo "Draft release $TAG belum ada atau sudah publish — skip upload."
+            exit 0
+          fi
+          gh release upload "$TAG" \
+            app/build/outputs/apk/release/app-release-unsigned.apk \
+            --clobber --name app-release-unsigned.apk
+          echo "APK unsigned (versionCode=${{ steps.ver.outputs.code }}) nempel di $TAG"
