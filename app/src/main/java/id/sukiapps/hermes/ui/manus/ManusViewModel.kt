@@ -186,7 +186,8 @@ class ManusViewModel @Inject constructor(
                         taskId = taskId,
                         stepId = "$taskId-s${index + 1}",
                         tool = ToolCall(name = step.toolName, args = step.args.toStringMap()),
-                        detail = step.detail
+                        detail = step.detail,
+                        isPreparation = step.isPreparation
                     )
                 )
             }
@@ -255,6 +256,7 @@ class ManusViewModel @Inject constructor(
                 is ManusEvent.CancelTask -> it.id == event.taskId
                 is ManusEvent.VerificationPassed -> it.id == event.taskId
                 is ManusEvent.VerificationFailed -> it.id == event.taskId
+                is ManusEvent.VerificationPartial -> it.id == event.taskId
                 else -> false
             }
         }

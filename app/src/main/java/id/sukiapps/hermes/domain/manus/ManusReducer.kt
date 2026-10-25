@@ -28,7 +28,9 @@ sealed interface ManusEvent {
         val tool: ToolCall,
         val detail: String? = null,
         val sources: List<String> = emptyList(),
-        val artifacts: List<String> = emptyList()
+        val artifacts: List<String> = emptyList(),
+        /** 14.24: true bila langkah ini hanya persiapan (bukan hasil). */
+        val isPreparation: Boolean = false
     ) : ManusEvent
     /** Mulai eksekusi task aktif dari langkah pertama. */
     data class StartTask(val taskId: String) : ManusEvent
@@ -79,6 +81,17 @@ sealed interface ManusEvent {
     data class VerificationPassed(val taskId: String, val evidence: String) : ManusEvent
     /** 14.22: gerbang verifikasi gagal — hanya dari VERIFYING → STOPPED. */
     data class VerificationFailed(val taskId: String, val reason: String) : ManusEvent
+    /**
+     * 14.24: gerbang verifikasi sebagian — hanya dari VERIFYING → PARTIAL.
+     * Tugas berjalan sampai habis tapi hasilnya tidak cukup membuktikan
+     * goal tercapai. BUKAN COMPLETED dan BUKAN FAILED: capaian tercatat,
+     * `missing` menjelaskan apa yang kurang.
+     */
+    data class VerificationPartial(
+        val taskId: String,
+        val reason: String,
+        val missing: List<String> = emptyList()
+    ) : ManusEvent
     /** 14.22: lanjutkan tugas STOPPED (verifikasi ulang / langkah tersisa). */
     data class ResumeStopped(val taskId: String) : ManusEvent
     /** Bersihkan riwayat task yang sudah selesai. */
@@ -149,6 +162,7 @@ object ManusReducer {
         is ManusEvent.ReplacePlan -> replacePlan(state, event, clock)
         is ManusEvent.VerificationPassed -> verificationPassed(state, event, clock)
         is ManusEvent.VerificationFailed -> verificationFailed(state, event, clock)
+        is ManusEvent.VerificationPartial -> verificationPartial(state, event, clock)
         is ManusEvent.ResumeStopped -> resumeStopped(state, event, clock)
         ManusEvent.ClearHistory -> clearHistory(state)
     }
@@ -202,7 +216,8 @@ object ManusReducer {
                         tool = event.tool,
                         detail = event.detail ?: it.detail,
                         sources = event.sources.ifEmpty { it.sources },
-                        artifacts = event.artifacts.ifEmpty { it.artifacts }
+                        artifacts = event.artifacts.ifEmpty { it.artifacts },
+                        isPreparation = event.isPreparation
                     )
                 } else it
             },
@@ -554,6 +569,25 @@ object ManusReducer {
         )
         return replaceTask(state, stopped)
             .log(now, LogLevel.WARN, "manus", "task ${task.id} TERHENTI: ${event.reason}")
+    }
+
+    /** 14.24: hanya dari VERIFYING — hasil sebagian, tugas SELESAI SEBAGIAN. */
+    private fun verificationPartial(
+        state: ManusUiState,
+        event: ManusEvent.VerificationPartial,
+        clock: () -> Long
+    ): ManusUiState {
+        val now = clock()
+        val task = state.tasks.firstOrNull { it.id == event.taskId } ?: return state
+        if (task.status != TaskStatus.VERIFYING) return state
+        val partial = task.copy(
+            status = TaskStatus.PARTIAL,
+            partialReason = event.reason,
+            missingItems = event.missing,
+            updatedAt = now
+        )
+        return replaceTask(state, partial)
+            .log(now, LogLevel.WARN, "manus", "task ${task.id} SELESAI SEBAGIAN: ${event.reason}")
     }
 
     /**

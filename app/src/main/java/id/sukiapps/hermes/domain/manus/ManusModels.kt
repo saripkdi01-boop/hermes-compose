@@ -19,6 +19,16 @@ enum class TaskStatus {
     FAILED,
     CANCELLED,
     /**
+     * 14.24: verifikasi jujur. Terminal, tapi BUKAN COMPLETED: tugas
+     * berjalan sampai habis, namun hasilnya tidak cukup membuktikan goal
+     * tercapai (mis. audit tanpa temuan, atau hanya langkah persiapan
+     * yang selesai). `partialReason` + `missingItems` menjelaskan apa
+     * yang kurang — kartu TIDAK boleh menampilkan TERVERIFIKASI untuk
+     * status ini. User memulai tugas baru untuk melengkapi, bukan
+     * menekan Lanjutkan (verifikasi ulang tidak mengubah bukti yang ada).
+     */
+    PARTIAL,
+    /**
      * 14.22: verifikasi bukti GAGAL. Terminal, tapi bukan FAILED biasa:
      * capaian tetap tercatat dan user bisa menekan "Lanjutkan" untuk
      * mencoba lagi (verifikasi ulang / langkah tersisa).
@@ -87,7 +97,15 @@ data class AgentStep(
     /** Bukti langkah untuk panel Komputer: penjelasan, sumber, dan file hasil. */
     val detail: String? = null,
     val sources: List<String> = emptyList(),
-    val artifacts: List<String> = emptyList()
+    val artifacts: List<String> = emptyList(),
+    /**
+     * 14.24: true bila langkah ini HANYA persiapan (snapshot lingkungan,
+     * riset web generik) — bukan hasil yang menjawab goal. Langkah
+     * persiapan tidak dihitung "selesai" oleh kartu/ringkasan dan tidak
+     * dihitung sebagai bukti hasil oleh TaskVerifier. Default false
+     * supaya simpanan lama (tanpa field ini) tetap terbaca.
+     */
+    val isPreparation: Boolean = false
 ) {
     val isSettled: Boolean
         get() = status == StepStatus.DONE || status == StepStatus.FAILED ||
@@ -117,7 +135,11 @@ data class AgentTask(
     /** 14.22: bukti verifikasi, hanya diisi bila COMPLETED lewat gerbang. */
     val verificationEvidence: String? = null,
     /** 14.22: alasan verifikasi gagal, hanya diisi bila STOPPED. */
-    val stopReason: String? = null
+    val stopReason: String? = null,
+    /** 14.24: alasan status PARTIAL (verifikasi jujur). */
+    val partialReason: String? = null,
+    /** 14.24: daftar yang kurang agar tugas PARTIAL bisa disebut selesai. */
+    val missingItems: List<String> = emptyList()
 ) {
     /** Progress 0f..1f dari langkah yang sudah selesai. */
     val progress: Float
@@ -127,6 +149,28 @@ data class AgentTask(
     val doneCount: Int
         get() = steps.count { it.status == StepStatus.DONE }
 
+    /**
+     * 14.24: hitungan JUJUR untuk kartu/ringkasan/verifikasi. Langkah
+     * persiapan yang DONE tidak dihitung sebagai hasil; langkah manual
+     * (tanpa tool) tetap dihitung karena itu kerja manusia, bukan filler.
+     */
+    val resultDoneCount: Int
+        get() = steps.count {
+            it.status == StepStatus.DONE && !it.isPreparation
+        }
+
+    /** Jumlah langkah hasil (semua langkah minus persiapan). */
+    val resultStepCount: Int
+        get() = steps.count { !it.isPreparation }
+
+    /** Jumlah langkah persiapan (DONE maupun tidak). */
+    val preparationCount: Int
+        get() = steps.count { it.isPreparation }
+
+    /** True bila rencana berasal dari fallback kata kunci (tanpa LLM). */
+    val isFallbackPlan: Boolean
+        get() = planLabel.startsWith("rencana fallback")
+
     /** Langkah pertama yang masih PENDING, atau null kalau semua sudah lewat. */
     val nextStep: AgentStep?
         get() = steps.firstOrNull { it.status == StepStatus.PENDING }
@@ -135,7 +179,8 @@ data class AgentTask(
         get() = status == TaskStatus.COMPLETED ||
             status == TaskStatus.FAILED ||
             status == TaskStatus.CANCELLED ||
-            status == TaskStatus.STOPPED
+            status == TaskStatus.STOPPED ||
+            status == TaskStatus.PARTIAL
 }
 
 /**

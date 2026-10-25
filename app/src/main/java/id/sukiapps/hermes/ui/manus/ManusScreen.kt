@@ -116,10 +116,12 @@ fun ManusScreen(
                                     color = MaterialTheme.colorScheme.primary
                                 )
                             }
-                            val done = t.steps.count { it.status == StepStatus.DONE }
+                            val done = t.resultDoneCount
                             val skipped = t.steps.count { it.status == StepStatus.SKIPPED }
+                            val prep = t.preparationCount
                             Text(
-                                "Status: ${agentTaskStatusLabel(t.status)} • $done selesai, $skipped dilewati, dari ${t.steps.size} langkah",
+                                "Status: ${agentTaskStatusLabel(t.status)} • $done selesai, $skipped dilewati, dari ${t.resultStepCount} langkah" +
+                                    if (prep > 0) " (+ $prep persiapan)" else "",
                                 style = MaterialTheme.typography.bodySmall
                             )
                             // 14.22: asal rencana + bukti verifikasi + alasan
@@ -145,6 +147,22 @@ fun ManusScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.error
                                 )
+                            }
+                            if (t.status == TaskStatus.PARTIAL) {
+                                if (!t.partialReason.isNullOrBlank()) {
+                                    Text(
+                                        "Alasan sebagian: ${t.partialReason}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                                if (t.missingItems.isNotEmpty()) {
+                                    Text(
+                                        "Yang kurang: ${t.missingItems.joinToString("; ")}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                }
                             }
                             val current = t.steps.firstOrNull { it.status == StepStatus.RUNNING }
                                 ?: t.steps.firstOrNull { it.status == StepStatus.PENDING }
