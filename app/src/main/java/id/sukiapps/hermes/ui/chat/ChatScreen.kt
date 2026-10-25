@@ -80,6 +80,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import id.sukiapps.hermes.ApkShareProvider
 import id.sukiapps.hermes.TtsReader
 import id.sukiapps.hermes.domain.Prefs
+import id.sukiapps.hermes.domain.manus.TaskStatus
 import id.sukiapps.hermes.ui.history.DrawerContent
 import id.sukiapps.hermes.ui.history.HistoryViewModel
 import id.sukiapps.hermes.ui.live.LiveActivityBar
@@ -124,9 +125,10 @@ fun HermesChatScreen(
     val ctx = LocalContext.current
     val state by chatVm.state.collectAsStateWithLifecycle()
     val manusState by manusVm.state.collectAsStateWithLifecycle()
-    // Mode Manus di chat utama: default MATI tiap buka layar, supaya chat
-    // biasa tidak berubah perilaku. Saklar hanya mengatur kiriman BARU.
-    var manusMode by remember { mutableStateOf(false) }
+    // 14.22: SATU Mode Agen di chat utama (gabungan Mode Agen lama +
+    // Mode Manus). Default MATI tiap buka layar, supaya chat biasa tidak
+    // berubah perilaku. Saklar hanya mengatur kiriman BARU.
+    var agentMode by remember { mutableStateOf(false) }
     // Percakapan tempat goal Manus terakhir dikirim — hasil akhir ditempel
     // ke percakapan itu, bukan ke percakapan yang sedang dibuka belakangan.
     var manusConvId by remember { mutableStateOf(-1L) }
@@ -413,15 +415,15 @@ fun HermesChatScreen(
                     onSend = {
                         val text = input
                         input = ""
-                        if (manusMode && text.isNotBlank()) {
-                            // Mode Manus: goal TIDAK lewat LLM chat sama sekali.
+                        if (agentMode && text.isNotBlank()) {
+                            // Mode Agen: goal TIDAK lewat LLM chat sama sekali.
                             // Tugas aktif yang belum selesai memblokir goal baru
-                            // supaya dua pelaksana Manus tidak berebut state.
+                            // supaya dua pelaksana tidak berebut state.
                             val active = manusState.activeTask
                             if (active != null && active.status.isActive) {
                                 scope.launch {
                                     snack.showSnackbar(
-                                        "Tugas Manus masih berjalan — " +
+                                        "Tugas agen masih berjalan — " +
                                             "selesaikan atau batalkan dulu."
                                     )
                                 }
@@ -485,31 +487,37 @@ fun HermesChatScreen(
                         modifier = Modifier.padding(start = 16.dp, top = 2.dp)
                     )
                 }
-                // Mode Agen — pil kompak (loop LLM lama, tidak diubah).
+                // 14.22: SATU pil Mode Agen. Loop LLM lama (agentMode di
+                // ChatViewModel) DIHAPUS — kiriman dengan saklar aktif selalu
+                // lewat mesin agen tunggal (rencana LLM + runner Manus).
+                // Default mati; status tugas aktif ditampilkan jujur.
                 AgentModePill(
-                    checked = state.agentMode,
-                    status = state.agentStatus,
-                    onCheckedChange = { chatVm.setAgentMode(it) }
-                )
-                // 14.20: Mode Manus — saklar TERPISAH dari Mode Agen di atas.
-                // Aktif = kiriman berikutnya dijalankan mesin Manus (rencana +
-                // tool nyata), bukan chat LLM. Default mati.
-                AgentModePill(
-                    checked = manusMode,
+                    checked = agentMode,
                     status = manusState.activeTask?.let {
-                        "Mode Manus • ${it.status}"
-                    } ?: "Mode Manus",
-                    onCheckedChange = { manusMode = it }
+                        "Mode Agen • ${agentTaskStatusLabel(it.status)}"
+                    } ?: "Mode Agen",
+                    onCheckedChange = { agentMode = it }
                 )
-                // Kartu timeline tugas Manus inline (aktif, atau selesai yang
-                // belum ditutup) — state yang sama dengan tab Agent.
+                // Kartu timeline tugas agen inline — RINGKAS (goal, progres,
+                // langkah berjalan, Batal, Buka di Agent). Detail penuh ada
+                // di tab Agent. State yang sama dengan tab Agent.
                 val manusCardTask = manusState.activeTask
+                val resumeNeeded by manusVm.resumeNeeded.collectAsStateWithLifecycle()
                 if (manusCardTask != null && manusCardTask.id != dismissedManusTaskId) {
                     ManusTaskCard(
                         task = manusCardTask,
                         onCancel = { manusVm.cancelTask(manusCardTask.id) },
                         onOpenAgent = onOpenManus,
                         onDismissFinished = { dismissedManusTaskId = manusCardTask.id },
+                        onResume = {
+                            if (manusCardTask.status == TaskStatus.STOPPED) {
+                                manusVm.resumeStopped(manusCardTask.id)
+                            } else {
+                                manusVm.resumeRestored(manusCardTask.id)
+                            }
+                        },
+                        showResume = manusCardTask.status == TaskStatus.STOPPED ||
+                            (resumeNeeded && manusCardTask.status.isActive),
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                     )
                 }

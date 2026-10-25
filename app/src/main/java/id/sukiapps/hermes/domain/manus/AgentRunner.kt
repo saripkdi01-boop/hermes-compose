@@ -104,6 +104,19 @@ class AgentRunner(
                 val snapshot = stateProvider() ?: break
                 val task = snapshot.tasks.firstOrNull { it.id == taskId } ?: break
 
+                // 14.22: gerbang bukti. Semua langkah habis (VERIFYING):
+                // runner memverifikasi, lalu dispatch hasil; loop berhenti
+                // (tugas kini COMPLETED atau STOPPED).
+                if (task.status == TaskStatus.VERIFYING) {
+                    val result = verifyTask(task)
+                    if (result.passed) {
+                        onEvent(ManusEvent.VerificationPassed(taskId, result.evidence))
+                    } else {
+                        onEvent(ManusEvent.VerificationFailed(taskId, result.reason ?: "verifikasi gagal"))
+                    }
+                    break
+                }
+
                 // Hanya proses task yang memang aktif dan sedang RUNNING.
                 if (task.status != TaskStatus.RUNNING) break
 
@@ -136,6 +149,24 @@ class AgentRunner(
             }
         } finally {
             running = false
+        }
+    }
+
+    /**
+     * 14.22: verifikasi bukti tugas. Baca-balik file_write dilakukan lewat
+     * ToolLoop file_read yang sama (nyata, bukan rekaman) — bila konektor
+     * belum diinisialisasi, baca-balik gagal dan verifikasi gagal dengan
+     * jujur, bukan lolos diam-diam.
+     */
+    private suspend fun verifyTask(task: AgentTask): VerificationResult {
+        return TaskVerifier.verify(task) { path ->
+            runCatching {
+                val result = toolLoop.execute(
+                    "file_read",
+                    JSONObject().put("path", path)
+                )
+                if (result.isError) null else result.content
+            }.getOrNull()
         }
     }
 

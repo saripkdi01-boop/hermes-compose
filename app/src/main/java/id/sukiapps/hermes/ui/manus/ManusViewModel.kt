@@ -5,13 +5,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import id.sukiapps.hermes.data.local.AppPrefs
 import id.sukiapps.hermes.domain.manus.AgentRunner
+import id.sukiapps.hermes.domain.manus.LlmPlanResult
+import id.sukiapps.hermes.domain.manus.LlmPlanner
 import id.sukiapps.hermes.domain.manus.ManusEvent
 import id.sukiapps.hermes.domain.manus.ManusReducer
 import id.sukiapps.hermes.domain.manus.ManusStateEngine
 import id.sukiapps.hermes.domain.manus.ManusToolPlanner
 import id.sukiapps.hermes.domain.manus.ManusUiState
+import id.sukiapps.hermes.domain.manus.PlanValidator
+import id.sukiapps.hermes.domain.manus.PlannedStep
 import id.sukiapps.hermes.domain.manus.StepStatus
+import id.sukiapps.hermes.domain.manus.TaskStatus
 import id.sukiapps.hermes.domain.manus.ToolCall
 import id.sukiapps.hermes.tool.ToolLoop
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,6 +28,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import okhttp3.OkHttpClient
 import javax.inject.Inject
 
 /**
@@ -43,11 +50,33 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class ManusViewModel @Inject constructor(
-    @ApplicationContext private val appCtx: Context
+    @ApplicationContext private val appCtx: Context,
+    // 14.22: agen tunggal memakai model + base URL Pengaturan (AppPrefs)
+    // dan OkHttpClient ber-AuthInterceptor (Bearer dari KeyVault) untuk
+    // perencanaan LLM. Keduanya binding @Singleton yang sudah ada — tidak
+    // ada modul Hilt baru. Nama `appPrefs` sengaja dibedakan dari fun
+    // prefs() (SharedPreferences manus_state) di bawah.
+    private val appPrefs: AppPrefs,
+    private val httpClient: OkHttpClient
 ) : ViewModel() {
     private val json = Json { ignoreUnknownKeys = true }
     private val _state = MutableStateFlow(restore() ?: ManusStateEngine.seed())
     val state: StateFlow<ManusUiState> = _state.asStateFlow()
+
+    /**
+     * 14.22: true bila tugas yang direstore dari manus_state berstatus
+     * RUNNING (atau VERIFYING) saat ViewModel dibuat — artinya pelaksana
+     * sempat mati bersama aplikasi dan tugas itu menggantung tanpa
+     * pelaksana. UI menampilkan tombol "Lanjutkan" yang benar-benar
+     * menjalankan runner (resumeRestored), bukan sekadar label.
+     * Dibersihkan saat tugas dilanjutkan, dibatalkan, atau selesai.
+     */
+    private val _resumeNeeded = MutableStateFlow(
+        _state.value.tasks.any {
+            it.status == TaskStatus.RUNNING || it.status == TaskStatus.VERIFYING
+        }
+    )
+    val resumeNeeded: StateFlow<Boolean> = _resumeNeeded.asStateFlow()
 
     private val runner = AgentRunner(toolLoop = ToolLoop, onEvent = ::dispatch)
 
@@ -86,43 +115,107 @@ class ManusViewModel @Inject constructor(
     fun clearHistory() = dispatch(ManusEvent.ClearHistory)
 
     /**
-     * Jalur UTAMA baru: goal bahasa biasa → planner → sematkan tool nyata →
-     * mulai task → jalankan [AgentRunner] di background.
+     * Jalur UTAMA agen tunggal (14.22): goal bahasa biasa → rencana LLM
+     * (atau fallback kata kunci BERLABEL bila LLM gagal) → sematkan tool
+     * nyata → mulai task → jalankan [AgentRunner] di background.
      *
-     * Urutan event sengaja dipisah (bukan satu event besar) supaya tiap
-     * transisi tercatat di timeline — persis seperti tab Rencana/Komputer/Hasil
-     * di UI: user bisa melihat langkah apa yang direncanakan sebelum dijalankan.
+     * Task dibuat SEGERA dengan satu langkah placeholder "Merencanakan
+     * langkah…" supaya chat langsung menampilkan kartu (tidak ada jeda
+     * kosong selama LLM berpikir), lalu ReplacePlan mengganti placeholder
+     * dengan rencana tervalidasi. Bila rencana tervalidasi kosong (semua
+     * langkah dibuang validator), fallback kata kunci dipakai dan labelnya
+     * menyebut alasannya — timeline TIDAK PERNAH mengklaim rencana LLM
+     * padahal bukan.
      */
     fun submitAndRun(goal: String) {
         if (goal.isBlank()) return
-        val planned = ManusToolPlanner.plan(goal)
-        if (planned.isEmpty()) return
-
-        // 1) Buat task + langkah judul saja.
-        dispatch(ManusEvent.SubmitGoal(goal, planned.map { it.title }))
+        dispatch(ManusEvent.SubmitGoal(goal, listOf("Merencanakan langkah…")))
         val taskId = _state.value.activeTaskId ?: return
-
-        // 2) Sematkan ToolCall nyata ke setiap langkah (panel Komputer hidup).
-        planned.forEachIndexed { index, step ->
+        viewModelScope.launch {
+            val llm = LlmPlanner.plan(
+                goal = goal,
+                model = appPrefs.model,
+                baseUrl = appPrefs.baseUrl,
+                client = httpClient
+            )
+            // Nama tool runtime dari ToolLoop.toolsArray() (struktur
+            // OpenAI: entry.type=function, entry.function.name). Bila
+            // ekstraksi gagal, validator memakai daftar dikenalnya sendiri.
+            val toolsArr = ToolLoop.toolsArray()
+            val allowed = HashSet<String>()
+            for (i in 0 until toolsArr.length()) {
+                runCatching {
+                    toolsArr.getJSONObject(i).getJSONObject("function").getString("name")
+                }.getOrNull()?.let { allowed += it }
+            }
+            val validated = when (llm) {
+                is LlmPlanResult.Success -> PlanValidator.validate(
+                    llm.steps, allowed
+                )
+                is LlmPlanResult.Failure -> null
+            }
+            val plan: List<PlannedStep>
+            val label: String
+            if (validated != null && validated.steps.isNotEmpty()) {
+                plan = validated.steps
+                label = if (validated.dropped.isEmpty()) "LLM"
+                else "LLM (${validated.dropped.size} langkah dibuang validator)"
+            } else {
+                plan = ManusToolPlanner.plan(goal)
+                val why = when (llm) {
+                    is LlmPlanResult.Failure -> llm.reason.take(80)
+                    else -> "rencana LLM kosong / semua langkah ditolak validator"
+                }
+                label = "rencana fallback — tanpa LLM ($why)"
+            }
+            if (plan.isEmpty()) {
+                dispatch(ManusEvent.CancelTask(taskId))
+                return@launch
+            }
+            // Ganti placeholder dengan rencana nyata, lalu sematkan tool.
             dispatch(
-                ManusEvent.AttachStepTool(
+                ManusEvent.ReplacePlan(
                     taskId = taskId,
-                    stepId = "$taskId-s${index + 1}",
-                    tool = ToolCall(name = step.toolName, args = step.args.toStringMap()),
-                    detail = step.detail
+                    plan = plan.map { it.title },
+                    planLabel = label
                 )
             )
+            plan.forEachIndexed { index, step ->
+                dispatch(
+                    ManusEvent.AttachStepTool(
+                        taskId = taskId,
+                        stepId = "$taskId-s${index + 1}",
+                        tool = ToolCall(name = step.toolName, args = step.args.toStringMap()),
+                        detail = step.detail
+                    )
+                )
+            }
+            // Mulai: reducer menandai langkah pertama RUNNING (atau meminta izin).
+            dispatch(ManusEvent.StartTask(taskId))
+            ensureRunner(taskId)
         }
+    }
 
-        // 3) Mulai: reducer menandai langkah pertama RUNNING (atau meminta izin).
-        dispatch(ManusEvent.StartTask(taskId))
-
-        // 4) Jalankan pelaksana nyata di IO thread.
+    /** 14.22: lanjutkan tugas STOPPED (verifikasi ulang / langkah tersisa). */
+    fun resumeStopped(taskId: String) {
+        dispatch(ManusEvent.ResumeStopped(taskId))
         ensureRunner(taskId)
     }
 
     /**
-     * Jalankan [AgentRunner] untuk taskId bila state memang RUNNING.
+     * 14.22: lanjutkan tugas yang direstore dalam keadaan RUNNING/VERIFYING
+     * tanpa pelaksana (aplikasi sempat ditutup). Sekadar menjalankan runner
+     * untuk task itu — tidak mengubah rencana maupun menghapus capaian.
+     */
+    fun resumeRestored(taskId: String) {
+        _resumeNeeded.value = false
+        ensureRunner(taskId)
+    }
+
+    /**
+     * Jalankan [AgentRunner] untuk taskId bila state memang RUNNING atau
+     * VERIFYING (14.22: gerbang verifikasi juga butuh pelaksana — bila
+     * runner mati saat task VERIFYING, verifikasi tidak pernah jalan).
      * Dipanggil setelah StartTask, PermissionGranted, ResumeTask, dan setiap
      * kali ToolFinished memicu advance() — supaya loop pelaksana selalu
      * bekerja dari snapshot terbaru, bukan state basi.
@@ -130,7 +223,7 @@ class ManusViewModel @Inject constructor(
     private fun ensureRunner(taskId: String?) {
         if (taskId == null) return
         val task = _state.value.tasks.firstOrNull { it.id == taskId } ?: return
-        if (task.status != id.sukiapps.hermes.domain.manus.TaskStatus.RUNNING) return
+        if (task.status != TaskStatus.RUNNING && task.status != TaskStatus.VERIFYING) return
         viewModelScope.launch {
             runner.runTask(taskId) { _state.value }
         }
@@ -155,8 +248,20 @@ class ManusViewModel @Inject constructor(
     private fun dispatch(event: ManusEvent) {
         _state.update { prev -> ManusReducer.reduce(prev, event) }
         save(_state.value)
+        // Tugas yang direstore sudah settle (atau dibatalkan) -> tidak
+        // perlu lagi tombol "Lanjutkan" untuk tugas itu.
+        val task = _state.value.tasks.firstOrNull {
+            when (event) {
+                is ManusEvent.CancelTask -> it.id == event.taskId
+                is ManusEvent.VerificationPassed -> it.id == event.taskId
+                is ManusEvent.VerificationFailed -> it.id == event.taskId
+                else -> false
+            }
+        }
+        if (task != null && task.isFinished) _resumeNeeded.value = false
         // Setiap ToolFinished/PermissionDenied memicu advance(); pastikan
-        // pelaksana nyata ikut berjalan untuk langkah RUNNING berikutnya.
+        // pelaksana nyata ikut berjalan untuk langkah RUNNING berikutnya
+        // (atau gerbang VERIFYING bila semua langkah habis).
         when (event) {
             is ManusEvent.ToolFinished -> ensureRunner(event.taskId)
             is ManusEvent.PermissionDenied -> ensureRunner(event.taskId)

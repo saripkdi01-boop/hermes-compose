@@ -36,6 +36,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import id.sukiapps.hermes.domain.manus.StepStatus
 import id.sukiapps.hermes.domain.manus.TaskStatus
 import id.sukiapps.hermes.domain.manus.risk
+import id.sukiapps.hermes.ui.chat.agentTaskStatusLabel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -69,6 +70,8 @@ fun ManusScreen(
     )
 ) {
     val state by vm.state.collectAsState()
+    // 14.22: tugas restore yang menggantung tanpa pelaksana.
+    val resumeNeeded by vm.resumeNeeded.collectAsState()
     var goalInput by remember { mutableStateOf("") }
     var planInput by remember { mutableStateOf("") }
     var steerInput by remember { mutableStateOf("") }
@@ -86,7 +89,7 @@ fun ManusScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Manus Engine") },
+                title = { Text("Agen") },
                 navigationIcon = {
                     TextButton(onClick = onBack) { Text("‹ Kembali") }
                 }
@@ -116,9 +119,33 @@ fun ManusScreen(
                             val done = t.steps.count { it.status == StepStatus.DONE }
                             val skipped = t.steps.count { it.status == StepStatus.SKIPPED }
                             Text(
-                                "Status: ${t.status} • $done selesai, $skipped dilewati, dari ${t.steps.size} langkah",
+                                "Status: ${agentTaskStatusLabel(t.status)} • $done selesai, $skipped dilewati, dari ${t.steps.size} langkah",
                                 style = MaterialTheme.typography.bodySmall
                             )
+                            // 14.22: asal rencana + bukti verifikasi + alasan
+                            // berhenti — detail penuh ada di tab ini, bukan
+                            // hanya di kartu ringkas chat.
+                            if (t.planLabel.isNotBlank()) {
+                                Text(
+                                    "Rencana: ${t.planLabel}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (!t.verificationEvidence.isNullOrBlank()) {
+                                Text(
+                                    "Bukti: ${t.verificationEvidence}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (!t.stopReason.isNullOrBlank()) {
+                                Text(
+                                    "Alasan berhenti: ${t.stopReason}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
                             val current = t.steps.firstOrNull { it.status == StepStatus.RUNNING }
                                 ?: t.steps.firstOrNull { it.status == StepStatus.PENDING }
                             Text(
@@ -151,6 +178,15 @@ fun ManusScreen(
                                 }
                                 if (t.status == TaskStatus.PAUSED) {
                                     OutlinedButton(onClick = { vm.resumeTask(t.id) }) { Text("Lanjut") }
+                                }
+                                // 14.22: lanjutkan dari TERHENTI (verifikasi
+                                // ulang) atau dari tugas restore yang
+                                // menggantung tanpa pelaksana.
+                                if (t.status == TaskStatus.STOPPED) {
+                                    Button(onClick = { vm.resumeStopped(t.id) }) { Text("Lanjutkan") }
+                                }
+                                if (resumeNeeded && t.status.isActive) {
+                                    Button(onClick = { vm.resumeRestored(t.id) }) { Text("Lanjutkan") }
                                 }
                                 if (t.status.isActive) {
                                     OutlinedButton(onClick = { vm.cancelTask(t.id) }) { Text("Batal") }
@@ -208,7 +244,7 @@ fun ManusScreen(
                             },
                             enabled = goalInput.isNotBlank(),
                             modifier = Modifier.fillMaxWidth()
-                        ) { Text("Kirim & Jalankan — auto-plan + eksekusi tool nyata") }
+                        ) { Text("Kirim & Jalankan — rencana LLM + eksekusi tool nyata") }
                     }
                     item {
                         OutlinedButton(
