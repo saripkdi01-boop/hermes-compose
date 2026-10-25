@@ -7,6 +7,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -56,11 +57,78 @@ private val V14Typography = Typography(
     )
 )
 
+/**
+ * v14.18 accent mapping: the stored accent key maps to colours that already
+ * exist in this package — coral keeps the previous primary, teal is
+ * HermesTeal, sand is the existing tertiary sand. Containers for teal/sand
+ * are the accent at low alpha over the surface (no new scheme is invented).
+ */
+private data class AccentColors(
+    val primary: Color,
+    val onPrimary: Color,
+    val container: Color,
+    val onContainer: Color,
+)
+
+private fun accentColors(
+    accent: String,
+    darkTheme: Boolean,
+    chatPalette: ChatPalette,
+    contentStyle: ContentStyle,
+): AccentColors {
+    // Non-MUSE styles keep their own accent (PREMIUM is green); the stored
+    // accent key only restyles the MUSE style used by MainActivity.
+    if (contentStyle != ContentStyle.MUSE) {
+        return AccentColors(
+            chatPalette.accent,
+            if (darkTheme) chatPalette.textPrimary else chatPalette.background,
+            chatPalette.accentDim,
+            chatPalette.textPrimary,
+        )
+    }
+    return when (accent) {
+        "teal" -> if (darkTheme) {
+            AccentColors(
+                HermesTealDark, Color(0xFF062A2E),
+                HermesTealDark.copy(alpha = 0.20f), HermesTealDark,
+            )
+        } else {
+            AccentColors(
+                HermesTeal, Color.White,
+                HermesTeal.copy(alpha = 0.16f), HermesTeal,
+            )
+        }
+        "sand" -> if (darkTheme) {
+            AccentColors(
+                Color(0xFFD8C9AE), Color(0xFF1F1B16),
+                Color(0xFFD8C9AE).copy(alpha = 0.20f), Color(0xFFD8C9AE),
+            )
+        } else {
+            AccentColors(
+                Color(0xFF8A7A5F), Color.White,
+                Color(0xFF8A7A5F).copy(alpha = 0.16f), Color(0xFF8A7A5F),
+            )
+        }
+        else -> if (darkTheme) {
+            AccentColors(
+                MuseCoralLight, Color(0xFF2B1208),
+                MuseCoralContainerDark, Color(0xFFFFD9C7),
+            )
+        } else {
+            AccentColors(
+                MuseCoral, Color.White,
+                MuseCoralContainerLight, MuseCoralDark,
+            )
+        }
+    }
+}
+
 @Composable
 fun HermesTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     contentStyle: ContentStyle = ContentStyle.MUSE,
     settingsDensity: SettingsDensity = SettingsDensityCompact,
+    accent: String = "coral",
     content: @Composable () -> Unit
 ) {
     val chatPalette = when (contentStyle) {
@@ -69,11 +137,14 @@ fun HermesTheme(
     }
     val settingPalette =
         if (darkTheme) settingDarkPalette() else settingLightPalette()
+    val accentColors = accentColors(accent, darkTheme, chatPalette, contentStyle)
 
     val colorScheme = if (darkTheme) {
         darkColorScheme(
-            primary = chatPalette.accent,
-            onPrimary = chatPalette.textPrimary,
+            primary = accentColors.primary,
+            onPrimary = accentColors.onPrimary,
+            primaryContainer = accentColors.container,
+            onPrimaryContainer = accentColors.onContainer,
             background = chatPalette.background,
             onBackground = chatPalette.textPrimary,
             surface = chatPalette.surface,
@@ -87,8 +158,10 @@ fun HermesTheme(
         )
     } else {
         lightColorScheme(
-            primary = chatPalette.accent,
-            onPrimary = chatPalette.background,
+            primary = accentColors.primary,
+            onPrimary = accentColors.onPrimary,
+            primaryContainer = accentColors.container,
+            onPrimaryContainer = accentColors.onContainer,
             background = chatPalette.background,
             onBackground = chatPalette.textPrimary,
             surface = chatPalette.surface,

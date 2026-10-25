@@ -22,7 +22,16 @@ public class TtsReader {
     private TextToSpeech tts;
     private boolean ready;
     private boolean speaking;
+    private float speechRate = 1.0f;
     private final List<ReadyCb> pending = new ArrayList<ReadyCb>();
+
+    /** v14.18: kecepatan baca dari pref tts_speed; berlaku segera bila sudah init. */
+    public synchronized void setSpeechRate(float rate) {
+        speechRate = Math.max(0.5f, Math.min(2.0f, rate));
+        if (tts != null) {
+            try { tts.setSpeechRate(speechRate); } catch (Exception ignored) {}
+        }
+    }
 
     /** Inisialisasi lazy; callback dipanggil di thread pemanggil listener (UI thread). */
     public synchronized void ensure(Context ctx, ReadyCb cb) {
@@ -44,6 +53,7 @@ public class TtsReader {
                             }
                             ok = r != TextToSpeech.LANG_MISSING_DATA
                                     && r != TextToSpeech.LANG_NOT_SUPPORTED;
+                            tts.setSpeechRate(speechRate);
                             tts.setOnUtteranceProgressListener(
                                     new UtteranceProgressListener() {
                                         public void onStart(String id) {}

@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
@@ -104,15 +105,22 @@ class MainActivity : ComponentActivity() {
                 if (pendingRoute != null) runCatching { nav.navigate(pendingRoute) }
             }
             // Baca ulang tema setiap kali destinasi berubah (mis. kembali
-            // dari Settings setelah ganti tema).
+            // dari Settings setelah ganti tema). v14.18: mode tiga nilai
+            // ("system" mengikuti sistem; nilai lama "dark"/"light" tetap
+            // berlaku) dan aksen dari pref yang sama.
             val backStack by nav.currentBackStackEntryAsState()
-            var darkTheme by remember(backStack?.destination?.route) {
-                mutableStateOf(
-                    getSharedPreferences(Prefs.FILE, Context.MODE_PRIVATE)
-                        .getString(Prefs.KEY_THEME, "dark") != "light"
-                )
+            val themePrefs = getSharedPreferences(Prefs.FILE, Context.MODE_PRIVATE)
+            val themeMode = themePrefs.getString(Prefs.KEY_THEME, "dark") ?: "dark"
+            val accentPref =
+                themePrefs.getString(Prefs.KEY_ACCENT_COLOR, "coral") ?: "coral"
+            // Dihitung tiap komposisi (bukan remember): kembali dari
+            // Settings atau ganti tema sistem langsung terlihat.
+            val darkTheme = when (themeMode) {
+                "light" -> false
+                "system" -> isSystemInDarkTheme()
+                else -> true
             }
-            HermesTheme(darkTheme = darkTheme) {
+            HermesTheme(darkTheme = darkTheme, accent = accentPref) {
                 // Dialog izin global — di atas NavHost agar selalu bisa muncul
                 // dari layar mana pun.
                 PermissionGateDialog(gate)

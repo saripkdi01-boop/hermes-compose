@@ -54,6 +54,25 @@ class AppPrefs @Inject constructor(
         get() = prefs.getString(Prefs.KEY_THEME, "dark") != "light"
         set(v) = prefs.edit().putString(Prefs.KEY_THEME, if (v) "dark" else "light").apply()
 
+    // v14.18: mode tema tiga pilihan. Memakai KEY_THEME yang sama sehingga
+    // nilai lama "dark"/"light" tetap berlaku; "system" mengikuti sistem.
+    var themeMode: String
+        get() = prefs.getString(Prefs.KEY_THEME, "dark") ?: "dark"
+        set(v) = prefs.edit().putString(Prefs.KEY_THEME, v).apply()
+
+    // v14.18: aksen (coral/teal/sand) — dipetakan HermesTheme ke palet
+    // yang sudah ada, bukan skema baru.
+    var accentColor: String
+        get() = prefs.getString(Prefs.KEY_ACCENT_COLOR, "coral") ?: "coral"
+        set(v) = prefs.edit().putString(Prefs.KEY_ACCENT_COLOR, v).apply()
+
+    // v14.18: kecepatan baca TTS 0.5x-2.0x; dibaca TtsReader tiap bicara.
+    var ttsSpeed: Float
+        get() = try {
+            prefs.getFloat(Prefs.KEY_TTS_SPEED, 1.0f)
+        } catch (e: Exception) { 1.0f }
+        set(v) = prefs.edit().putFloat(Prefs.KEY_TTS_SPEED, v).apply()
+
     var onboarded: Boolean
         get() = prefs.getBoolean(Prefs.KEY_ONBOARDED, false)
         set(v) = prefs.edit().putBoolean(Prefs.KEY_ONBOARDED, v).apply()

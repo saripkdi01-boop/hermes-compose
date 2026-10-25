@@ -16,7 +16,13 @@ object Prefs {
     const val KEY_TEMPERATURE = "temperature"     // float 0..2
     const val KEY_MAX_TOKENS = "max_tokens"       // int, 0 = unset
     const val KEY_TOP_P = "top_p"                // float 0..1
-    const val KEY_THEME = "theme"                // "dark" | "light"
+    const val KEY_THEME = "theme"                // "system" | "dark" | "light"
+    // (nilai lama "dark"/"light" tetap dibaca; "system" ditambahkan v14.18)
+
+    // v14.18: aksen Settings (coral/teal/sand) + kecepatan TTS.
+    // model_name dari prompt sudah ada sebagai KEY_MODEL — tidak diduplikasi.
+    const val KEY_ACCENT_COLOR = "accent_color"
+    const val KEY_TTS_SPEED = "tts_speed"
     const val KEY_ONBOARDED = "onboarded"         // boolean
     const val KEY_PERSONA_PRESETS = "persona_presets" // JSON [{"n":..,"t":..}]
 
