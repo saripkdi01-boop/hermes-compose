@@ -52,7 +52,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -565,17 +569,63 @@ fun SettingsScreen(
                         else "Export gagal."
                     }
                 }
+                val importScope = rememberCoroutineScope()
                 val importLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
                     androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
                 ) { uri ->
                     if (uri != null) {
-                        val ok = runCatching {
-                            val text = ctx.contentResolver.openInputStream(uri)
-                                ?.bufferedReader()?.readText().orEmpty()
-                            id.sukiapps.hermes.data.agent.AgentMemory.importJson(text)
-                        }.getOrDefault(false)
-                        memMsg = if (ok) "Import ingatan diterapkan."
-                        else "Import gagal — format tidak dikenal."
+                        // File ekspor nyata ~26 MB: baca + tulis di IO,
+                        // jangan blokir main thread (ANR) seperti dulu.
+                        memMsg = "Mengimpor ingatan…"
+                        importScope.launch {
+                            val text = withContext(Dispatchers.IO) {
+                                runCatching {
+                                    ctx.contentResolver.openInputStream(uri)
+                                        ?.bufferedReader()?.readText().orEmpty()
+                                }.getOrDefault("")
+                            }
+                            // Format lama hermes-memory-v1 tetap lewat
+                            // importJson (jalur lama, tidak diubah); format
+                            // Upin lewat importUpin yang rinci + backup.
+                            // Penanda format ada di awal kedua dokumen,
+                            // jadi cek string murah ini cukup — tidak
+                            // perlu parse JSON 26 MB dua kali.
+                            if (text.contains("hermes-memory-v1")) {
+                                val ok = runCatching {
+                                    id.sukiapps.hermes.data.agent
+                                        .AgentMemory.importJson(text)
+                                }.getOrDefault(false)
+                                memMsg = if (ok) "Import ingatan diterapkan."
+                                else "Import gagal — format tidak dikenal."
+                            } else {
+                                val result = runCatching {
+                                    id.sukiapps.hermes.data.agent
+                                        .AgentMemory.importUpin(ctx, text)
+                                }.getOrElse {
+                                    id.sukiapps.hermes.data.agent
+                                        .AgentMemory.ImportResult(
+                                            ok = false,
+                                            error = it.message
+                                                ?: "gagal membaca file.",
+                                        )
+                                }
+                                memMsg = if (result.ok) {
+                                    buildString {
+                                        append("Import berhasil: ")
+                                        append("${result.imported} file")
+                                        if (result.skipped.isNotEmpty()) {
+                                            append(", ${result.skipped.size} dilewati")
+                                        }
+                                        append(".")
+                                        if (result.summaryApplied) {
+                                            append(" Ringkasan masuk ingatan agen.")
+                                        }
+                                    }
+                                } else {
+                                    "Import gagal: ${result.error}"
+                                }
+                            }
+                        }
                     }
                 }
                 Text(
@@ -663,7 +713,14 @@ fun SettingsScreen(
                         modifier = Modifier.weight(1f)
                     ) { Text("Export ingatan") }
                     OutlinedButton(
-                        onClick = { importLauncher.launch(arrayOf("application/json")) },
+                        // Beberapa file manager melabeli .json sebagai
+                        // text/plain — terima keduanya supaya file tidak
+                        // "tidak terlihat" di pemilih.
+                        onClick = {
+                            importLauncher.launch(
+                                arrayOf("application/json", "text/plain")
+                            )
+                        },
                         modifier = Modifier.weight(1f)
                     ) { Text("Import ingatan") }
                 }
