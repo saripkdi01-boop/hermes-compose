@@ -18,7 +18,14 @@ data class PlannedStep(
     val title: String,
     val toolName: String,
     val args: JSONObject,
-    val detail: String
+    val detail: String,
+    /**
+     * 14.24: true bila langkah ini hanya persiapan (bukan hasil yang
+     * menjawab goal). Dipakai TaskVerifier + kartu untuk tidak menghitung
+     * persiapan sebagai "selesai". Default false supaya rencana LLM lama
+     * (tanpa flag ini) tetap diperlakukan sebagai langkah hasil.
+     */
+    val isPreparation: Boolean = false
 )
 
 /**
@@ -52,12 +59,15 @@ object ManusToolPlanner {
         // Langkah 1 selalu ada: snapshot lingkungan. Risiko LOW, tidak
         // pernah memicu kartu izin, jadi rencana paling umum pun tetap
         // bisa langsung dijalankan tanpa interupsi.
+        // 14.24: ini PERSIAPAN, bukan hasil — verifier + kartu tidak
+        // menghitungnya sebagai "selesai".
         steps += PlannedStep(
             title = "Ambil snapshot lingkungan kerja",
             toolName = "system_info",
             args = JSONObject(),
             detail = "Membaca model perangkat, versi Android, memori, dan isi sandbox " +
-                "sebelum langkah lain dijalankan."
+                "sebelum langkah lain dijalankan.",
+            isPreparation = true
         )
 
         // URL eksplisit menang atas segalanya: user sudah menyebut target.
@@ -124,6 +134,9 @@ object ManusToolPlanner {
 
         // Riset jadi tujuan paling umum — kalau belum ada tool berat yang
         // terpilih, jadikan web_fetch sebagai langkah riset generik.
+        // 14.24: riset generik ini PERSIAPAN (URL-nya bukan dari goal),
+        // jadi tidak dihitung hasil — rencana 1 persiapan yang jujur
+        // lebih baik daripada 2 langkah yang satu generik.
         val hasHeavy = steps.any { it.toolName != "system_info" }
         if (!hasHeavy) {
             steps += PlannedStep(
@@ -131,7 +144,8 @@ object ManusToolPlanner {
                 toolName = "web_fetch",
                 args = JSONObject().put("url", "https://sukiapps.web.id"),
                 detail = "Mengambil halaman acuan sebagai bahan riset. " +
-                    "Ganti URL lewat arahan di tengah jalan bila perlu target lain."
+                    "Ganti URL lewat arahan di tengah jalan bila perlu target lain.",
+                isPreparation = true
             )
         }
 

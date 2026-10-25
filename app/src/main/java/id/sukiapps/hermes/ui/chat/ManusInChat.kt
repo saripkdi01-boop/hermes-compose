@@ -37,6 +37,7 @@ fun agentTaskStatusLabel(status: TaskStatus): String = when (status) {
     TaskStatus.PAUSED -> "⏸ Dijeda"
     TaskStatus.VERIFYING -> "🔍 Memverifikasi bukti"
     TaskStatus.COMPLETED -> "✓ TERVERIFIKASI"
+    TaskStatus.PARTIAL -> "◐ SELESAI SEBAGIAN — hasil belum tentu tuntas"
     TaskStatus.FAILED -> "✗ GAGAL"
     TaskStatus.CANCELLED -> "⊘ Dibatalkan"
     TaskStatus.STOPPED -> "⚠ TERHENTI — bukti gagal"
@@ -61,9 +62,14 @@ fun ManusTaskCard(
     showResume: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val done = task.steps.count { it.status == StepStatus.DONE }
+    val done = task.resultDoneCount
     val skipped = task.steps.count { it.status == StepStatus.SKIPPED }
     val failed = task.steps.count { it.status == StepStatus.FAILED }
+    val prep = task.preparationCount
+    // 14.24: hitungan jujur — persiapan tidak dihitung "selesai".
+    val countText = "${agentTaskStatusLabel(task.status)} • $done selesai, " +
+        "$skipped dilewati, $failed gagal, dari ${task.resultStepCount} langkah" +
+        if (prep > 0) " (+ $prep persiapan)" else ""
     val runningStep = task.steps.firstOrNull { it.status == StepStatus.RUNNING }
         ?: task.steps.firstOrNull { it.status == StepStatus.PENDING }
     Card(modifier = modifier.fillMaxWidth()) {
@@ -80,7 +86,7 @@ fun ManusTaskCard(
                 )
             }
             Text(
-                text = "${agentTaskStatusLabel(task.status)} • $done selesai, $skipped dilewati, $failed gagal, dari ${task.steps.size} langkah",
+                text = countText,
                 style = MaterialTheme.typography.bodySmall
             )
             Spacer(modifier = Modifier.height(4.dp))
@@ -110,12 +116,39 @@ fun ManusTaskCard(
                 }
             }
             // Hasil verifikasi / alasan berhenti — jujur, bukan hilang.
+            // 14.24: TERVERIFIKASI hanya untuk COMPLETED. Tugas fallback
+            // yang COMPLETED tetap membawa peringatan fallback yang sama
+            // menonjolnya dengan label rencana (B2); tugas PARTIAL
+            // menampilkan daftar yang kurang, bukan bukti lolos.
+            if (task.status == TaskStatus.COMPLETED && task.isFallbackPlan) {
+                Text(
+                    text = "⚠ Rencana fallback (tanpa LLM) — hasil belum tentu tuntas, periksa kembali.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
             if (task.status == TaskStatus.COMPLETED && !task.verificationEvidence.isNullOrBlank()) {
                 Text(
                     text = task.verificationEvidence!!,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+            if (task.status == TaskStatus.PARTIAL) {
+                if (!task.partialReason.isNullOrBlank()) {
+                    Text(
+                        text = "Alasan: ${task.partialReason}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                if (task.missingItems.isNotEmpty()) {
+                    Text(
+                        text = "Yang kurang: ${task.missingItems.joinToString("; ")}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
             }
             if (task.status == TaskStatus.STOPPED && !task.stopReason.isNullOrBlank()) {
                 Text(

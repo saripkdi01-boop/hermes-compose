@@ -106,10 +106,18 @@ class AgentRunner(
 
                 // 14.22: gerbang bukti. Semua langkah habis (VERIFYING):
                 // runner memverifikasi, lalu dispatch hasil; loop berhenti
-                // (tugas kini COMPLETED atau STOPPED).
+                // (tugas kini COMPLETED, PARTIAL, atau STOPPED).
                 if (task.status == TaskStatus.VERIFYING) {
                     val result = verifyTask(task)
-                    if (result.passed) {
+                    if (result.isPartial) {
+                        onEvent(
+                            ManusEvent.VerificationPartial(
+                                taskId,
+                                result.reason ?: "hasil sebagian",
+                                result.missing
+                            )
+                        )
+                    } else if (result.passed) {
                         onEvent(ManusEvent.VerificationPassed(taskId, result.evidence))
                     } else {
                         onEvent(ManusEvent.VerificationFailed(taskId, result.reason ?: "verifikasi gagal"))
