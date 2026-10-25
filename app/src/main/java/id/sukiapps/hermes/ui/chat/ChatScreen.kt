@@ -78,6 +78,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import id.sukiapps.hermes.ApkShareProvider
 import id.sukiapps.hermes.TtsReader
+import id.sukiapps.hermes.domain.Prefs
 import id.sukiapps.hermes.ui.history.DrawerContent
 import id.sukiapps.hermes.ui.history.HistoryViewModel
 import id.sukiapps.hermes.ui.live.LiveActivityBar
@@ -257,6 +258,11 @@ fun HermesChatScreen(
     fun speak(msg: UiMessage) {
         tts.ensure(ctx) { ok ->
             if (ok) {
+                // v14.18: terapkan kecepatan dari Settings tiap kali bicara,
+                // supaya slider di Pengaturan langsung terasa di sesi ini.
+                val rate = ctx.getSharedPreferences(Prefs.FILE, Context.MODE_PRIVATE)
+                    .getFloat(Prefs.KEY_TTS_SPEED, 1.0f)
+                tts.setSpeechRate(rate)
                 speakingId = msg.id
                 tts.speak(msg.content)
             } else {

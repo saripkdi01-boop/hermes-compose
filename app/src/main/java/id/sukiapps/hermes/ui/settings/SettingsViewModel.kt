@@ -40,6 +40,10 @@ data class SettingsUiState(
     val persona: String = "",
     val presets: List<PersonaPreset> = emptyList(),
     val darkTheme: Boolean = true,
+    // v14.18: mode tema ("system"/"dark"/"light"), aksen, kecepatan TTS.
+    val themeMode: String = "dark",
+    val accentColor: String = "coral",
+    val ttsSpeed: Float = 1.0f,
     val baseUrl: String = "",
     val busyMessage: String? = null,
     val snack: String? = null,
@@ -91,6 +95,9 @@ class SettingsViewModel @Inject constructor(
                 persona = prefs.persona,
                 presets = prefs.personaPresets(),
                 darkTheme = prefs.themeDark,
+                themeMode = prefs.themeMode,
+                accentColor = prefs.accentColor,
+                ttsSpeed = prefs.ttsSpeed,
                 baseUrl = prefs.baseUrl,
                 notifEnabled = prefs.notifEnabled,
                 notifExec = prefs.notifExec,
@@ -233,8 +240,35 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setDarkTheme(dark: Boolean) {
-        prefs.themeDark = dark
-        _state.update { it.copy(darkTheme = dark) }
+        // Kompatibilitas: pemanggil lama memetakan ke mode dua nilai.
+        setThemeMode(if (dark) "dark" else "light")
+    }
+
+    // v14.18: setter tema/aksen/TTS — semuanya langsung persist ke AppPrefs.
+    fun setThemeMode(mode: String) {
+        val clean = when (mode) {
+            "system", "light", "dark" -> mode
+            else -> "dark"
+        }
+        prefs.themeMode = clean
+        _state.update {
+            it.copy(themeMode = clean, darkTheme = clean != "light")
+        }
+    }
+
+    fun setAccentColor(accent: String) {
+        val clean = when (accent) {
+            "teal", "sand", "coral" -> accent
+            else -> "coral"
+        }
+        prefs.accentColor = clean
+        _state.update { it.copy(accentColor = clean) }
+    }
+
+    fun setTtsSpeed(speed: Float) {
+        val clean = speed.coerceIn(0.5f, 2.0f)
+        prefs.ttsSpeed = clean
+        _state.update { it.copy(ttsSpeed = clean) }
     }
 
     // v14.10: setter toggle notifikasi (persist ke AppPrefs).

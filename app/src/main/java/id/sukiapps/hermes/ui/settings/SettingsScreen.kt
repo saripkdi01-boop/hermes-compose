@@ -5,11 +5,16 @@ import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.core.content.ContextCompat
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,6 +28,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
@@ -38,11 +47,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -57,10 +64,10 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import id.sukiapps.hermes.tool.ToolAllowlist
 import id.sukiapps.hermes.data.audit.DevMode
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -185,14 +192,30 @@ fun SettingsScreen(
             )
         }
     ) { pad ->
+        // v14.18 restyle: enter fade + slide up 24dp dalam 300ms.
+        val density = LocalDensity.current
+        AnimatedVisibility(
+            visible = true,
+            enter = fadeIn(animationSpec = tween(300)) +
+                slideInVertically(
+                    animationSpec = tween(300),
+                    initialOffsetY = { with(density) { 24.dp.roundToPx() } },
+                ),
+            modifier = Modifier.padding(pad),
+        ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(pad)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
+            // Header identitas: tanpa nama/email karangan — app tidak
+            // menyimpan keduanya; yang tampil hanya model + base URL nyata.
+            SettingsProfileHeader(
+                model = state.model,
+                baseUrl = state.baseUrl,
+            )
             if (state.keyBroken) {
                 Card {
                     Text(
@@ -207,7 +230,15 @@ fun SettingsScreen(
             // ---- Grup: Model ----
             // v9.3: dropdown (Box+Popup) diganti dialog picker — pola popup
             // terbukti rapuh di device (tidak bisa switch model).
-            SettingsGroup("Model AI") {
+            SettingsSectionCard(
+                "Model AI",
+                trailing = {
+                    StatusDot(
+                        connected = state.models.isNotEmpty(),
+                        connecting = state.modelsLoading,
+                    )
+                },
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -262,22 +293,23 @@ fun SettingsScreen(
             }
 
             // ---- Grup: Parameter ----
-            SettingsGroup("Parameter Generasi") {
-                SliderRow(
+            SettingsSectionCard("Parameter Generasi") {
+                SettingsSlider(
                     label = "Temperature",
                     valueText = String.format("%.2f", state.temperature),
                     value = state.temperature,
                     range = 0f..2f,
-                    onChange = vm::setTemperature
+                    onChange = vm::setTemperature,
+                    steps = 19
                 )
-                SliderRow(
+                SettingsSlider(
                     label = "Top-P",
                     valueText = String.format("%.2f", state.topP),
                     value = state.topP,
                     range = 0f..1f,
                     onChange = vm::setTopP
                 )
-                SliderRow(
+                SettingsSlider(
                     label = "Max Tokens (0 = otomatis)",
                     valueText = state.maxTokens.toString(),
                     value = state.maxTokens.toFloat(),
@@ -287,7 +319,7 @@ fun SettingsScreen(
             }
 
             // ---- Grup: Persona ----
-            SettingsGroup("Persona") {
+            SettingsSectionCard("Persona") {
                 OutlinedTextField(
                     value = state.persona,
                     onValueChange = vm::setPersona,
@@ -326,73 +358,78 @@ fun SettingsScreen(
                     Spacer(Modifier.width(8.dp))
                     Text("Simpan persona saat ini sebagai preset")
                 }
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Suara",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(8.dp))
+                SettingsSlider(
+                    label = "Kecepatan baca",
+                    valueText = String.format("%.1fx", state.ttsSpeed),
+                    value = state.ttsSpeed,
+                    range = 0.5f..2.0f,
+                    steps = 14,
+                    onChange = vm::setTtsSpeed
+                )
+                Text(
+                    "Berlaku untuk pembacaan pesan berikutnya.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
             }
 
             // ---- Grup: Tampilan ----
-            SettingsGroup("Tampilan") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Tema gelap", modifier = Modifier.weight(1f))
-                    Switch(
-                        checked = state.darkTheme,
-                        onCheckedChange = vm::setDarkTheme,
-                        // Fix uji fisik Gate 1: warna default switch nyaris
-                        // menyatu dengan kartu di tema terang (ghost switch).
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = MaterialTheme.colorScheme.primary,
-                            uncheckedThumbColor =
-                                MaterialTheme.colorScheme.onSurfaceVariant,
-                            uncheckedTrackColor =
-                                MaterialTheme.colorScheme.surfaceVariant,
-                            uncheckedBorderColor =
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    )
-                }
+            SettingsSectionCard("Tampilan") {
+                Text("Mode tema", style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.height(8.dp))
+                SettingsThemeSegmented(
+                    selected = state.themeMode,
+                    onSelect = vm::setThemeMode
+                )
+                Spacer(Modifier.height(12.dp))
+                Text("Warna aksen", style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.height(8.dp))
+                SettingsAccentRow(
+                    selected = state.accentColor,
+                    onSelect = vm::setAccentColor
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Tema & aksen diterapkan saat kembali dari Pengaturan.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
             }
 
             // ---- Grup: Notifikasi & Izin (v14.10) ----
-            SettingsGroup("Notifikasi & Izin") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Notifikasi", modifier = Modifier.weight(1f))
-                    Switch(
-                        checked = state.notifEnabled,
-                        onCheckedChange = vm::setNotifEnabled
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "Eksekusi (tool, prompt, respons)",
-                        modifier = Modifier.weight(1f)
-                    )
-                    Switch(
-                        checked = state.notifExec,
-                        onCheckedChange = vm::setNotifExec,
-                        enabled = state.notifEnabled
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Izin & persetujuan", modifier = Modifier.weight(1f))
-                    Switch(
-                        checked = state.notifApproval,
-                        onCheckedChange = vm::setNotifApproval,
-                        enabled = state.notifEnabled
-                    )
-                }
+            SettingsSectionCard("Notifikasi & Izin") {
+                SettingsItemSwitch(
+                    icon = Icons.Filled.Notifications,
+                    title = "Notifikasi",
+                    subtitle = "Tampilkan notifikasi aplikasi",
+                    checked = state.notifEnabled,
+                    onCheckedChange = vm::setNotifEnabled
+                )
+                Spacer(Modifier.height(2.dp))
+                SettingsItemSwitch(
+                    icon = Icons.Filled.PlayArrow,
+                    title = "Eksekusi",
+                    subtitle = "Tool, prompt, dan respons",
+                    checked = state.notifExec,
+                    onCheckedChange = vm::setNotifExec,
+                    enabled = state.notifEnabled
+                )
+                Spacer(Modifier.height(2.dp))
+                SettingsItemSwitch(
+                    icon = Icons.Filled.Security,
+                    title = "Izin & persetujuan",
+                    subtitle = "Minta konfirmasi sebelum aksi sensitif",
+                    checked = state.notifApproval,
+                    onCheckedChange = vm::setNotifApproval,
+                    enabled = state.notifEnabled
+                )
                 Spacer(Modifier.height(12.dp))
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                     !notifGranted
@@ -417,7 +454,7 @@ fun SettingsScreen(
             }
 
             // ---- Grup: Koneksi ----
-            SettingsGroup("Koneksi") {
+            SettingsSectionCard("Koneksi") {
                 // Preset provider (Sprint 1 tambahan): Muse by Meta = Meta Model API.
                 Text(
                     "Preset provider",
@@ -492,7 +529,7 @@ fun SettingsScreen(
             }
 
             // ---- Grup: Tool Web (Sprint 1 Gate 2) ----
-            SettingsGroup("Tool Web") {
+            SettingsSectionCard("Tool Web") {
                 Text(
                     "Allowlist domain web_fetch — satu domain per baris. " +
                         "Kosongkan untuk mengizinkan semua domain publik " +
@@ -546,7 +583,7 @@ fun SettingsScreen(
             }
 
             // ---- Grup: Agen (Sprint 1 Gate 4) ----
-            SettingsGroup("Agen") {
+            SettingsSectionCard("Agen") {
                 val limitsNow = id.sukiapps.hermes.data.agent.AgentLimits.get(ctx)
                 var iterEdit by remember { mutableStateOf(limitsNow.maxIterations.toString()) }
                 var minEdit by remember { mutableStateOf(limitsNow.timeoutMinutes.toString()) }
@@ -672,37 +709,31 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Simpan batas agen") }
                 Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        "Upgrade Diri Otomatis — agen boleh branch, tulis, " +
-                            "merge, dan buat rilis draft TANPA popup. " +
-                            "Matikan untuk menghentikan loop (kill switch). " +
-                            "Signing + lampir APK tetap oleh maintainer.",
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    var suOn by remember {
-                        mutableStateOf(
-                            id.sukiapps.hermes.data.agent.SelfUpgradePrefs
-                                .enabled(ctx)
-                        )
-                    }
-                    Switch(
-                        checked = suOn,
-                        onCheckedChange = {
-                            suOn = it
-                            id.sukiapps.hermes.data.agent.SelfUpgradePrefs
-                                .setEnabled(ctx, it)
-                            memMsg = if (it) {
-                                "Upgrade Diri Otomatis AKTIF."
-                            } else {
-                                "Upgrade Diri Otomatis nonaktif."
-                            }
-                        }
+                var suOn by remember {
+                    mutableStateOf(
+                        id.sukiapps.hermes.data.agent.SelfUpgradePrefs
+                            .enabled(ctx)
                     )
                 }
+                SettingsItemSwitch(
+                    icon = Icons.Filled.SmartToy,
+                    title = "Upgrade Diri Otomatis",
+                    subtitle = "Agen boleh branch, tulis, merge, dan buat " +
+                        "rilis draft TANPA popup. Matikan untuk " +
+                        "menghentikan loop (kill switch). Signing + " +
+                        "lampir APK tetap oleh maintainer.",
+                    checked = suOn,
+                    onCheckedChange = {
+                        suOn = it
+                        id.sukiapps.hermes.data.agent.SelfUpgradePrefs
+                            .setEnabled(ctx, it)
+                        memMsg = if (it) {
+                            "Upgrade Diri Otomatis AKTIF."
+                        } else {
+                            "Upgrade Diri Otomatis nonaktif."
+                        }
+                    }
+                )
                 Spacer(Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -726,12 +757,19 @@ fun SettingsScreen(
                 }
                 memMsg?.let {
                     Spacer(Modifier.height(4.dp))
-                    Text(it, style = MaterialTheme.typography.bodySmall)
+                    if (it.startsWith("Import berhasil") ||
+                        it.endsWith("tersimpan.") ||
+                        it.endsWith("tersimpan")
+                    ) {
+                        SettingsSuccessNote(it)
+                    } else {
+                        Text(it, style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
 
             // ---- Grup: Mode Developer (Sprint 1 Gate 2) ----
-            SettingsGroup("Mode Developer") {
+            SettingsSectionCard("Mode Developer") {
                 Text(
                     if (devOn) {
                         "AKTIF — approval LOW/MEDIUM dilewati otomatis; HIGH tetap wajib popup."
@@ -832,7 +870,7 @@ fun SettingsScreen(
             }
 
             // ---- Grup: Backup ----
-            SettingsGroup("Backup & Restore") {
+            SettingsSectionCard("Backup & Restore") {
                 Button(
                     onClick = { vm.doBackup() },
                     modifier = Modifier.fillMaxWidth()
@@ -854,24 +892,39 @@ fun SettingsScreen(
             }
 
             // ---- Grup: API Key ----
-            SettingsGroup("API Key") {
+            SettingsSectionCard("API Key") {
                 OutlinedButton(
                     onClick = onOpenKeySetup,
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Ganti API key…") }
-                OutlinedButton(
-                    onClick = { confirmClearKey = true },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                SettingsDangerBox {
                     Text(
-                        "Hapus API key",
-                        color = MaterialTheme.colorScheme.error
+                        "Zona berbahaya",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
                     )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Menghapus API key berarti kamu harus memasukkan " +
+                            "key baru sebelum bisa memakai aplikasi.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { confirmClearKey = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            "Hapus API key",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             }
 
             // ---- Grup: Jiwa Hermes (v9.1) ----
-            SettingsGroup("Jiwa Hermes") {
+            SettingsSectionCard("Jiwa Hermes") {
                 Text(
                     "Persona tetap, ingatan jangka panjang, dan todo — " +
                         "disusun otomatis menjadi system prompt.",
@@ -885,7 +938,7 @@ fun SettingsScreen(
             }
 
             // ---- Grup: Konektor (v9.1, aksi manual) ----
-            SettingsGroup("Konektor") {
+            SettingsSectionCard("Konektor") {
                 Text(
                     "Aksi manual — setiap tombol di bawah ditekan olehmu, " +
                         "tidak pernah berjalan otomatis. Token tersimpan " +
@@ -1108,7 +1161,7 @@ fun SettingsScreen(
             }
 
             // ---- Grup: Konektor Upin (v9.4) ----
-            SettingsGroup("Konektor Upin") {
+            SettingsSectionCard("Konektor Upin") {
                 Text(
                     "Tanya-jawab dengan agent Upin di VM via SSH forward. " +
                         "Secret tersimpan terenkripsi di Keystore.",
@@ -1165,8 +1218,40 @@ fun SettingsScreen(
                 )
             }
 
+            // ---- Grup: Tentang (v14.18) ----
+            SettingsSectionCard("Tentang") {
+                val pkgInfo = runCatching {
+                    ctx.packageManager.getPackageInfo(ctx.packageName, 0)
+                }.getOrNull()
+                Text(
+                    "Hermes ${pkgInfo?.versionName ?: "—"} " +
+                        "(build ${pkgInfo?.longVersionCode ?: 0})",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Paket: ${ctx.packageName}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = {
+                        ctx.startActivity(
+                            Intent(
+                                Intent.ACTION_VIEW,
+                                Uri.parse(
+                                    "https://github.com/saripkdi01-boop/hermes-compose"
+                                )
+                            )
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Buka repositori") }
+            }
+
             // ---- Grup: Izin & Riwayat (v9.2) ----
-            SettingsGroup("Izin & Riwayat") {
+            SettingsSectionCard("Izin & Riwayat") {
                 Text(
                     "Semua aksi sensitif (Termux, Telegram, GitHub, tulis " +
                         "ingatan) tercatat — termasuk yang kamu tolak.",
@@ -1178,6 +1263,9 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Buka Riwayat Izin…") }
             }
+            // Ruang bawah 96dp agar konten tidak tertutup navigation bar.
+            Spacer(Modifier.height(96.dp))
+        }
         }
     }
 
@@ -1291,48 +1379,3 @@ fun SettingsScreen(
     }
 }
 
-@Composable
-private fun SettingsGroup(
-    title: String,
-    content: @Composable () -> Unit
-) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(Modifier.height(12.dp))
-            content()
-        }
-    }
-}
-
-@Composable
-private fun SliderRow(
-    label: String,
-    valueText: String,
-    value: Float,
-    range: ClosedFloatingPointRange<Float>,
-    onChange: (Float) -> Unit
-) {
-    Column {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(label, modifier = Modifier.weight(1f))
-            Text(
-                valueText,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-        Slider(
-            value = value,
-            onValueChange = onChange,
-            valueRange = range
-        )
-    }
-}
