@@ -47,12 +47,22 @@ android {
         }
     }
 }
-// D1 (14.30): Chaquopy 16.0.0 — AGP proyek 8.7.3 ada dalam rentang dukungannya
-// (7.0–8.8) dan minSdk 30 ≥ 24. Python 3.11; buildPython autodetect CI (bila
-// minor version tidak cocok, kompilasi pyc hanya warning, build tetap jalan).
+// D1 (14.30): Chaquopy 17.1.0 — AGP proyek 8.7.3 ada dalam rentang dukungannya
+// (7.3–9.4) dan minSdk 30 ≥ 24; runtime Python tetap 3.11. Alasan naik dari
+// 16.0.0: 16.0 memakai org.gradle.util.VersionNumber di checkAgpVersion, kelas
+// yang dihapus di Gradle 9 → build-gate (Gradle 9.8.1) merah; 17.1 tidak lagi
+// memakainya dan menangani Gradle 9 secara eksplisit.
+// pyc.src = false: Chaquopy 17.x mewajibkan buildPython se-major.minor dengan
+// Python aplikasi (3.11), sementara workflow CI tidak menyiapkan Python 3.11.
+// Tanpa pip/staticProxy, satu-satunya pemakai buildPython adalah kompilasi pyc
+// sumber — mematikannya melepas ketergantungan build dari buildPython tanpa
+// mengubah perilaku D1 (runtime tetap 3.11, toolrunner.py dikirim sebagai .py).
 chaquopy {
     defaultConfig {
         version = "3.11"
+        pyc {
+            src = false
+        }
     }
 }
 dependencies {
