@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+    alias(libs.plugins.chaquopy)
 }
 android {
     namespace = "id.sukiapps.hermes"
@@ -13,8 +14,14 @@ android {
         applicationId = "id.sukiapps.hermes"
         minSdk = 30
         targetSdk = 34
-        versionCode = 53
-        versionName = "14.29"
+        versionCode = 54
+        versionName = "14.30"
+        // D1 (14.30): Chaquopy butuh ABI native Python. arm64-v8a = semua HP
+        // target (A76 dkk); x86_64 = emulator. Tiap ABI menambah MB APK —
+        // delta diukur dari artifact CI dan dilaporkan di deskripsi PR.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
     }
     buildTypes {
         release {
@@ -38,6 +45,14 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+}
+// D1 (14.30): Chaquopy 16.0.0 — AGP proyek 8.7.3 ada dalam rentang dukungannya
+// (7.0–8.8) dan minSdk 30 ≥ 24. Python 3.11; buildPython autodetect CI (bila
+// minor version tidak cocok, kompilasi pyc hanya warning, build tetap jalan).
+chaquopy {
+    defaultConfig {
+        version = "3.11"
     }
 }
 dependencies {
