@@ -48,4 +48,47 @@ class SseParserTest {
         val data = """{"choices":[{"delta":{"content":"baris1\nbaris2"}}]}"""
         assertEquals("baris1\nbaris2", SseDecoder.extractDelta(data))
     }
+
+    // 14.29 (B6): parse bertipe — error provider tidak boleh hilang
+    // menjadi null seperti "bukan konten".
+
+    @Test
+    fun parseEvent_delta() {
+        val data = """{"choices":[{"delta":{"content":"Halo"}}]}"""
+        assertEquals(SseDecoder.SseEvent.Delta("Halo"), SseDecoder.parseEvent(data))
+    }
+
+    @Test
+    fun parseEvent_providerError_rateLimit_isRetryable() {
+        val data = """{"error":{"message":"Rate limit reached","type":"rate_limit_error","code":"rate_limit_exceeded"}}"""
+        assertEquals(
+            SseDecoder.SseEvent.ProviderError("Rate limit reached", true),
+            SseDecoder.parseEvent(data)
+        )
+    }
+
+    @Test
+    fun parseEvent_providerError_invalidKey_isNotRetryable() {
+        val data = """{"error":{"message":"Incorrect API key","type":"authentication_error","code":"invalid_api_key"}}"""
+        assertEquals(
+            SseDecoder.SseEvent.ProviderError("Incorrect API key", false),
+            SseDecoder.parseEvent(data)
+        )
+    }
+
+    @Test
+    fun parseEvent_usageOnly_isIgnored() {
+        val data = """{"usage":{"prompt_tokens":10,"completion_tokens":0}}"""
+        assertEquals(SseDecoder.SseEvent.Ignored, SseDecoder.parseEvent(data))
+    }
+
+    @Test
+    fun parseEvent_malformed_isParseFailed() {
+        assertEquals(SseDecoder.SseEvent.ParseFailed, SseDecoder.parseEvent("bukan json"))
+    }
+
+    @Test
+    fun parseEvent_done_isIgnored() {
+        assertEquals(SseDecoder.SseEvent.Ignored, SseDecoder.parseEvent("[DONE]"))
+    }
 }
