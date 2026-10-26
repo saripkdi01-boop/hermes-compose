@@ -69,15 +69,47 @@ class SseClient @Inject constructor(
                 val line = try {
                     source.readUtf8Line()
                 } catch (e: IOException) {
-                    break // koneksi putus / dibatalkan
+                    // 14.29 (B6): putus di tengah stream BUKAN penutupan
+                    // normal lagi. Pembatalan user → tutup diam (perilaku
+                    // lama dipertahankan); putus/timeout nyata → error yang
+                    // tampil di chat, bukan balasan terpotong seolah utuh.
+                    // Batas stal transport = readTimeout 120 dtk di
+                    // NetworkModule (SocketTimeoutException) → pesan
+                    // "Stream terhenti" agar spinner tidak abadi.
+                    if (call.isCanceled()) break
+                    resp.close()
+                    val msg = if (e is java.net.SocketTimeoutException) {
+                        "Stream terhenti: tidak ada data selama 120 detik. " +
+                            "Coba lagi atau ganti model."
+                    } else {
+                        "Stream terputus: " +
+                            (e.message?.take(160) ?: "koneksi gagal") + ". Coba lagi."
+                    }
+                    close(AIHttpException(msg, true))
+                    return@callbackFlow
                 } ?: break // EOF
                 val t = line.trim()
                 if (t.isEmpty() || t.startsWith(":")) continue
                 if (!t.startsWith("data:")) continue
                 val data = t.removePrefix("data:").trim()
                 if (data == "[DONE]") break
-                val delta = SseDecoder.extractDelta(data)
-                if (delta != null) trySend(delta)
+                // 14.29 (B6): parse bertipe — error provider di dalam SSE
+                // (HTTP 200) sebelumnya jatuh ke null yang sama dengan
+                // "bukan konten" dan hilang diam-diam di jalur chat biasa.
+                when (val event = SseDecoder.parseEvent(data)) {
+                    is SseDecoder.SseEvent.Delta -> trySend(event.text)
+                    is SseDecoder.SseEvent.ProviderError -> {
+                        resp.close()
+                        close(AIHttpException("Server menolak: ${event.message}", event.retryable))
+                        return@callbackFlow
+                    }
+                    // Ignored (role/usage/[DONE]) dan ParseFailed (baris
+                    // bukan JSON): lewati. ParseFailed sengaja TIDAK
+                    // dijadikan error — provider bisa mengirim baris
+                    // non-JSON (keep-alive/metadata); kegagalan nyata
+                    // (error object, putus, timeout) sudah ditangani di atas.
+                    else -> {}
+                }
             }
             resp.close()
             close()
