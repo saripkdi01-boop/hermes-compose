@@ -14,8 +14,9 @@ android {
         applicationId = "id.sukiapps.hermes"
         minSdk = 30
         targetSdk = 34
-        versionCode = 54
-        versionName = "14.30"
+        // D3 (14.31): login Google via Supabase Auth (PKCE).
+        versionCode = 55
+        versionName = "14.31"
         // D1 (14.30): Chaquopy butuh ABI native Python. arm64-v8a = semua HP
         // target (A76 dkk); x86_64 = emulator. Tiap ABI menambah MB APK —
         // delta diukur dari artifact CI dan dilaporkan di deskripsi PR.
@@ -72,6 +73,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
+    // D3 (14.31): Custom Tabs untuk login Google (spec: tambah di PR yang sama).
+    implementation(libs.androidx.browser)
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
     implementation("androidx.work:work-runtime-ktx:2.9.0")
     // Compose (versi dikelola BOM)

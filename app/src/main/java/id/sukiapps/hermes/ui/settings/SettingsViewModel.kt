@@ -1,11 +1,17 @@
 package id.sukiapps.hermes.ui.settings
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import id.sukiapps.hermes.KeyVault
+import id.sukiapps.hermes.data.auth.SupabaseAuth
+import id.sukiapps.hermes.data.auth.SupabaseAuthCallback
+import id.sukiapps.hermes.data.auth.UserProfile
 import id.sukiapps.hermes.data.audit.DangerLevel
 import id.sukiapps.hermes.data.audit.PermissionGate
 import id.sukiapps.hermes.data.connectors.GitHubConnector
@@ -72,6 +78,12 @@ data class SettingsUiState(
     val supabaseUrl: String = "",
     val supabaseKey: String = "",
     val vercelToken: String = "",
+    // v14.31 (D3): sesi login Google via Supabase Auth. Token TIDAK PERNAH
+    // masuk state — hanya nama/email tampil + status.
+    val authEmail: String = "",
+    val authName: String = "",
+    val authStatus: String? = null,
+    val authBusy: Boolean = false,
     // v14.10: toggle notifikasi eksekusi & izin.
     val notifEnabled: Boolean = true,
     val notifExec: Boolean = true,
@@ -126,6 +138,9 @@ class SettingsViewModel @Inject constructor(
             val sbUrl = KeyVault.getSecret(appCtx, "supabase_url")
             val sbKey = KeyVault.getSecret(appCtx, "supabase_key")
             val vcToken = KeyVault.getSecret(appCtx, "vercel_token")
+            // v14.31 (D3): profil login tersimpan (tanpa token ke state).
+            val auEmail = KeyVault.getSecret(appCtx, SupabaseAuth.SECRET_USER_EMAIL)
+            val auName = KeyVault.getSecret(appCtx, SupabaseAuth.SECRET_USER_NAME)
             _state.update {
                 it.copy(
                     githubPat = pat,
@@ -134,7 +149,10 @@ class SettingsViewModel @Inject constructor(
                     upinSecret = upinSecret,
                     supabaseUrl = sbUrl,
                     supabaseKey = sbKey,
-                    vercelToken = vcToken
+                    vercelToken = vcToken,
+                    authEmail = auEmail,
+                    authName = auName,
+                    authStatus = if (auEmail.isNotBlank() || auName.isNotBlank()) "Login" else null
                 )
             }
         }
@@ -578,5 +596,183 @@ class SettingsViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    // ---------- v14.31 (D3): Login Google via Supabase Auth (PKCE) ----------
+
+    /**
+     * Buka Custom Tab login Google. Memakai URL + anon key yang SUDAH
+     * tersimpan (bukan yang baru diketik tapi belum disimpan) — bila kosong,
+     * tolak dengan pesan jelas tanpa network call.
+     */
+    fun startGoogleLogin() {
+        val url = _state.value.supabaseUrl.trim().trimEnd('/')
+        val key = _state.value.supabaseKey.trim()
+        if (url.isBlank() || key.isBlank()) {
+            _state.update { it.copy(snack = "Isi & simpan URL Supabase + anon key dulu.") }
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            val verifier = SupabaseAuth.generateCodeVerifier()
+            val challenge = SupabaseAuth.codeChallenge(verifier)
+            val authUrl = SupabaseAuth.buildAuthorizeUrl(url, challenge)
+            if (authUrl == null) {
+                _state.update { it.copy(snack = "URL Supabase harus https.") }
+                return@launch
+            }
+            val saved = runCatching {
+                KeyVault.putSecret(appCtx, SupabaseAuth.SECRET_PKCE_VERIFIER, verifier)
+            }
+            if (saved.isFailure) {
+                _state.update {
+                    it.copy(snack = "Gagal menyiapkan login: ${saved.exceptionOrNull()?.message}".take(200))
+                }
+                return@launch
+            }
+            withContext(Dispatchers.Main) {
+                runCatching {
+                    val cti = CustomTabsIntent.Builder().build()
+                    cti.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    cti.launchUrl(appCtx, Uri.parse(authUrl))
+                }.onFailure { error ->
+                    _state.update {
+                        it.copy(snack = "Gagal membuka browser: ${error.message}".take(200))
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Konsumsi callback deep link (dipanggil sekali saat Pengaturan dibuka).
+     * No-op bila tidak ada callback. Verifier dihapus di semua jalur setelah
+     * percobaan tukar (sekali pakai).
+     */
+    fun consumeAuthCallback() {
+        val (code, error) = SupabaseAuthCallback.take()
+        if (error != null) {
+            _state.update { it.copy(snack = "Login dibatalkan/ditolak: $error".take(200)) }
+            return
+        }
+        if (code == null) return
+        val url = _state.value.supabaseUrl.trim().trimEnd('/')
+        val key = _state.value.supabaseKey.trim()
+        if (url.isBlank() || key.isBlank()) {
+            _state.update {
+                it.copy(snack = "Konfigurasi Supabase belum tersimpan — callback login dibuang.")
+            }
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            _state.update { it.copy(authBusy = true) }
+            try {
+                val verifier = KeyVault.getSecret(appCtx, SupabaseAuth.SECRET_PKCE_VERIFIER)
+                if (verifier.isBlank()) throw Exception("Verifier PKCE tidak ditemukan — ulangi login.")
+                val session = SupabaseAuth.exchangeCode(url, key, code, verifier).getOrThrow()
+                val profile = SupabaseAuth.fetchUser(url, key, session.accessToken)
+                    .getOrElse { UserProfile(session.userId, session.email, session.name) }
+                runCatching {
+                    KeyVault.putSecret(appCtx, SupabaseAuth.SECRET_ACCESS_TOKEN, session.accessToken)
+                    KeyVault.putSecret(appCtx, SupabaseAuth.SECRET_REFRESH_TOKEN, session.refreshToken)
+                    KeyVault.putSecret(appCtx, SupabaseAuth.SECRET_USER_ID, profile.id)
+                    KeyVault.putSecret(appCtx, SupabaseAuth.SECRET_USER_EMAIL, profile.email)
+                    KeyVault.putSecret(appCtx, SupabaseAuth.SECRET_USER_NAME, profile.name)
+                    KeyVault.putSecret(appCtx, SupabaseAuth.SECRET_EXPIRES_AT, session.expiresAtEpochSec.toString())
+                }
+                _state.update {
+                    it.copy(
+                        authEmail = profile.email,
+                        authName = profile.name,
+                        authStatus = "Login",
+                        authBusy = false,
+                        snack = "Login Google berhasil ✓"
+                    )
+                }
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(authBusy = false, snack = (e.message ?: "Login gagal.").take(200))
+                }
+            } finally {
+                runCatching { KeyVault.clearSecret(appCtx, SupabaseAuth.SECRET_PKCE_VERIFIER) }
+            }
+        }
+    }
+
+    /**
+     * Refresh diam-diam bila perlu: hanya bila refresh token ada DAN token
+     * sudah kedaluwarsa (buffer 60 detik). Bila refresh gagal, sesi dianggap
+     * berakhir — secret sesi dihapus, status jujur (bukan token mati diam-diam).
+     */
+    fun refreshAuthStatus() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val refresh = KeyVault.getSecret(appCtx, SupabaseAuth.SECRET_REFRESH_TOKEN)
+            if (refresh.isBlank()) return@launch
+            val expiresAt = KeyVault.getSecret(appCtx, SupabaseAuth.SECRET_EXPIRES_AT)
+                .toLongOrNull() ?: 0L
+            if (expiresAt > System.currentTimeMillis() / 1000) return@launch
+            val url = _state.value.supabaseUrl.trim().trimEnd('/')
+            val key = _state.value.supabaseKey.trim()
+            if (url.isBlank() || key.isBlank()) return@launch
+            _state.update { it.copy(authBusy = true) }
+            try {
+                val session = SupabaseAuth.refreshSession(url, key, refresh).getOrThrow()
+                val profile = SupabaseAuth.fetchUser(url, key, session.accessToken)
+                    .getOrElse { UserProfile(session.userId, session.email, session.name) }
+                runCatching {
+                    KeyVault.putSecret(appCtx, SupabaseAuth.SECRET_ACCESS_TOKEN, session.accessToken)
+                    KeyVault.putSecret(appCtx, SupabaseAuth.SECRET_REFRESH_TOKEN, session.refreshToken)
+                    KeyVault.putSecret(appCtx, SupabaseAuth.SECRET_USER_ID, profile.id)
+                    KeyVault.putSecret(appCtx, SupabaseAuth.SECRET_USER_EMAIL, profile.email)
+                    KeyVault.putSecret(appCtx, SupabaseAuth.SECRET_USER_NAME, profile.name)
+                    KeyVault.putSecret(appCtx, SupabaseAuth.SECRET_EXPIRES_AT, session.expiresAtEpochSec.toString())
+                }
+                _state.update {
+                    it.copy(
+                        authEmail = profile.email,
+                        authName = profile.name,
+                        authStatus = "Login",
+                        authBusy = false
+                    )
+                }
+            } catch (e: Exception) {
+                clearSessionSecrets()
+                _state.update {
+                    it.copy(
+                        authEmail = "",
+                        authName = "",
+                        authStatus = "Sesi berakhir, login ulang",
+                        authBusy = false
+                    )
+                }
+            }
+        }
+    }
+
+    /** Logout: POST server best-effort, lalu hapus SEMUA secret sesi lokal. */
+    fun logoutGoogle() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val url = _state.value.supabaseUrl.trim().trimEnd('/')
+            val key = _state.value.supabaseKey.trim()
+            val token = KeyVault.getSecret(appCtx, SupabaseAuth.SECRET_ACCESS_TOKEN)
+            if (url.isNotBlank() && key.isNotBlank() && token.isNotBlank()) {
+                runCatching { SupabaseAuth.logout(url, key, token) }
+            }
+            clearSessionSecrets()
+            _state.update {
+                it.copy(authEmail = "", authName = "", authStatus = null, snack = "Logout.")
+            }
+        }
+    }
+
+    private fun clearSessionSecrets() {
+        listOf(
+            SupabaseAuth.SECRET_ACCESS_TOKEN,
+            SupabaseAuth.SECRET_REFRESH_TOKEN,
+            SupabaseAuth.SECRET_USER_ID,
+            SupabaseAuth.SECRET_USER_EMAIL,
+            SupabaseAuth.SECRET_USER_NAME,
+            SupabaseAuth.SECRET_PKCE_VERIFIER,
+            SupabaseAuth.SECRET_EXPIRES_AT
+        ).forEach { runCatching { KeyVault.clearSecret(appCtx, it) } }
     }
 }
