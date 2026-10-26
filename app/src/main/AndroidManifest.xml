@@ -40,6 +40,16 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        <!-- v14.31 (D3): callback login Google via Supabase Auth (PKCE). -->
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data
+                android:scheme="id.sukiapps.hermes"
+                android:host="auth"
+                android:path="/callback" />
+        </intent-filter>
         </activity>
         <!-- v5.1: berbagi file APK/ZIP/foto kamera via provider framework-only
              (tanpa dependensi). Hanya melayani direktori privat, read-only
