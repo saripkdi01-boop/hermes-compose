@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+    alias(libs.plugins.chaquopy)
 }
 android {
     namespace = "id.sukiapps.hermes"
@@ -13,8 +14,14 @@ android {
         applicationId = "id.sukiapps.hermes"
         minSdk = 30
         targetSdk = 34
-        versionCode = 53
-        versionName = "14.29"
+        versionCode = 54
+        versionName = "14.30"
+        // D1 (14.30): Chaquopy butuh ABI native Python. arm64-v8a = semua HP
+        // target (A76 dkk); x86_64 = emulator. Tiap ABI menambah MB APK —
+        // delta diukur dari artifact CI dan dilaporkan di deskripsi PR.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
     }
     buildTypes {
         release {
@@ -37,6 +44,24 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
+}
+// D1 (14.30): Chaquopy 17.1.0 — AGP proyek 8.7.3 ada dalam rentang dukungannya
+// (7.3–9.4) dan minSdk 30 ≥ 24; runtime Python tetap 3.11. Alasan naik dari
+// 16.0.0: 16.0 memakai org.gradle.util.VersionNumber di checkAgpVersion, kelas
+// yang dihapus di Gradle 9 → build-gate (Gradle 9.8.1) merah; 17.1 tidak lagi
+// memakainya dan menangani Gradle 9 secara eksplisit.
+// pyc.src = false: Chaquopy 17.x mewajibkan buildPython se-major.minor dengan
+// Python aplikasi (3.11), sementara workflow CI tidak menyiapkan Python 3.11.
+// Tanpa pip/staticProxy, satu-satunya pemakai buildPython adalah kompilasi pyc
+// sumber — mematikannya melepas ketergantungan build dari buildPython tanpa
+// mengubah perilaku D1 (runtime tetap 3.11, toolrunner.py dikirim sebagai .py).
+chaquopy {
+    defaultConfig {
+        version = "3.11"
+        pyc {
+            src = false
         }
     }
 }
