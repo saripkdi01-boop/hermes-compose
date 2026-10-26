@@ -78,6 +78,12 @@ fun ManusTaskCard(
                 text = "🤖 Agen: ${task.goal}",
                 style = MaterialTheme.typography.titleSmall
             )
+            // 14.28 (penanda sumber): kartu agen berlabel sumber eksplisit.
+            Text(
+                text = "Sumber: Ringkasan agen (output tool)",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             if (task.planLabel.isNotBlank()) {
                 Text(
                     text = "Rencana: ${task.planLabel}",
@@ -114,7 +120,7 @@ fun ManusTaskCard(
                 val startedAt = SimpleDateFormat("HH:mm", Locale("id", "ID"))
                     .format(Date(runningStep.startedAt.takeIf { it > 0 } ?: task.updatedAt))
                 Text(
-                    text = "Masih berjalan: $toolText (mulai $startedAt)",
+                    text = "Masih berjalan: $toolText (jalur agen) (mulai $startedAt)",
                     style = MaterialTheme.typography.bodySmall
                 )
                 if (runningStep.tool != null) {

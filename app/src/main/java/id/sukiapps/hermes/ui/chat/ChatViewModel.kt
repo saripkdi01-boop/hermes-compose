@@ -558,9 +558,9 @@ class ChatViewModel @Inject constructor(
         // (web_fetch); dengan gambar -> jalur vision lama tanpa tool.
         val flow = if (imageB64s.isEmpty()) {
             ai.chatStreamWithTools(req) { name, ok, ms ->
-                val label = "🌐 $name ${if (ok) "✓" else "✗"} " +
-                    "${"%.1f".format(ms / 1000.0)} dtk"
-                _state.update { s -> s.copy(toolEvent = label) }
+                // 14.28 (penanda sumber): chip tool chat membawa jalur
+                // eksplisit — nama tool chat bisa sama dengan tool agen.
+                _state.update { s -> s.copy(toolEvent = chatToolEventLabel(name, ok, ms)) }
                 ExecutionLog.log("tool", name, "$ms ms", if (ok) "ok" else "fail")
                 postToolNotif(name)
             }

@@ -183,6 +183,14 @@ fun MessageBubble(
                 )
             }
             Spacer(Modifier.height(4.dp))
+            // 14.28 (penanda sumber): setiap balasan asisten berlabel
+            // sumber — balasan chat (LLM) vs ringkasan agen (output tool).
+            Text(
+                text = "Sumber: ${assistantSourceLabel(message.content)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(4.dp))
             if (message.replyToSnippet != null) {
                 ReplyQuote(
                     snippet = message.replyToSnippet,

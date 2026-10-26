@@ -37,6 +37,9 @@ fun manusSummary(task: AgentTask): String {
         .append("$failed gagal, dari ${task.resultStepCount} langkah")
     if (prep > 0) head.append(" (+ $prep persiapan)")
     val extra = ArrayList<String>()
+    // 14.28 (penanda sumber): ringkasan membawa label sumber eksplisit
+    // supaya tidak bisa dibaca sebagai balasan chat (LLM).
+    extra += "Sumber: Ringkasan agen (output tool)"
     if (task.planLabel.isNotBlank()) extra += "Rencana: ${task.planLabel}"
     // 14.27 (B8): usage di ringkasan — asli bila provider mengirimnya.
     task.usageLine()?.let { extra += it }
