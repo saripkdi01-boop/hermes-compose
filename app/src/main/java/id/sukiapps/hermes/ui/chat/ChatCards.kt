@@ -124,8 +124,10 @@ fun ChatApprovalCard(
                 style = MaterialTheme.typography.bodyMedium,
                 color = scheme.onSurfaceVariant
             )
+            // 14.28 (B9): teks scope disamakan persis dengan dialog
+            // (dulu tanpa "tidak berlaku untuk langkah lain").
             Text(
-                text = "Scope: Sekali saja — hanya langkah ini.",
+                text = "Scope: Sekali saja — hanya langkah ini, tidak berlaku untuk langkah lain.",
                 style = MaterialTheme.typography.bodySmall,
                 color = scheme.onSurfaceVariant
             )
