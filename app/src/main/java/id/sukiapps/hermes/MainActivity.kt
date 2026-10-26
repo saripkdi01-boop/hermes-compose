@@ -40,6 +40,7 @@ import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import id.sukiapps.hermes.data.audit.PermissionGate
+import id.sukiapps.hermes.data.auth.SupabaseAuthCallback
 import id.sukiapps.hermes.domain.Prefs
 import id.sukiapps.hermes.navigation.Nav
 import id.sukiapps.hermes.ui.v12.ActivityScreen
@@ -77,6 +78,8 @@ class MainActivity : ComponentActivity() {
     lateinit var gate: PermissionGate
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // v14.31 (D3): tangkap callback login Google (deep link Supabase PKCE).
+        SupabaseAuthCallback.capture(intent?.data?.toString())
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val prefs = getSharedPreferences(Prefs.FILE, Context.MODE_PRIVATE)
         val startDestination = when {
@@ -102,7 +105,12 @@ class MainActivity : ComponentActivity() {
                 }
             }
             // v12: deep-link dari notifikasi approval (cold start).
-            val pendingRoute = remember { intent.getStringExtra("nav_route") }
+            // v14.31 (D3): callback login mendarat di Pengaturan agar
+            // profil langsung terlihat (consume di SettingsViewModel).
+            val pendingRoute = remember {
+                intent.getStringExtra("nav_route")
+                    ?: if (SupabaseAuthCallback.hasPending()) Nav.SETTINGS else null
+            }
             LaunchedEffect(pendingRoute) {
                 if (pendingRoute != null) runCatching { nav.navigate(pendingRoute) }
             }
