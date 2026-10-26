@@ -134,6 +134,14 @@ fun ManusScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
+                            // 14.27 (B8): baris usage (asli/estimasi kasar).
+                            t.usageLine()?.let { usage ->
+                                Text(
+                                    usage,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                             if (!t.verificationEvidence.isNullOrBlank()) {
                                 Text(
                                     "Bukti: ${t.verificationEvidence}",

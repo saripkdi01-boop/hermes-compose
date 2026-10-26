@@ -75,8 +75,27 @@ sealed interface ManusEvent {
     data class ReplacePlan(
         val taskId: String,
         val plan: List<String>,
-        val planLabel: String = ""
+        val planLabel: String = "",
+        /** 14.27 (B8): usage planner dari respons provider (null = tidak dikirim). */
+        val usageTotal: Int? = null,
+        val usagePrompt: Int? = null,
+        val usageCompletion: Int? = null,
+        /** 14.27 (B6): token awal sesi — usage asli bila ada, estimasi bila tidak. */
+        val initialTokens: Int = 0
     ) : ManusEvent
+    /**
+     * 14.27 (B6): pelaksana melaporkan pemakaian token berjalan.
+     * Hanya memperbarui angka di task; tidak mengubah status.
+     */
+    data class UsageUpdated(val taskId: String, val tokensUsed: Int) : ManusEvent
+    /**
+     * 14.27 (B6): batas sesi tercapai (iterasi/timeout/budget) — hanya
+     * dari jalur RUNNING → STOPPED dengan alasan eksplisit. Bukan
+     * FAILED (tugas tidak rusak) dan bukan COMPLETED (tugas tidak
+     * tuntas); user bisa menekan Lanjutkan setelah menaikkan batas
+     * di Pengaturan, atau memulai tugas baru.
+     */
+    data class LimitReached(val taskId: String, val reason: String) : ManusEvent
     /** 14.22: gerbang verifikasi lolos — hanya dari VERIFYING. */
     data class VerificationPassed(val taskId: String, val evidence: String) : ManusEvent
     /** 14.22: gerbang verifikasi gagal — hanya dari VERIFYING → STOPPED. */
@@ -160,6 +179,8 @@ object ManusReducer {
         is ManusEvent.CancelTask -> cancelTask(state, event, clock)
         is ManusEvent.RetryStep -> retryStep(state, event, clock)
         is ManusEvent.ReplacePlan -> replacePlan(state, event, clock)
+        is ManusEvent.UsageUpdated -> usageUpdated(state, event, clock)
+        is ManusEvent.LimitReached -> limitReached(state, event, clock)
         is ManusEvent.VerificationPassed -> verificationPassed(state, event, clock)
         is ManusEvent.VerificationFailed -> verificationFailed(state, event, clock)
         is ManusEvent.VerificationPartial -> verificationPartial(state, event, clock)
@@ -529,10 +550,44 @@ object ManusReducer {
         val updated = task.copy(
             steps = steps,
             planLabel = event.planLabel,
+            plannerUsageTotal = event.usageTotal,
+            plannerUsagePrompt = event.usagePrompt,
+            plannerUsageCompletion = event.usageCompletion,
+            tokensUsed = event.initialTokens,
+            tokensReal = event.usageTotal != null,
             updatedAt = now
         )
         return replaceTask(state, updated)
             .log(now, LogLevel.INFO, "manus", "rencana ${task.id} diganti: ${steps.size} langkah (${event.planLabel})")
+    }
+
+    /** 14.27: perbarui angka token berjalan, tanpa mengubah status. */
+    private fun usageUpdated(
+        state: ManusUiState,
+        event: ManusEvent.UsageUpdated,
+        clock: () -> Long
+    ): ManusUiState {
+        val task = state.tasks.firstOrNull { it.id == event.taskId } ?: return state
+        return replaceTask(state, task.copy(tokensUsed = event.tokensUsed, updatedAt = clock()))
+    }
+
+    /** 14.27: batas sesi → STOPPED + alasan eksplisit (lihat LimitReached). */
+    private fun limitReached(
+        state: ManusUiState,
+        event: ManusEvent.LimitReached,
+        clock: () -> Long
+    ): ManusUiState {
+        val now = clock()
+        val task = state.tasks.firstOrNull { it.id == event.taskId } ?: return state
+        if (!task.status.isActive) return state
+        val stopped = task.copy(
+            status = TaskStatus.STOPPED,
+            stopReason = event.reason,
+            updatedAt = now
+        )
+        return replaceTask(state, stopped)
+            .copy(pendingPermission = null)
+            .log(now, LogLevel.WARN, "manus", "task ${task.id} TERHENTI (batas sesi): ${event.reason}")
     }
 
     /** 14.22: hanya dari VERIFYING — bukti lolos, tugas sah COMPLETED. */

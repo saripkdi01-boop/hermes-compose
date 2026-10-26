@@ -19,7 +19,15 @@ sealed interface LlmPlanResult {
     data class Success(
         val steps: List<RawStep>,
         val providerUsed: String = "",
-        val fallback: Boolean = false
+        val fallback: Boolean = false,
+        /**
+         * 14.27 (B8): usage dari field `usage` respons provider
+         * (prompt/completion/total). null = provider tidak mengirim
+         * usage — saat itu angka token adalah estimasi kasar.
+         */
+        val usageTotal: Int? = null,
+        val usagePrompt: Int? = null,
+        val usageCompletion: Int? = null
     ) : LlmPlanResult
 
     data class Failure(val reason: String) : LlmPlanResult
@@ -204,8 +212,10 @@ object LlmPlanner {
 
     /** Parse konten message LLM menjadi daftar langkah mentah. */
     internal fun parse(responseBody: String): LlmPlanResult {
+        val root = runCatching { JSONObject(responseBody) }.getOrNull()
+            ?: return LlmPlanResult.Failure("respons LLM kosong")
         val content = runCatching {
-            JSONObject(responseBody)
+            root
                 .getJSONArray("choices")
                 .getJSONObject(0)
                 .getJSONObject("message")
@@ -214,6 +224,22 @@ object LlmPlanner {
         if (content.isBlank()) {
             return LlmPlanResult.Failure("respons LLM kosong")
         }
+        // 14.27 (B8): baca usage ASLI bila provider mengirimnya.
+        // total_tokens diutamakan; bila hanya prompt+completion yang
+        // ada, total = jumlah keduanya. Tanpa field usage → null
+        // (pemanggil memakai estimasi kasar, bukan mengarang angka).
+        val usageObj = root.optJSONObject("usage")
+        val usagePrompt = usageObj?.optInt("prompt_tokens", -1)
+            ?.takeIf { it >= 0 }
+        val usageCompletion = usageObj?.optInt("completion_tokens", -1)
+            ?.takeIf { it >= 0 }
+        val usageTotal = usageObj?.optInt("total_tokens", -1)
+            ?.takeIf { it >= 0 }
+            ?: if (usagePrompt != null && usageCompletion != null) {
+                usagePrompt + usageCompletion
+            } else {
+                null
+            }
         val cleaned = content.trim()
             .removePrefix("```json").removePrefix("```")
             .removeSuffix("```").trim()
@@ -240,7 +266,12 @@ object LlmPlanner {
                 detail = obj.optString("detail")
             )
         }
-        return LlmPlanResult.Success(steps)
+        return LlmPlanResult.Success(
+            steps,
+            usageTotal = usageTotal,
+            usagePrompt = usagePrompt,
+            usageCompletion = usageCompletion
+        )
     }
 
     private const val SYSTEM_PROMPT =

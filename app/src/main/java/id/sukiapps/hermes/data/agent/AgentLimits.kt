@@ -6,8 +6,11 @@ import android.content.Context
  * AgentLimits — batas sesi Mode Agen (Sprint 1 Gate 4).
  * Disimpan di SharedPreferences "hermes_agent" (BUKAN Room).
  * Default sesuai keputusan Suki 23 Okt 2026: 10 iterasi / 5 menit /
- * 100.000 token (token = ESTIMASI Markdown.estimateTokens atas
- * percakapan — repo tidak punya usage asli dari provider).
+ * 100.000 token.
+ * 14.27 (B6+B8): batas ini DITEGAKKAN di AgentRunner (bukan hanya
+ * ditampilkan di Pengaturan). Token = usage asli provider bila
+ * respons planner mengirim field `usage`, sisanya estimasi kasar
+ * (panjang ÷ 4) atas goal + output langkah.
  */
 object AgentLimits {
 
