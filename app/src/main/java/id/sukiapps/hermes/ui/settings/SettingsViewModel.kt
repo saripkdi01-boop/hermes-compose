@@ -634,9 +634,9 @@ class SettingsViewModel @Inject constructor(
                     val cti = CustomTabsIntent.Builder().build()
                     cti.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     cti.launchUrl(appCtx, Uri.parse(authUrl))
-                }.onFailure {
+                }.onFailure { error ->
                     _state.update {
-                        it.copy(snack = "Gagal membuka browser: ${it.message}".take(200))
+                        it.copy(snack = "Gagal membuka browser: ${error.message}".take(200))
                     }
                 }
             }
