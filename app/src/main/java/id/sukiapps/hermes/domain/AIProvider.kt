@@ -57,4 +57,4 @@ data class ChatMessage(
 )
 
 /** Error HTTP yang sudah dipetakan ke pesan Indonesia. */
-class AIHttpException(message: String) : Exception(message)
+class AIHttpException(message: String, val retryable: Boolean = false) : Exception(message)
