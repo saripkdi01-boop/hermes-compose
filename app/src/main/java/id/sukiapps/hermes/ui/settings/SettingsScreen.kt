@@ -180,6 +180,16 @@ fun SettingsScreen(
             vm.consumeSnack()
         }
     }
+    // v14.31 (D3): konsumsi callback login Google + refresh sesi bila perlu
+    // (sekali per masuk Pengaturan, hanya bila ada sesi tersimpan).
+    var authRefreshed by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { vm.consumeAuthCallback() }
+    LaunchedEffect(state.authEmail, state.authName) {
+        if (!authRefreshed && (state.authEmail.isNotBlank() || state.authName.isNotBlank())) {
+            authRefreshed = true
+            vm.refreshAuthStatus()
+        }
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snack) },
@@ -1114,6 +1124,51 @@ fun SettingsScreen(
                     onClick = { vm.saveCloudTokens(sbUrlEdit, sbKeyEdit, vcTokenEdit) },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Simpan Supabase & Vercel") }
+                Spacer(Modifier.height(12.dp))
+                // v14.31 (D3): Login Google via Supabase Auth (identitas saja).
+                Text(
+                    "Login Google (Supabase Auth)",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    if (state.authBusy) "Memproses sesi…"
+                    else state.authStatus ?: "Belum login",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                if (state.authName.isNotBlank() || state.authEmail.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        listOf(state.authName, state.authEmail)
+                            .filter { it.isNotBlank() }.joinToString(" — "),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = { vm.startGoogleLogin() },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Login dengan Google") }
+                    if (state.authEmail.isNotBlank() || state.authName.isNotBlank()) {
+                        OutlinedButton(
+                            onClick = { vm.logoutGoogle() },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Logout") }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Simpan dulu URL + key Supabase di atas, lalu ketuk Login. " +
+                        "Login ini hanya identitas — bukan pengganti API key provider " +
+                        "dan bukan sinkronisasi. Chat tetap memakai key dari Pengaturan.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 Spacer(Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
