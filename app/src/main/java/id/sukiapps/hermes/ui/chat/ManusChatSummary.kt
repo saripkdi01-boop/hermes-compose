@@ -36,10 +36,20 @@ fun manusSummary(task: AgentTask): String {
         .append("Status: ${task.status} • $done selesai, $skipped dilewati, ")
         .append("$failed gagal, dari ${task.resultStepCount} langkah")
     if (prep > 0) head.append(" (+ $prep persiapan)")
+    val lines = task.steps
+        .filter { it.status == StepStatus.DONE && !it.isPreparation && !it.output.isNullOrBlank() }
+        .map { step ->
+            val out = step.output!!.replace('\n', ' ').take(200)
+            "- ${step.title}: $out"
+        }
     val extra = ArrayList<String>()
     // 14.28 (penanda sumber): ringkasan membawa label sumber eksplisit
-    // supaya tidak bisa dibaca sebagai balasan chat (LLM).
-    extra += "Sumber: Ringkasan agen (output tool)"
+    // HANYA bila ada output hasil yang ditempel — tanpa output, ringkasan
+    // = header saja (invarian summaryWithoutOutputsIsJustHeader). Label
+    // blok tetap ada di caption bubble lewat awalan "🤖 Manus selesai:"
+    // (lihat assistantSourceLabel), dan klaim "(output tool)" tidak muncul
+    // saat tidak ada output tool sama sekali.
+    if (lines.isNotEmpty()) extra += "Sumber: Ringkasan agen (output tool)"
     if (task.planLabel.isNotBlank()) extra += "Rencana: ${task.planLabel}"
     // 14.27 (B8): usage di ringkasan — asli bila provider mengirimnya.
     task.usageLine()?.let { extra += it }
@@ -55,12 +65,6 @@ fun manusSummary(task: AgentTask): String {
             extra += "Yang kurang: ${task.missingItems.joinToString("; ")}"
         }
     }
-    val lines = task.steps
-        .filter { it.status == StepStatus.DONE && !it.isPreparation && !it.output.isNullOrBlank() }
-        .map { step ->
-            val out = step.output!!.replace('\n', ' ').take(200)
-            "- ${step.title}: $out"
-        }
     val out = StringBuilder(head)
     for (line in extra) out.append("\n").append(line)
     if (lines.isNotEmpty()) out.append("\n").append(lines.joinToString("\n"))
