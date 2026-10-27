@@ -1,10 +1,18 @@
 package id.sukiapps.hermes
 
 import id.sukiapps.hermes.diagnostics.HealthScreen
+import android.Manifest
 import android.content.Context
+import android.content.SharedPreferences
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -20,6 +28,7 @@ import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
@@ -77,21 +86,70 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             val nav = rememberNavController()
+            // v14.10: minta izin notifikasi sekali saat start (API 33+).
+            // Tanpa dialog custom tambahan — PermissionGateDialog yang ada
+            // sudah cukup untuk keputusan izin aksi sensitif.
+            val notifLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission()
+            ) { }
+            LaunchedEffect(Unit) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    ContextCompat.checkSelfPermission(
+                        this@MainActivity, Manifest.permission.POST_NOTIFICATIONS
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
             // v12: deep-link dari notifikasi approval (cold start).
             val pendingRoute = remember { intent.getStringExtra("nav_route") }
             LaunchedEffect(pendingRoute) {
                 if (pendingRoute != null) runCatching { nav.navigate(pendingRoute) }
             }
-            // Baca ulang tema setiap kali destinasi berubah (mis. kembali
-            // dari Settings setelah ganti tema).
+            // Tema REAKTIF: sebelumnya tema hanya dibaca ulang saat
+            // backstack berubah, sehingga memilih Sistem/Terang/Gelap di
+            // Settings tidak mengubah layar Settings itu sendiri sampai
+            // pindah tab/restart. Sekarang nilai pref dipegang State dan
+            // diperbarui listener SharedPreferences — perubahan pref
+            // langsung me-recompose HermesTheme di tempat, tanpa restart.
+            // Arti kode tidak berubah ("system"/"light"/"dark", aksen sama).
             val backStack by nav.currentBackStackEntryAsState()
-            var darkTheme by remember(backStack?.destination?.route) {
+            val themePrefs =
+                remember { getSharedPreferences(Prefs.FILE, Context.MODE_PRIVATE) }
+            var themeMode by remember {
+                mutableStateOf(themePrefs.getString(Prefs.KEY_THEME, "dark") ?: "dark")
+            }
+            var accentPref by remember {
                 mutableStateOf(
-                    getSharedPreferences(Prefs.FILE, Context.MODE_PRIVATE)
-                        .getString(Prefs.KEY_THEME, "dark") != "light"
+                    themePrefs.getString(Prefs.KEY_ACCENT_COLOR, "coral") ?: "coral"
                 )
             }
-            HermesTheme(darkTheme = darkTheme) {
+            DisposableEffect(themePrefs) {
+                val listener =
+                    SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+                        if (key == Prefs.KEY_THEME) {
+                            themeMode =
+                                themePrefs.getString(Prefs.KEY_THEME, "dark") ?: "dark"
+                        }
+                        if (key == Prefs.KEY_ACCENT_COLOR) {
+                            accentPref = themePrefs.getString(
+                                Prefs.KEY_ACCENT_COLOR, "coral"
+                            ) ?: "coral"
+                        }
+                    }
+                themePrefs.registerOnSharedPreferenceChangeListener(listener)
+                onDispose {
+                    themePrefs.unregisterOnSharedPreferenceChangeListener(listener)
+                }
+            }
+            // v14.18: mode tiga nilai ("system" mengikuti sistem; nilai
+            // lama "dark"/"light" tetap berlaku) dan aksen dari pref sama.
+            val darkTheme = when (themeMode) {
+                "light" -> false
+                "system" -> isSystemInDarkTheme()
+                else -> true
+            }
+            HermesTheme(darkTheme = darkTheme, accent = accentPref) {
                 // Dialog izin global — di atas NavHost agar selalu bisa muncul
                 // dari layar mana pun.
                 PermissionGateDialog(gate)
@@ -172,7 +230,9 @@ class MainActivity : ComponentActivity() {
                             onOpenAktivitas = { nav.navigate(Nav.AKTIVITAS) },
                             onOpenMintaFitur = { nav.navigate(Nav.MINTA_FITUR) },
                             onOpenAudit = { nav.navigate(Nav.AUDIT) },
-                    onOpenV12Hub = { nav.navigate(Nav.V12_HUB) }
+                    onOpenV12Hub = { nav.navigate(Nav.V12_HUB) },
+                    // 14.20: kartu Manus di chat membuka layar Manus langsung.
+                    onOpenManus = { nav.navigate(Nav.MANUS) }
                         )
                     }
                     composable(Nav.SETTINGS) {
@@ -247,4 +307,6 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+}
+// v14.10: penutup class MainActivity — perbaikan Missing '}' (CI #110, kspReleaseKotlin).
 }

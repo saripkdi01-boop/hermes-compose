@@ -12,7 +12,6 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.widget.Toast
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -57,7 +56,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -84,13 +82,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import id.sukiapps.hermes.ApkShareProvider
 import id.sukiapps.hermes.TtsReader
 import id.sukiapps.hermes.domain.Prefs
-import id.sukiapps.hermes.domain.manus.TaskStatus
 import id.sukiapps.hermes.ui.history.DrawerContent
 import id.sukiapps.hermes.ui.history.HistoryViewModel
 import id.sukiapps.hermes.ui.live.LiveActivityBar
 import id.sukiapps.hermes.ui.live.LiveStatus
 import id.sukiapps.hermes.ui.live.LiveStatusBus
-import id.sukiapps.hermes.ui.manus.ManusViewModel
 import id.sukiapps.hermes.ui.theme.PillShape
 import kotlinx.coroutines.launch
 import java.io.File
@@ -103,7 +99,8 @@ private const val PREVIEW_CHARS = 4000
 
 /**
  * v15 — Chat ala Muse: top bar minimal (judul serif + pil model),
- * layar kosong berisi sapaan + chip saran, status mode agen jadi pil.
+ * layar kosong berisi sapaan + chip saran, tanpa UI mesin agen
+ * (tugas agen hanya di tab Agent).
  * Seluruh fitur lama dipertahankan: drawer, lampiran, kamera, suara,
  * TTS, web fetch, edit pesan, Upin.
  */
@@ -117,39 +114,9 @@ fun HermesChatScreen(
     chatVm: ChatViewModel = hiltViewModel(),
     historyVm: HistoryViewModel = hiltViewModel(),
     webVm: WebFetchViewModel = hiltViewModel(),
-    // 14.20: SATU instance ManusViewModel dengan tab Agent (activity-scope),
-    // sehingga tugas Manus yang dimulai dari chat terlihat di tab Agent dan
-    // sebaliknya — bukan dua mesin dengan dua state.
-    manusVm: ManusViewModel = hiltViewModel(
-        viewModelStoreOwner = LocalContext.current as ComponentActivity
-    ),
-    onOpenManus: () -> Unit = onOpenV12Hub
 ) {
     val ctx = LocalContext.current
     val state by chatVm.state.collectAsStateWithLifecycle()
-    val manusState by manusVm.state.collectAsStateWithLifecycle()
-    // 14.22: SATU Mode Agen di chat utama (gabungan Mode Agen lama +
-    // Mode Manus). Default MATI tiap buka layar, supaya chat biasa tidak
-    // berubah perilaku. Saklar hanya mengatur kiriman BARU.
-    var agentMode by remember { mutableStateOf(false) }
-    // Percakapan tempat goal Manus terakhir dikirim — hasil akhir ditempel
-    // ke percakapan itu, bukan ke percakapan yang sedang dibuka belakangan.
-    var manusConvId by remember { mutableStateOf(-1L) }
-    // Tugas Manus yang hasil akhirnya sudah ditempel sebagai pesan asisten.
-    var postedManusTaskIds by remember { mutableStateOf(setOf<String>()) }
-    var dismissedManusTaskId by remember { mutableStateOf<String?>(null) }
-    // Hasil akhir tugas Manus → pesan asisten di riwayat chat (sekali saja
-    // per tugas, tidak diulang saat recompose/pindah tab).
-    val manusTask = manusState.activeTask
-    LaunchedEffect(manusTask?.id, manusTask?.status) {
-        val task = manusTask
-        if (task != null && task.isFinished && task.id !in postedManusTaskIds &&
-            manusConvId > 0
-        ) {
-            chatVm.recordManusResult(manusConvId, manusSummary(task))
-            postedManusTaskIds = postedManusTaskIds + task.id
-        }
-    }
     val attachments by chatVm.attachmentsFlow.collectAsStateWithLifecycle()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -418,28 +385,7 @@ fun HermesChatScreen(
                     onSend = {
                         val text = input
                         input = ""
-                        if (agentMode && text.isNotBlank()) {
-                            // Mode Agen: goal TIDAK lewat LLM chat sama sekali.
-                            // Tugas aktif yang belum selesai memblokir goal baru
-                            // supaya dua pelaksana tidak berebut state.
-                            val active = manusState.activeTask
-                            if (active != null && active.status.isActive) {
-                                scope.launch {
-                                    snack.showSnackbar(
-                                        "Tugas agen masih berjalan — " +
-                                            "selesaikan atau batalkan dulu."
-                                    )
-                                }
-                                input = text
-                            } else {
-                                chatVm.recordManusGoal(text) { convId ->
-                                    manusConvId = convId
-                                    manusVm.submitAndRun(text)
-                                }
-                            }
-                        } else {
-                            chatVm.send(text)
-                        }
+                        chatVm.send(text)
                     },
                     onStop = { chatVm.stopStream() },
                     attachments = attachments,
@@ -462,7 +408,6 @@ fun HermesChatScreen(
         ) { pad ->
             val listState = rememberLazyListState()
             val all = state.messages
-            val pendingPermission = manusState.pendingPermission
             // 14.23: daftar tampil = pesan + pemisah tanggal per hari.
             val displayItems = remember(all) { buildChatListItems(all) }
             // Indeks item terakhir di LazyColumn (termasuk streaming/upin).
@@ -537,47 +482,6 @@ fun HermesChatScreen(
                         modifier = Modifier.padding(start = 16.dp, top = 2.dp)
                     )
                 }
-                // 14.22: SATU pil Mode Agen. Loop LLM lama (agentMode di
-                // ChatViewModel) DIHAPUS — kiriman dengan saklar aktif selalu
-                // lewat mesin agen tunggal (rencana LLM + runner Manus).
-                // Default mati; status tugas aktif ditampilkan jujur.
-                AgentModePill(
-                    checked = agentMode,
-                    status = when {
-                        pendingPermission != null ->
-                            "Mode Agen • Butuh persetujuan"
-                        manusState.activeTask != null ->
-                            "Mode Agen • " +
-                                agentTaskStatusLabel(
-                                    manusState.activeTask!!.status
-                                )
-                        else -> "Mode Agen"
-                    },
-                    onCheckedChange = { agentMode = it }
-                )
-                // Kartu timeline tugas agen inline — RINGKAS (goal, progres,
-                // langkah berjalan, Batal, Buka di Agent). Detail penuh ada
-                // di tab Agent. State yang sama dengan tab Agent.
-                val manusCardTask = manusState.activeTask
-                val resumeNeeded by manusVm.resumeNeeded.collectAsStateWithLifecycle()
-                if (manusCardTask != null && manusCardTask.id != dismissedManusTaskId) {
-                    ManusTaskCard(
-                        task = manusCardTask,
-                        onCancel = { manusVm.cancelTask(manusCardTask.id) },
-                        onOpenAgent = onOpenManus,
-                        onDismissFinished = { dismissedManusTaskId = manusCardTask.id },
-                        onResume = {
-                            if (manusCardTask.status == TaskStatus.STOPPED) {
-                                manusVm.resumeStopped(manusCardTask.id)
-                            } else {
-                                manusVm.resumeRestored(manusCardTask.id)
-                            }
-                        },
-                        showResume = manusCardTask.status == TaskStatus.STOPPED ||
-                            (resumeNeeded && manusCardTask.status.isActive),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                    )
-                }
                 if (showEmpty) {
                     ChatEmptyState(
                         onSuggestion = { input = it },
@@ -642,27 +546,6 @@ fun HermesChatScreen(
                                         modifier = Modifier.padding(vertical = 3.dp)
                                     )
                                 }
-                            }
-                        }
-                        // 14.23: kartu persetujuan agen INLINE di alur chat
-                        // (menggantikan dialog modal di chat utama; tab
-                        // Agent tetap memakai dialog). Callback dan teks
-                        // kontrak keamanan sama dengan dialog.
-                        pendingPermission?.let { req ->
-                            item(key = "approval:${req.taskId}") {
-                                ChatApprovalCard(
-                                    request = req,
-                                    onGrant = {
-                                        manusVm.grantPermission(req.taskId)
-                                    },
-                                    onDeny = {
-                                        manusVm.denyPermission(req.taskId)
-                                    },
-                                    modifier = Modifier.padding(
-                                        horizontal = 16.dp,
-                                        vertical = 4.dp
-                                    )
-                                )
                             }
                         }
                         if (state.isStreaming) {
@@ -763,9 +646,6 @@ fun HermesChatScreen(
             }
         }
     }
-    // 14.23: kartu izin agen kini INLINE di daftar chat (item approval
-    // di atas); dialog modal di chat utama dihapus. Tab Agent tetap
-    // memakai ManusPermissionDialog seperti sebelumnya.
     // Dialog edit pesan.
     editingMsg?.let { m ->
         AlertDialog(
@@ -988,48 +868,4 @@ private fun MuseTopBar(
     }
 }
 
-/** Pil status Mode Agen: titik aksen + switch + label status. */
-@Composable
-private fun AgentModePill(
-    checked: Boolean,
-    status: String?,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    val scheme = MaterialTheme.colorScheme
-    Surface(
-        shape = PillShape,
-        color = scheme.surfaceVariant,
-        border = BorderStroke(
-            1.dp,
-            if (checked) scheme.primary.copy(alpha = 0.4f) else scheme.outlineVariant
-        ),
-        modifier = Modifier.padding(start = 16.dp, top = 4.dp)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (checked) scheme.primary
-                        else scheme.onSurfaceVariant.copy(alpha = 0.4f)
-                    )
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = status ?: "Mode Agen",
-                style = MaterialTheme.typography.labelSmall,
-                color = scheme.onSurfaceVariant
-            )
-            Spacer(Modifier.width(4.dp))
-            Switch(
-                checked = checked,
-                onCheckedChange = onCheckedChange
-            )
-        }
-    }
-}
 /* akhir ChatScreen */

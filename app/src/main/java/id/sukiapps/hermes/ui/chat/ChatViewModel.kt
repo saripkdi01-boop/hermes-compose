@@ -83,9 +83,6 @@ data class ChatUiState(
     val upinBusy: Boolean = false,
     // Sprint 1 Gate 2: ringkasan event tool terakhir (chip di layar chat)
     val toolEvent: String? = null
-    // 14.22: Mode Agen lama (agentMode/agentStatus + runAgentSession)
-    // DIHAPUS — satu-satunya Mode Agen kini saklar di ChatScreen yang
-    // mengarah ke mesin agen tunggal (ManusViewModel.submitAndRun).
 )
 
 @HiltViewModel
@@ -454,48 +451,8 @@ class ChatViewModel @Inject constructor(
                 memoryWriter.maybeWriteBack(snapshot)
             }
         }
-        // 14.22: chat biasa SELALU lewat streamReply. Mode Agen tidak lagi
-        // bercabang di sini — kiriman agen ditangani ChatScreen langsung
-        // ke ManusViewModel.submitAndRun (mesin agen tunggal).
+        // Chat biasa SELALU lewat streamReply (tugas agen hanya di tab Agent).
         streamReply(convId, fullPrompt, imageB64s)
-    }
-
-    // ---------- Agen di chat utama (14.22: mesin tunggal) ----------
-    //
-    // Jalur ini SENGAJA tidak memakai LLM sama sekali: goal diteruskan ke
-    // mesin Manus (submitAndRun di ManusViewModel, milik layar), jadi tidak
-    // ada gate "Pilih model dulu" di sini — tugas Manus tidak butuh model
-    // chat. Yang dilakukan fungsi ini hanya mencatat goal sebagai pesan
-    // user di percakapan yang sedang dibuka (atau percakapan baru), supaya
-    // kartu timeline dan hasil akhir punya konteks percakapan.
-    // Membatalkan/mematikan Mode Manus di tengah tugas TIDAK membatalkan
-    // tugas: pelaksana Manus terus berjalan sampai selesai/dibatalkan
-    // lewat tombol Batal di kartu; saklar hanya mengatur kiriman BARU.
-    fun recordManusGoal(text: String, onRecorded: (Long) -> Unit) {
-        val goal = text.trim()
-        if (goal.isEmpty()) return
-        viewModelScope.launch {
-            var convId = _state.value.convId
-            if (convId <= 0) {
-                convId = withContext(Dispatchers.IO) {
-                    repo.newConversation(repo.makeTitle(goal), prefs.persona)
-                }
-                prefs.currentConvId = convId
-                openConversation(convId)
-            }
-            withContext(Dispatchers.IO) {
-                repo.addMessage(convId, "user", goal, null)
-            }
-            onRecorded(convId)
-        }
-    }
-
-    /** Tempel hasil akhir tugas Manus sebagai pesan asisten di [convId]. */
-    fun recordManusResult(convId: Long, summary: String) {
-        if (convId <= 0 || summary.isBlank()) return
-        viewModelScope.launch(Dispatchers.IO) {
-            repo.addMessage(convId, "assistant", summary, null)
-        }
     }
 
     /** Rakit system prompt jiwa SEKALI per conversation (cache per convId). */
