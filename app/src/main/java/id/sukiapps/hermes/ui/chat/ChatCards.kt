@@ -33,7 +33,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import id.sukiapps.hermes.domain.manus.PermissionRequest
 import id.sukiapps.hermes.util.FileUtil
 
 /**
@@ -47,114 +46,6 @@ data class FileMeta(
     val visibility: String,
     val expiresAt: String
 )
-
-/**
- * Kartu persetujuan agen DI DALAM alur chat — pola kartu "Izinkan …?"
- * dari tangkapan layar (judul aksi + deskripsi + kotak metadata + dua
- * tombol), diadaptasi ke tema Pasir Hermes. Menggantikan dialog modal
- * di chat utama (tab Agent tetap memakai dialog); callback dan teks
- * kontrak keamanan SAMA dengan dialog: Izinkan = sekali saja untuk
- * langkah ini, Tolak = langkah dilewati dan tugas lanjut, tool TIDAK
- * dijalankan. Beda perilaku yang disengaja: kartu tidak memblokir
- * layar — tugas menunggu sampai pengguna memilih, dan label
- * "Butuh persetujuan" menandai status menunggu itu.
- */
-@Composable
-fun ChatApprovalCard(
-    request: PermissionRequest,
-    onGrant: () -> Unit,
-    onDeny: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val scheme = MaterialTheme.colorScheme
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = scheme.surface,
-        border = BorderStroke(1.dp, scheme.outlineVariant),
-        modifier = modifier.fillMaxWidth()
-    ) {
-        Column(Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    shape = CircleShape,
-                    color = scheme.surfaceVariant,
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Filled.AutoAwesome,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = scheme.primary
-                        )
-                    }
-                }
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = "Hermes",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = scheme.primary
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = "Butuh persetujuan",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = scheme.tertiary
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = "Izin Diperlukan — Risiko ${request.risk}",
-                style = MaterialTheme.typography.titleSmall,
-                color = scheme.onSurface
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = "Perintah persis: ${request.tool.summary()}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = scheme.onSurface
-            )
-            Text(
-                text = "Alasan: ${request.reason}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = scheme.onSurfaceVariant
-            )
-            Text(
-                text = "Target: ${request.targets.joinToString("; ")}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = scheme.onSurfaceVariant
-            )
-            // 14.28 (B9): teks scope disamakan persis dengan dialog
-            // (dulu tanpa "tidak berlaku untuk langkah lain").
-            Text(
-                text = "Scope: Sekali saja — hanya langkah ini, tidak berlaku untuk langkah lain.",
-                style = MaterialTheme.typography.bodySmall,
-                color = scheme.onSurfaceVariant
-            )
-            Text(
-                text = "Rollback: ${request.rollback ?: "-"}",
-                style = MaterialTheme.typography.bodySmall,
-                color = scheme.onSurfaceVariant
-            )
-            Text(
-                text = "Tugas menunggu sampai kamu memilih.",
-                style = MaterialTheme.typography.bodySmall,
-                color = scheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = onGrant,
-                    modifier = Modifier.sizeIn(minHeight = 48.dp)
-                ) { Text("Izinkan sekali") }
-                OutlinedButton(
-                    onClick = onDeny,
-                    modifier = Modifier.sizeIn(minHeight = 48.dp)
-                ) { Text("Tolak (lewati langkah)") }
-            }
-        }
-    }
-}
 
 /**
  * Kartu opsi pilihan di dalam chat — pola widget dua tombol dari
