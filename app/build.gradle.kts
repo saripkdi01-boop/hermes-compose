@@ -14,8 +14,8 @@ android {
         applicationId = "id.sukiapps.hermes"
         minSdk = 30
         targetSdk = 34
-        versionCode = 54
-        versionName = "14.30"
+        versionCode = 55
+        versionName = "14.31"
         // D1 (14.30): Chaquopy butuh ABI native Python. arm64-v8a = semua HP
         // target (A76 dkk); x86_64 = emulator. Tiap ABI menambah MB APK —
         // delta diukur dari artifact CI dan dilaporkan di deskripsi PR.
