@@ -260,6 +260,18 @@ object ManusReducer {
         val now = clock()
         val task = state.tasks.firstOrNull { it.id == event.taskId } ?: return state
         if (task.status != TaskStatus.IDLE && task.status != TaskStatus.PAUSED) return state
+        // 14.32 gerbang verifikasi (2/3): tugas dijeda yang masih punya
+        // langkah RUNNING dilanjutkan apa adanya — JANGAN lewat advance()
+        // karena advance() akan memulai langkah PENDING berikutnya juga
+        // sehingga dua langkah berjalan bersamaan. (Jalur UI normal
+        // memakai ResumeTask untuk lanjut; ini pengaman level reducer.)
+        if (task.status == TaskStatus.PAUSED &&
+            task.steps.any { it.status == StepStatus.RUNNING }
+        ) {
+            val resumed = task.copy(status = TaskStatus.RUNNING, updatedAt = now)
+            return replaceTask(state, resumed)
+                .log(now, LogLevel.INFO, "manus", "task ${task.id} dilanjutkan (langkah berjalan dipertahankan)")
+        }
         val updated = task.copy(status = TaskStatus.PLANNING, updatedAt = now)
         return advance(replaceTask(state, updated), updated, clock)
             .log(now, LogLevel.INFO, "manus", "task ${task.id} mulai direncanakan")
@@ -272,6 +284,8 @@ object ManusReducer {
      * HANYA boleh keluar dari gerbang verifikasi (VerificationPassed),
      * bukan langsung dari sini. Ini yang membedakan "tool tidak error"
      * dengan "tujuan tercapai dengan bukti".
+     * 14.32: "tersisa" termasuk langkah RUNNING — advance() tidak boleh
+     * ke VERIFYING selagi ada langkah berjalan.
      */
     private fun advance(
         state: ManusUiState,
@@ -279,6 +293,21 @@ object ManusReducer {
         clock: () -> Long
     ): ManusUiState {
         val now = clock()
+        // 14.32 gerbang verifikasi (1/3): langkah yang masih RUNNING berarti
+        // pekerjaan belum habis, apa pun kata "tidak ada PENDING". Tanpa
+        // penjaga ini, advance() bisa mengirim tugas ke VERIFYING (lalu
+        // COMPLETED lewat gerbang) sementara satu langkah masih berjalan —
+        // mis. tugas dijeda saat langkah berjalan lalu StartTask dipanggil
+        // lagi sehingga dua langkah berjalan bersamaan. Fail-closed:
+        // tahan apa adanya, jangan mulai langkah baru, jangan ke VERIFYING.
+        // Langkah yang ditahan tidak hilang: begitu langkah berjalan itu
+        // selesai dan ToolFinished tiba, advance() dipanggil lagi dan
+        // langkah PENDING pertama dimulai seperti biasa.
+        val inFlight = task.steps.firstOrNull { it.status == StepStatus.RUNNING }
+        if (inFlight != null) {
+            return replaceTask(state, task)
+                .log(now, LogLevel.DEBUG, "manus", "advance ditahan: ${inFlight.id} masih berjalan")
+        }
         val next = task.nextStep
         return if (next == null) {
             val waiting = task.copy(
@@ -333,6 +362,14 @@ object ManusReducer {
             },
             updatedAt = now
         )
+        // 14.32 gerbang verifikasi (3/3): hasil langkah yang selesai
+        // saat tugas dijeda dicatat, tapi tugas TETAP dijeda — advance()
+        // tidak boleh membawanya diam-diam ke VERIFYING sebelum user
+        // menekan Lanjutkan (ResumeTask).
+        if (task.status == TaskStatus.PAUSED) {
+            return replaceTask(state, updatedTask)
+                .log(now, LogLevel.INFO, "manus", "langkah ${target.id} selesai saat dijeda — tugas tetap dijeda")
+        }
         return advance(replaceTask(state, updatedTask), updatedTask, clock)
             .log(now, LogLevel.INFO, "manus", "langkah ${target.id} selesai: ${target.title}")
     }
@@ -599,6 +636,13 @@ object ManusReducer {
         val now = clock()
         val task = state.tasks.firstOrNull { it.id == event.taskId } ?: return state
         if (task.status != TaskStatus.VERIFYING) return state
+        // 14.32 gerbang verifikasi (reducer): COMPLETED mensyaratkan
+        // TIDAK ADA pekerjaan tersisa — semua langkah harus settled
+        // (DONE/FAILED/SKIPPED) dan daftar langkah tidak boleh kosong.
+        // Kualitas bukti tetap wewenang TaskVerifier di sisi runner;
+        // di sini reducer hanya memastikan tidak ada langkah PENDING,
+        // RUNNING, atau BLOCKED yang lolos jadi COMPLETED.
+        if (task.steps.isEmpty() || task.steps.any { !it.isSettled }) return state
         val done = task.copy(
             status = TaskStatus.COMPLETED,
             verificationEvidence = event.evidence,
