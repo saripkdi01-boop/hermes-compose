@@ -83,7 +83,9 @@ object LlmPlanner {
         baseUrl: String,
         client: OkHttpClient,
         /** Kunci cadangan per baseUrl (dari KeyVault). Kosong = tanpa cadangan. */
-        providerKeys: Map<String, String> = emptyMap()
+        providerKeys: Map<String, String> = emptyMap(),
+        /** Prompt skill tambahan (dari SkillRouter); null = tanpa skill. */
+        skillPrompt: String? = null
     ): LlmPlanResult = withContext(Dispatchers.IO) {
         if (model.isBlank()) return@withContext LlmPlanResult.Failure(
             "model belum dipilih di Pengaturan"
@@ -97,7 +99,7 @@ object LlmPlanner {
             .put("max_tokens", 1000)
             .put(
                 "messages", JSONArray()
-                    .put(JSONObject().put("role", "system").put("content", SYSTEM_PROMPT))
+                    .put(JSONObject().put("role", "system").put("content", buildSystemPrompt(skillPrompt)))
                     .put(JSONObject().put("role", "user").put("content", goal))
             )
             .toString()
@@ -272,6 +274,16 @@ object LlmPlanner {
             usagePrompt = usagePrompt,
             usageCompletion = usageCompletion
         )
+    }
+
+    /**
+     * 14.32: prompt sistem perencana = prompt dasar + peran skill (bila ada).
+     * Internal supaya bisa di-unit-test; pemanggil lama yang tidak mengirim
+     * skillPrompt mendapat prompt dasar persis seperti sebelumnya.
+     */
+    internal fun buildSystemPrompt(skillPrompt: String?): String {
+        val extra = skillPrompt?.takeIf { it.isNotBlank() } ?: return SYSTEM_PROMPT
+        return SYSTEM_PROMPT + "\n\nPeran tambahan untuk tugas ini:\n" + extra
     }
 
     private const val SYSTEM_PROMPT =

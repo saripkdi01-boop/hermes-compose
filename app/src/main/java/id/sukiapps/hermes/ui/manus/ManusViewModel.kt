@@ -18,6 +18,7 @@ import id.sukiapps.hermes.domain.manus.PlanValidator
 import id.sukiapps.hermes.domain.manus.PlannedStep
 import id.sukiapps.hermes.domain.manus.ProviderChain
 import id.sukiapps.hermes.domain.manus.SessionLimits
+import id.sukiapps.hermes.domain.manus.SkillRouter
 import id.sukiapps.hermes.domain.manus.StepStatus
 import id.sukiapps.hermes.domain.manus.estimateSessionTokens
 import id.sukiapps.hermes.domain.manus.TaskStatus
@@ -146,12 +147,17 @@ class ManusViewModel @Inject constructor(
                     if (key.isNotBlank()) provider.baseUrl to key else null
                 }
                 .toMap()
+            // 14.32: skill router mini — satu skill (bila cocok) ditempel
+            // sebagai peran tambahan di prompt perencana, dan namanya
+            // tampil di label rencana supaya tidak diklaim diam-diam.
+            val skill = SkillRouter.pick(goal)
             val llm = LlmPlanner.plan(
                 goal = goal,
                 model = appPrefs.model,
                 baseUrl = appPrefs.baseUrl,
                 client = httpClient,
-                providerKeys = providerKeys
+                providerKeys = providerKeys,
+                skillPrompt = skill?.prompt
             )
             // Nama tool runtime dari ToolLoop.toolsArray() (struktur
             // OpenAI: entry.type=function, entry.function.name). Bila
@@ -176,11 +182,12 @@ class ManusViewModel @Inject constructor(
                 // 14.26: bila rencana datang dari provider cadangan,
                 // label menyebutnya — kartu tidak boleh mengklaim
                 // rencana provider terpilih padahal cadangan yang jalan.
-                val via = if (llm is LlmPlanResult.Success && llm.fallback) {
+                val viaBase = if (llm is LlmPlanResult.Success && llm.fallback) {
                     "LLM via ${llm.providerUsed} (fallback)"
                 } else {
                     "LLM"
                 }
+                val via = viaBase + (skill?.let { " • skill ${it.title}" } ?: "")
                 label = if (validated.dropped.isEmpty()) via
                 else "$via (${validated.dropped.size} langkah dibuang validator)"
             } else {
