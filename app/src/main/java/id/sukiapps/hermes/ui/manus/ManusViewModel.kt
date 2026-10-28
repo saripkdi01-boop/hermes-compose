@@ -7,6 +7,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import id.sukiapps.hermes.data.local.AppPrefs
 import id.sukiapps.hermes.domain.manus.AgentRunner
+import id.sukiapps.hermes.domain.manus.LaneModelChain
 import id.sukiapps.hermes.domain.manus.LlmPlanResult
 import id.sukiapps.hermes.domain.manus.LlmPlanner
 import id.sukiapps.hermes.domain.manus.ManusEvent
@@ -146,12 +147,17 @@ class ManusViewModel @Inject constructor(
                     if (key.isNotBlank()) provider.baseUrl to key else null
                 }
                 .toMap()
+            // 14.32: lane→model — anggaran token perencanaan per jenis
+            // tugas; rantai model/provider dibangun di LlmPlanner dari
+            // LaneModelChain (model pilihan user dulu, lalu cadangan).
+            val lane = LaneModelChain.laneFor(goal)
             val llm = LlmPlanner.plan(
                 goal = goal,
                 model = appPrefs.model,
                 baseUrl = appPrefs.baseUrl,
                 client = httpClient,
-                providerKeys = providerKeys
+                providerKeys = providerKeys,
+                maxTokens = LaneModelChain.maxTokensFor(lane)
             )
             // Nama tool runtime dari ToolLoop.toolsArray() (struktur
             // OpenAI: entry.type=function, entry.function.name). Bila
@@ -176,11 +182,16 @@ class ManusViewModel @Inject constructor(
                 // 14.26: bila rencana datang dari provider cadangan,
                 // label menyebutnya — kartu tidak boleh mengklaim
                 // rencana provider terpilih padahal cadangan yang jalan.
-                val via = if (llm is LlmPlanResult.Success && llm.fallback) {
+                val viaBase = if (llm is LlmPlanResult.Success && llm.fallback) {
                     "LLM via ${llm.providerUsed} (fallback)"
                 } else {
                     "LLM"
                 }
+                // 14.32: bila model yang berhasil BUKAN model pilihan user
+                // (mis. cadangan Meta), tampilkan — jangan turun diam-diam.
+                val via = viaBase + (if (llm is LlmPlanResult.Success &&
+                    llm.modelUsed.isNotBlank() && llm.modelUsed != appPrefs.model
+                ) " (model ${llm.modelUsed})" else "")
                 label = if (validated.dropped.isEmpty()) via
                 else "$via (${validated.dropped.size} langkah dibuang validator)"
             } else {

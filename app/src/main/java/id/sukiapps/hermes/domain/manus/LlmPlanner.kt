@@ -21,6 +21,12 @@ sealed interface LlmPlanResult {
         val providerUsed: String = "",
         val fallback: Boolean = false,
         /**
+         * 14.32: model yang akhirnya berhasil. Kosong = tidak tercatat
+         * (hasil dari parse() langsung). Bila berbeda dari model pilihan
+         * user, pemanggil WAJIB menampilkannya — bukan turun diam-diam.
+         */
+        val modelUsed: String = "",
+        /**
          * 14.27 (B8): usage dari field `usage` respons provider
          * (prompt/completion/total). null = provider tidak mengirim
          * usage — saat itu angka token adalah estimasi kasar.
@@ -34,7 +40,7 @@ sealed interface LlmPlanResult {
 }
 
 /**
- * LlmPlanner — otak agen tunggal (14.22, rantai fallback 14.26).
+ * LlmPlanner — otak agen tunggal (14.22, rantai fallback 14.26, rantai model 14.32).
  *
  * Satu panggilan /chat/completions NON-STREAMING memakai model + base URL
  * yang sudah dipilih user di Pengaturan. LLM diminta mengembalikan HANYA
@@ -62,10 +68,13 @@ sealed interface LlmPlanResult {
  *   Pemanggil (ManusViewModel) lalu memakai fallback planner kata kunci
  *   BERLABEL dengan alasan gabungan itu, bukan gagal diam-diam.
  *
- * Batas jujur: model yang sama dipakai di semua provider. Bila model
- * terpilih tidak ada di provider cadangan, provider itu gagal (mis.
- * HTTP 404) dan dicatat — model per provider adalah pekerjaan lanjutan,
- * bukan bagian PR ini.
+ * Batas jujur 14.32: rantai model — tiap provider dicoba dengan model
+ * pilihan user dulu; khusus provider Meta, bila model pilihan ditolak,
+ * model cadangan muse-spark-1.3 (model awal preset Muse by Meta) dicoba
+ * pada provider yang sama sebelum pindah provider. Model/provider yang
+ * berhasil dilaporkan di Success (modelUsed/providerUsed) supaya
+ * penurunan tidak diam-diam. Tidak ada ID model karangan untuk provider
+ * lain: tidak ada katalog model terverifikasi untuk mereka di app ini.
  *
  * Tidak ada dependensi Android di sini selain OkHttp (sudah dipakai app);
  * pemanggilan jaringan selalu di Dispatchers.IO.
@@ -83,7 +92,9 @@ object LlmPlanner {
         baseUrl: String,
         client: OkHttpClient,
         /** Kunci cadangan per baseUrl (dari KeyVault). Kosong = tanpa cadangan. */
-        providerKeys: Map<String, String> = emptyMap()
+        providerKeys: Map<String, String> = emptyMap(),
+        /** Anggaran token perencanaan (dari LaneModelChain per lane). */
+        maxTokens: Int = 1000
     ): LlmPlanResult = withContext(Dispatchers.IO) {
         if (model.isBlank()) return@withContext LlmPlanResult.Failure(
             "model belum dipilih di Pengaturan"
@@ -91,23 +102,21 @@ object LlmPlanner {
         if (baseUrl.isBlank()) return@withContext LlmPlanResult.Failure(
             "base URL belum diatur di Pengaturan"
         )
-        val body = JSONObject()
-            .put("model", model)
-            .put("stream", false)
-            .put("max_tokens", 1000)
-            .put(
-                "messages", JSONArray()
-                    .put(JSONObject().put("role", "system").put("content", SYSTEM_PROMPT))
-                    .put(JSONObject().put("role", "user").put("content", goal))
-            )
-            .toString()
-        val chain = ProviderChain.ordered(baseUrl)
+        // 14.32: rantai percobaan provider-major dari LaneModelChain:
+        // model pilihan user dulu pada tiap provider, lalu (khusus Meta)
+        // model cadangan muse-spark-1.3 pada provider yang sama, lalu
+        // provider berikutnya. "Provider menolak model" jatuh ke model
+        // berikutnya — bukan diam-diam turun kualitas, karena model dan
+        // provider yang berhasil dilaporkan di Success.
+        val selected = baseUrl.trimEnd('/')
+        val attempts = LaneModelChain.attempts(baseUrl, model)
         val failures = ArrayList<String>()
-        for ((index, provider) in chain.withIndex()) {
-            val isSelected = index == 0
+        for (laneAttempt in attempts) {
+            val provider = laneAttempt.provider
+            val isSelectedProvider = provider.baseUrl.trimEnd('/') == selected
             val key: String?
             val callClient: OkHttpClient
-            if (isSelected) {
+            if (isSelectedProvider) {
                 // Provider terpilih: kunci utama lewat AuthInterceptor.
                 key = null
                 callClient = client
@@ -119,6 +128,7 @@ object LlmPlanner {
                 }
                 callClient = withoutAuth(client)
             }
+            val body = requestBody(goal, laneAttempt.model, maxTokens)
             val attempt = attemptProvider(provider, key, body, callClient)
             when (attempt) {
                 is ProviderAttempt.Ok -> {
@@ -126,18 +136,32 @@ object LlmPlanner {
                     if (parsed is LlmPlanResult.Success) {
                         return@withContext parsed.copy(
                             providerUsed = provider.name,
-                            fallback = !isSelected
+                            fallback = !isSelectedProvider,
+                            modelUsed = laneAttempt.model
                         )
                     }
                     // Isi respons tidak bisa diparse sebagai rencana:
-                    // provider ini gagal, lanjut ke cadangan.
-                    failures += "${provider.name}: ${(parsed as LlmPlanResult.Failure).reason}"
+                    // percobaan ini gagal, lanjut ke percobaan berikutnya.
+                    failures += "${provider.name}: ${laneAttempt.model}: ${(parsed as LlmPlanResult.Failure).reason}"
                 }
-                is ProviderAttempt.Failed -> failures += "${provider.name}: ${attempt.reason}"
+                is ProviderAttempt.Failed -> failures += "${provider.name}: ${laneAttempt.model}: ${attempt.reason}"
             }
         }
         LlmPlanResult.Failure("semua provider gagal (${failures.joinToString("; ")})")
     }
+
+    /** Body /chat/completions untuk satu percobaan (provider, model). */
+    private fun requestBody(goal: String, model: String, maxTokens: Int): String =
+        JSONObject()
+            .put("model", model)
+            .put("stream", false)
+            .put("max_tokens", maxTokens)
+            .put(
+                "messages", JSONArray()
+                    .put(JSONObject().put("role", "system").put("content", SYSTEM_PROMPT))
+                    .put(JSONObject().put("role", "user").put("content", goal))
+            )
+            .toString()
 
     /** Hasil satu percobaan provider: body mentah, atau alasan gagal. */
     private sealed interface ProviderAttempt {
