@@ -63,7 +63,7 @@ fun TypingIndicator(
             Box(
                 modifier = Modifier
                     .size(7.dp)
-                    .alpha(alphas[i].value)
+                    .alpha(alphas[i])
                     .background(MaterialTheme.colorScheme.primary, CircleShape)
             )
         }
