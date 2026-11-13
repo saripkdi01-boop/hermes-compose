@@ -271,6 +271,50 @@ fun DrawerContent(
         }
     }
 
+    // Dialog ganti nama.
+    renaming?.let { c ->
+        AlertDialog(
+            onDismissRequest = { renaming = null },
+            title = { Text("Ganti nama") },
+            text = {
+                TextField(
+                    value = renameText,
+                    onValueChange = { renameText = it },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.rename(c.id, renameText)
+                    renaming = null
+                }) { Text("Simpan") }
+            },
+            dismissButton = {
+                TextButton(onClick = { renaming = null }) { Text("Batal") }
+            }
+        )
+    }
+
+    // Konfirmasi hapus.
+    deleting?.let { c ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("Hapus percakapan?") },
+            text = { Text("\"${c.title}\" dan seluruh pesannya akan dihapus permanen.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.delete(c.id)
+                    deleting = null
+                }) { Text("Hapus") }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleting = null }) { Text("Batal") }
+            }
+        )
+    }
+}
+
 /** Fase 2: header seksi daftar riwayat (overline kecil, bukan judul). */
 @Composable
 private fun DrawerSectionHeader(title: String) {
@@ -385,49 +429,5 @@ private fun ConversationRow(
                 )
             }
         }
-    }
-}
-
-    // Dialog ganti nama.
-    renaming?.let { c ->
-        AlertDialog(
-            onDismissRequest = { renaming = null },
-            title = { Text("Ganti nama") },
-            text = {
-                TextField(
-                    value = renameText,
-                    onValueChange = { renameText = it },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.rename(c.id, renameText)
-                    renaming = null
-                }) { Text("Simpan") }
-            },
-            dismissButton = {
-                TextButton(onClick = { renaming = null }) { Text("Batal") }
-            }
-        )
-    }
-
-    // Konfirmasi hapus.
-    deleting?.let { c ->
-        AlertDialog(
-            onDismissRequest = { deleting = null },
-            title = { Text("Hapus percakapan?") },
-            text = { Text("\"${c.title}\" dan seluruh pesannya akan dihapus permanen.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.delete(c.id)
-                    deleting = null
-                }) { Text("Hapus") }
-            },
-            dismissButton = {
-                TextButton(onClick = { deleting = null }) { Text("Batal") }
-            }
-        )
     }
 }
