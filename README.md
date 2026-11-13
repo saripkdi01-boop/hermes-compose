@@ -46,7 +46,7 @@ PR kecil dan fokus paling cepat di-review.
 | Network | OkHttp 4.12.0 + Retrofit 2.11.0 + kotlinx.serialization 1.7.3 |
 | Async | Kotlin coroutines (chatStream → `Flow<String>`, cancel via scope) |
 | Database | Room 2.6.1 (file `hermes_chat.db`, **version 5** + Migration(4,5) — lihat HermesDatabase.kt) |
-| Build | Gradle 8.11.1, AGP 8.7.3, Kotlin 2.0.21, KSP 2.0.21-1.0.25, compileSdk 34, minSdk 30 |
+| Build | Gradle 8.11.1, AGP 8.7.3, Kotlin 2.0.21, KSP 2.0.21-1.0.25, compileSdk 34, minSdk 27 |
 
 ## Kontrak yang dipertahankan (perilaku tidak berubah)
 

@@ -1,6 +1,12 @@
 package id.sukiapps.hermes.ui.chat
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,10 +42,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
+import id.sukiapps.hermes.ui.theme.currentChatPalette
 import id.sukiapps.hermes.ui.theme.UserBubbleShape
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -70,6 +78,10 @@ fun MessageBubble(
     onRegenerate: () -> Unit = {},
     onJumpToReply: (Long) -> Unit = {},
     onOptionSelect: (String) -> Unit = {},
+    // Fase 2: true saat bubble ini adalah pratinjau streaming — tampilkan
+    // kursor berkedip di ujung teks (token streamCaret yang selama ini
+    // tidak dipakai).
+    isStreaming: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val isUser = message.role == "user"
@@ -107,7 +119,10 @@ fun MessageBubble(
             ) {
                 Surface(
                     shape = UserBubbleShape,
-                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    // Fase 2: warna bubble hangat dari palet (userBubble),
+                    // bukan surfaceVariant yang sama dengan kartu biasa.
+                    // Kontras teks onSurface: >7:1 di terang maupun gelap.
+                    color = currentChatPalette().userBubble,
                     modifier = Modifier
                         .combinedClickable(
                             onClick = {},
@@ -203,6 +218,10 @@ fun MessageBubble(
                 text = message.content,
                 modifier = Modifier.fillMaxWidth()
             )
+            if (isStreaming) {
+                Spacer(Modifier.height(4.dp))
+                StreamingCaret()
+            }
             if (message.fileMeta != null) {
                 Spacer(Modifier.height(6.dp))
                 FileMetaBox(meta = message.fileMeta)
@@ -303,6 +322,31 @@ fun MessageBubble(
             )
         }
     }
+}
+
+/**
+ * Fase 2: kursor streaming — blok 2×18 dp warna streamCaret yang
+ * berkedip 530 ms (cursorPulse). Menandai jawaban masih mengalir,
+ * tanpa menggeser layout (inline di bawah teks).
+ */
+@Composable
+private fun StreamingCaret() {
+    val transition = rememberInfiniteTransition(label = "caret")
+    val alpha by transition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.2f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(530),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "caretBlink"
+    )
+    Box(
+        modifier = Modifier
+            .size(width = 2.dp, height = 18.dp)
+            .alpha(alpha)
+            .background(currentChatPalette().streamCaret)
+    )
 }
 
 @Composable

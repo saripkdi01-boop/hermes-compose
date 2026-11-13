@@ -285,6 +285,11 @@ class ChatViewModel @Inject constructor(
     /** Coba lagi setelah error: sama seperti regenerate. */
     fun retry() = regenerate()
 
+    /** Fase 2: tutup kartu error inline (snackbar tetap jalan sendiri). */
+    fun clearError() {
+        _state.update { it.copy(error = null) }
+    }
+
     /** Edit pesan user lalu kirim ulang (jawaban setelahnya dihapus & dibuat baru). */
     fun editAndResend(msgId: Long, newText: String) {
         val text = newText.trim()

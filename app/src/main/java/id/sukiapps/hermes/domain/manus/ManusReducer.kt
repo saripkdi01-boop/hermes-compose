@@ -132,7 +132,9 @@ fun ToolCall.risk(): RiskLevel {
         "read_file", "list_files", "web_search", "read_logs", "summarize",
         "web_fetch", "file_read", "github_read_file", "github_repos",
         "supabase_query", "vercel_projects", "memory_list", "system_info",
-        "net_scan", "conn_health", "github_runs"
+        "net_scan", "conn_health", "github_runs",
+        // Fase 3: tool registry baru yang hanya-baca (READ_ONLY).
+        "calc", "time_now", "code_search"
     )
     val medium = setOf(
         "write_file", "send_message", "create_task", "edit_file",
@@ -140,7 +142,9 @@ fun ToolCall.risk(): RiskLevel {
         "github_dispatch"
     )
     val high = setOf(
-        "run_command", "delete_file", "shell_exec", "code_run"
+        "run_command", "delete_file", "shell_exec", "code_run",
+        // Tool registry Termux: perintah shell di Termux (full Linux).
+        "termux_exec"
     )
     val critical = setOf(
         "deploy", "selfupgrade_merge", "selfupgrade_release",

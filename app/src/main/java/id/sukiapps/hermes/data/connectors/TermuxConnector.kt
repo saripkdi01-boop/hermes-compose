@@ -22,6 +22,32 @@ object TermuxConnector {
     const val EXTRA_WORKDIR = "com.termux.RUN_COMMAND_WORKDIR"
     const val EXTRA_BACKGROUND = "com.termux.RUN_COMMAND_BACKGROUND"
 
+    /**
+     * Tambahan untuk tool registry `termux_exec` (bukan untuk konektor
+     * manual di atas). Nilai string di bawah adalah nilai LITERAL dari
+     * `TermuxConstants` (termux-shared, master, repo termux/termux-app) —
+     * diverifikasi dari sumber resmi, bukan tebakan. Lihat
+     * TERMUX-TOOLS-REPORT.md untuk sumber + tanggal verifikasi.
+     *
+     * - Nama service penerima RUN_COMMAND (dipakai setClassName).
+     * - EXTRA_PENDING_INTENT: PendingIntent untuk menerima hasil kembali.
+     *   Wajib Termux >= 0.109; tanpa ini perintah fire-and-forget.
+     * - Kunci result bundle (TERMUX_SERVICE.EXTRA_PLUGIN_RESULT_BUNDLE_*):
+     *   bundle "result" berisi stdout/stderr/exitCode/err/errmsg.
+     *   Perintah background (BACKGROUND=true) mengembalikan stdout dan
+     *   stderr TERPISAH; perintah foreground mengembalikan transkrip sesi.
+     */
+    const val RUN_COMMAND_SERVICE_NAME = "com.termux.app.RunCommandService"
+    const val EXTRA_PENDING_INTENT = "com.termux.RUN_COMMAND_PENDING_INTENT"
+    const val RESULT_BUNDLE_KEY = "result"
+    const val RESULT_STDOUT = "stdout"
+    const val RESULT_STDOUT_ORIGINAL_LENGTH = "stdout_original_length"
+    const val RESULT_STDERR = "stderr"
+    const val RESULT_STDERR_ORIGINAL_LENGTH = "stderr_original_length"
+    const val RESULT_EXIT_CODE = "exitCode"
+    const val RESULT_ERR = "err"
+    const val RESULT_ERRMSG = "errmsg"
+
     /** true bila aplikasi Termux:API terinstal. */
     fun isApiInstalled(ctx: Context): Boolean = try {
         @Suppress("DEPRECATION")

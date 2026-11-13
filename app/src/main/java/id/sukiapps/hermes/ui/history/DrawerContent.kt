@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -160,107 +161,111 @@ fun DrawerContent(
                 .weight(1f)
                 .padding(horizontal = 8.dp)
         ) {
-            items(conversations, key = { it.id }) { c ->
-                val active = c.id == state.activeId
-                androidx.compose.foundation.layout.Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 2.dp)
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (active) MaterialTheme.colorScheme.primaryContainer
-                        else MaterialTheme.colorScheme.surface,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .combinedClickable(
-                                onClick = { onSelect(c.id) },
-                                onLongClick = { menuFor = c }
-                            )
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(
-                                horizontal = 14.dp,
-                                vertical = 10.dp
-                            ),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    if (c.pinned) {
-                                        Icon(
-                                            Icons.Filled.PushPin,
-                                            contentDescription = "Disematkan",
-                                            tint = MaterialTheme.colorScheme.primary
-                                        )
-                                        Spacer(Modifier.width(4.dp))
-                                    }
-                                    Text(
-                                        text = c.title,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        maxLines = 1
-                                    )
-                                }
-                                Text(
-                                    text = SimpleDateFormat(
-                                        "d MMM yyyy HH:mm",
-                                        Locale("id", "ID")
-                                    ).format(Date(c.updatedAt)),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                    // Menu tekan-lama, di-anchor ke item ini.
-                    if (menuFor?.id == c.id) {
-                        DropdownMenu(
-                            expanded = true,
-                            onDismissRequest = { menuFor = null }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Ganti nama") },
-                                leadingIcon = { Icon(Icons.Filled.Edit, null) },
-                                onClick = {
-                                    renaming = c
-                                    renameText = c.title
-                                    menuFor = null
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(if (c.pinned) "Lepas sematan" else "Sematkan") },
-                                leadingIcon = { Icon(Icons.Filled.PushPin, null) },
-                                onClick = { vm.togglePin(c); menuFor = null }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(if (c.archived) "Keluarkan dari arsip" else "Arsipkan") },
-                                leadingIcon = {
-                                    Icon(
-                                        if (c.archived) Icons.Filled.Unarchive
-                                        else Icons.Filled.Archive,
-                                        null
-                                    )
-                                },
-                                onClick = { vm.toggleArchive(c); menuFor = null }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Hapus") },
-                                leadingIcon = { Icon(Icons.Filled.Delete, null) },
-                                onClick = { deleting = c; menuFor = null }
-                            )
-                        }
-                    }
+            // Fase 2: pin dikelompokkan di bawah header seksi.
+            val pinned = conversations.filter { it.pinned }
+            val rest = conversations.filter { !it.pinned }
+            if (pinned.isNotEmpty()) {
+                item(key = "header-pinned") { DrawerSectionHeader("Disematkan") }
+                items(pinned, key = { it.id }) { c ->
+                    ConversationRow(
+                        c = c,
+                        active = c.id == state.activeId,
+                        menuFor = menuFor,
+                        onMenuChange = { menuFor = it },
+                        onSelect = onSelect,
+                        onRename = {
+                            renaming = it
+                            renameText = it.title
+                            menuFor = null
+                        },
+                        onTogglePin = { vm.togglePin(it); menuFor = null },
+                        onToggleArchive = { vm.toggleArchive(it); menuFor = null },
+                        onDelete = { deleting = it; menuFor = null }
+                    )
+                }
+                if (rest.isNotEmpty()) {
+                    item(key = "header-all") { DrawerSectionHeader("Semua percakapan") }
+                }
+                items(rest, key = { it.id }) { c ->
+                    ConversationRow(
+                        c = c,
+                        active = c.id == state.activeId,
+                        menuFor = menuFor,
+                        onMenuChange = { menuFor = it },
+                        onSelect = onSelect,
+                        onRename = {
+                            renaming = it
+                            renameText = it.title
+                            menuFor = null
+                        },
+                        onTogglePin = { vm.togglePin(it); menuFor = null },
+                        onToggleArchive = { vm.toggleArchive(it); menuFor = null },
+                        onDelete = { deleting = it; menuFor = null }
+                    )
+                }
+            } else {
+                items(conversations, key = { it.id }) { c ->
+                    ConversationRow(
+                        c = c,
+                        active = c.id == state.activeId,
+                        menuFor = menuFor,
+                        onMenuChange = { menuFor = it },
+                        onSelect = onSelect,
+                        onRename = {
+                            renaming = it
+                            renameText = it.title
+                            menuFor = null
+                        },
+                        onTogglePin = { vm.togglePin(it); menuFor = null },
+                        onToggleArchive = { vm.toggleArchive(it); menuFor = null },
+                        onDelete = { deleting = it; menuFor = null }
+                    )
                 }
             }
             if (conversations.isEmpty()) {
+                // Fase 2: layar kosong yang membantu — ikon + ajakan
+                // bertindak, bukan sekadar teks.
                 item {
-                    Text(
-                        text = if (state.query.isBlank()) "Belum ada percakapan."
-                        else "Tidak ditemukan.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(16.dp)
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp, vertical = 32.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.History,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = if (state.query.isBlank()) "Belum ada percakapan"
+                            else "Tidak ditemukan.",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = if (state.query.isBlank())
+                                "Mulai chat pertama — riwayatmu tersimpan di HP ini."
+                            else "Coba kata kunci lain.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        if (state.query.isBlank()) {
+                            FilledTonalButton(onClick = onNewChat) {
+                                Icon(Icons.Filled.Add, contentDescription = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Mulai chat")
+                            }
+                        } else {
+                            TextButton(onClick = { vm.setQuery("") }) {
+                                Text("Bersihkan pencarian")
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -307,5 +312,122 @@ fun DrawerContent(
                 TextButton(onClick = { deleting = null }) { Text("Batal") }
             }
         )
+    }
+}
+
+/** Fase 2: header seksi daftar riwayat (overline kecil, bukan judul). */
+@Composable
+private fun DrawerSectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp)
+    )
+}
+
+/**
+ * Fase 2: satu baris riwayat sebagai fungsi sendiri — supaya daftar bisa
+ * disisipi header seksi ("Disematkan" / "Semua percakapan") tanpa
+ * menduplikasi isi baris. Semua aksi diteruskan sebagai lambda dari
+ * DrawerContent (state renaming/deleting/menu tetap di sana).
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ConversationRow(
+    c: ConversationEntity,
+    active: Boolean,
+    menuFor: ConversationEntity?,
+    onMenuChange: (ConversationEntity?) -> Unit,
+    onSelect: (Long) -> Unit,
+    onRename: (ConversationEntity) -> Unit,
+    onTogglePin: (ConversationEntity) -> Unit,
+    onToggleArchive: (ConversationEntity) -> Unit,
+    onDelete: (ConversationEntity) -> Unit
+) {
+    androidx.compose.foundation.layout.Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = if (active) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.surface,
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = { onSelect(c.id) },
+                    onLongClick = { onMenuChange(c) }
+                )
+        ) {
+            Row(
+                modifier = Modifier.padding(
+                    horizontal = 14.dp,
+                    vertical = 10.dp
+                ),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (c.pinned) {
+                            Icon(
+                                Icons.Filled.PushPin,
+                                contentDescription = "Disematkan",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(Modifier.width(4.dp))
+                        }
+                        Text(
+                            text = c.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1
+                        )
+                    }
+                    Text(
+                        text = SimpleDateFormat(
+                            "d MMM yyyy HH:mm",
+                            Locale("id", "ID")
+                        ).format(Date(c.updatedAt)),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+        // Menu tekan-lama, di-anchor ke item ini.
+        if (menuFor?.id == c.id) {
+            DropdownMenu(
+                expanded = true,
+                onDismissRequest = { onMenuChange(null) }
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Ganti nama") },
+                    leadingIcon = { Icon(Icons.Filled.Edit, null) },
+                    onClick = { onRename(c) }
+                )
+                DropdownMenuItem(
+                    text = { Text(if (c.pinned) "Lepas sematan" else "Sematkan") },
+                    leadingIcon = { Icon(Icons.Filled.PushPin, null) },
+                    onClick = { onTogglePin(c) }
+                )
+                DropdownMenuItem(
+                    text = { Text(if (c.archived) "Keluarkan dari arsip" else "Arsipkan") },
+                    leadingIcon = {
+                        Icon(
+                            if (c.archived) Icons.Filled.Unarchive
+                            else Icons.Filled.Archive,
+                            null
+                        )
+                    },
+                    onClick = { onToggleArchive(c) }
+                )
+                DropdownMenuItem(
+                    text = { Text("Hapus") },
+                    leadingIcon = { Icon(Icons.Filled.Delete, null) },
+                    onClick = { onDelete(c) }
+                )
+            }
+        }
     }
 }
