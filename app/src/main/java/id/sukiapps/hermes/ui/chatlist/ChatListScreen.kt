@@ -346,13 +346,16 @@ fun ChatListScreen(
                 )
             } else {
                 TopAppBar(
-                    title = { Text("Hermes", color = Color.White) },
+                    // Fase 2: judul + ikon memakai onSurface, BUKAN putih —
+                    // di tema MUSE terang appBar nyaris putih (#FBF7EF)
+                    // sehingga teks putih tidak terlihat (kontras < 1,2:1).
+                    title = { Text("Hermes", color = MaterialTheme.colorScheme.onSurface) },
                     actions = {
                         IconButton(onClick = { searchOpen = true }) {
-                            Icon(Icons.Outlined.Search, stringResource(R.string.hermes_cd_search), tint = Color.White)
+                            Icon(Icons.Outlined.Search, stringResource(R.string.hermes_cd_search), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         IconButton(onClick = { menuOpen = true }) {
-                            Icon(Icons.Outlined.MoreVert, stringResource(R.string.hermes_cd_menu), tint = Color.White)
+                            Icon(Icons.Outlined.MoreVert, stringResource(R.string.hermes_cd_menu), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                             DropdownMenuItem(

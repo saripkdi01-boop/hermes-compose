@@ -29,32 +29,6 @@ object ToolLoop {
     /** Sprint 1 Gate 2: batas keras iterasi tool-loop (clamp pemanggil). */
     const val HARD_MAX_ITERATIONS = 10
 
-    private val webFetchParams = JSONObject()
-        .put("type", "object")
-        .put(
-            "properties",
-            JSONObject()
-                .put(
-                    "url",
-                    JSONObject()
-                        .put("type", "string")
-                        .put("description", "URL lengkap, contoh: https://sukiapps.web.id/pricing"),
-                )
-                .put(
-                    "render_js",
-                    JSONObject()
-                        .put("type", "boolean")
-                        .put("description", "Render dengan WebView headless bila konten utama muncul setelah JavaScript jalan. Default false."),
-                )
-                .put(
-                    "max_chars",
-                    JSONObject()
-                        .put("type", "integer")
-                        .put("description", "Batas karakter output. Default 20000, max 100000."),
-                ),
-        )
-        .put("required", JSONArray().put("url"))
-
     // Sprint 1 Gate 2 slice 2: konteks + gerbang izin untuk DevTools.
     @Volatile
     private var appCtx: Context? = null
@@ -119,15 +93,11 @@ object ToolLoop {
      */
     fun toolsArray(includeSelfUpgrade: Boolean = true): JSONArray {
         val arr = JSONArray()
-        arr.put(
-            toolDef(
-                "web_fetch",
-                "Ambil isi teks dari sebuah URL (halaman web, dokumentasi, JSON API publik). " +
-                    "Gunakan saat butuh isi faktual dari internet, verifikasi klaim, atau audit isi halaman. " +
-                    "Set render_js=true hanya jika konten utama muncul setelah JavaScript jalan.",
-                webFetchParams,
-            ),
-        )
+        // Fase 3: definisi web_fetch diambil dari ToolRegistry (satu sumber
+        // dengan eksekutor + discovery UI) — bukan duplikat hand-written.
+        // file_read TIDAK punya def di sini sejak awal (hanya ada di
+        // execute()/DevTools); def-nya kini ikut dari registry di akhir.
+        ToolRegistry.toolDef("web_fetch")?.let { arr.put(it) }
         arr.put(
             toolDef(
                 "shell_exec",
@@ -421,6 +391,23 @@ object ToolLoop {
                 params(JSONObject(), emptyList()),
             ),
         )
+        // Fase 3: tool terdaftar di ToolRegistry yang belum punya def
+        // hand-written di atas (file_read, calc, time_now, code_search)
+        // ditambahkan dari registry — satu sumber, tanpa duplikasi def.
+        // PERUBAHAN PERILAKU: file_read kini DITAWARKAN ke LLM di chat
+        // (sebelumnya hanya bisa dipanggil jalur agen/Manus). Aman karena
+        // eksekusinya tetap lewat PermissionGate MEDIUM + sandbox guard.
+        val legacyNames = HashSet<String>()
+        for (i in 0 until arr.length()) {
+            runCatching {
+                legacyNames += arr.getJSONObject(i).getJSONObject("function").getString("name")
+            }
+        }
+        for (tool in ToolRegistry.all()) {
+            if (tool.id in legacyNames) continue
+            if (!includeSelfUpgrade && tool.agentOnly) continue
+            ToolRegistry.toolDef(tool.id)?.let { arr.put(it) }
+        }
         return arr
     }
 
@@ -445,25 +432,20 @@ object ToolLoop {
                 "Minta user mengaktifkan Mode Agen bila memang bermaksud upgrade diri."
         } else null
 
-    /** Jalankan tool yang diminta model. Argumen dinormalisasi & di-clamp. Tidak pernah throw. */
-    suspend fun execute(name: String, args: JSONObject): ToolResult = when (name) {
-        "web_fetch" -> {
-            val url = args.optString("url", "").trim()
-            if (url.isEmpty()) {
-                ToolResult("Error: parameter 'url' wajib diisi", true)
-            } else {
-                val renderJs = args.optBoolean("render_js", false)
-                val maxChars = args.optInt("max_chars", 20_000).coerceIn(500, 100_000)
-                val tool = WebFetchTool()
-                if (renderJs) {
-                    val html = JsRenderer.get(url)
-                    if (html != null) tool.fetchFromHtml(url, html, maxChars)
-                    else tool.fetch(url, renderJs = false, maxChars = maxChars)
-                } else {
-                    tool.fetch(url, renderJs = false, maxChars = maxChars)
-                }
-            }
+    /**
+     * Jalankan tool yang diminta model. Argumen dinormalisasi & di-clamp.
+     * Tidak pernah throw.
+     *
+     * Fase 3: tool terdaftar di [ToolRegistry] dieksekusi DULUAN (satu
+     * jalur untuk semua tool baru — tambah tool = daftar di registry,
+     * tanpa sentuh fungsi ini). Cabang `when` di bawah adalah fallback
+     * legacy untuk tool yang belum dimigrasikan ke interface HermesTool.
+     */
+    suspend fun execute(name: String, args: JSONObject): ToolResult {
+        ToolRegistry.find(name)?.let { tool ->
+            return tool.execute(args, ToolContext(appCtx, gate))
         }
+        return when (name) {
         "github_repos", "github_runs", "github_read_file", "github_write_file",
         "github_dispatch", "telegram_send", "upin_ask", "supabase_query",
         "vercel_projects", "vercel_deployments" -> {
@@ -494,7 +476,9 @@ object ToolLoop {
                 MemoryTools.execute(name, args, g)
             }
         }
-        "shell_exec", "file_read", "file_write", "net_scan",
+        // "file_read" TIDAK ada di sini lagi (Fase 3): dieksekusi lewat
+        // registry → FileReadHermesTool → DevTools yang sama.
+        "shell_exec", "file_write", "net_scan",
         "conn_health", "code_run", "system_info" -> {
             val c = appCtx
             val g = gate
@@ -505,5 +489,6 @@ object ToolLoop {
             }
         }
         else -> ToolResult("Error: tool '$name' tidak dikenal", true)
+        }
     }
 }

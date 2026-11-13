@@ -49,5 +49,13 @@
             android:authorities="id.sukiapps.hermes.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true" />
+        <!-- Tool Termux (termux_exec): terima hasil RUN_COMMAND dari Termux
+             via PendingIntent. Eksplisit (tanpa intent-filter) +
+             exported=false: hanya Hermes sendiri yang bisa memicunya lewat
+             PendingIntent miliknya. Izin RUN_COMMAND + <queries> com.termux
+             sudah ada sejak v9.1 (lihat atas). -->
+        <receiver
+            android:name=".tool.TermuxResultReceiver"
+            android:exported="false" />
     </application>
 </manifest>

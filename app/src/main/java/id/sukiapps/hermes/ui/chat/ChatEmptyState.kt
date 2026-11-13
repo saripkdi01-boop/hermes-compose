@@ -21,6 +21,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,11 +39,15 @@ private val SUGGESTIONS = listOf(
 /**
  * Layar kosong ala Muse: logo bulat, sapaan serif, chip saran.
  * Tap chip → teks masuk ke composer (user review dulu sebelum kirim).
+ * Fase 2: bila belum ada model aktif, tampilkan baris status + jalan ke
+ * Pengaturan — mencegah kegagalan sesudah saran diketuk.
  */
 @Composable
 fun ChatEmptyState(
     onSuggestion: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    model: String = "",
+    onOpenSettings: (() -> Unit)? = null
 ) {
     val scheme = MaterialTheme.colorScheme
     Column(
@@ -78,6 +83,21 @@ fun ChatEmptyState(
             style = MaterialTheme.typography.bodyLarge,
             color = scheme.onSurfaceVariant
         )
+        if (model.isBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Belum ada model aktif.",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = scheme.onSurfaceVariant
+                )
+                if (onOpenSettings != null) {
+                    TextButton(onClick = onOpenSettings) {
+                        Text("Buka Pengaturan")
+                    }
+                }
+            }
+        }
         Spacer(Modifier.height(28.dp))
         Column(
             verticalArrangement = Arrangement.spacedBy(10.dp),

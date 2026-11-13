@@ -6,7 +6,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -52,7 +55,11 @@ fun MarkdownText(
                     }
                     is Markdown.Block.Heading -> {
                         val style = when (b.level) {
-                            1 -> MaterialTheme.typography.headlineSmall
+                            // Fase 2: H1 memakai headlineMedium dari
+                            // V14Typography (serif 20 sp) — sebelumnya
+                            // headlineSmall default M3 yang tidak ada di
+                            // skala tipografi aplikasi.
+                            1 -> MaterialTheme.typography.headlineMedium
                             2 -> MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp)
                             else -> MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.SemiBold
@@ -80,17 +87,29 @@ fun MarkdownText(
                         }
                     }
                     is Markdown.Block.Quote -> {
-                        Text(
-                            text = b.text,
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            ),
-                            modifier = Modifier.padding(
-                                start = 8.dp,
-                                top = 2.dp,
-                                bottom = 2.dp
+                        // Fase 2: quote punya bar aksen kiri 3 dp — sebelumnya
+                        // hanya teks berwarna sekunder, mudah dikira paragraf.
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            Box(
+                                modifier = Modifier
+                                    .width(3.dp)
+                                    .fillMaxHeight()
+                                    .background(
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                    )
                             )
-                        )
+                            Text(
+                                text = b.text,
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                ),
+                                modifier = Modifier.padding(
+                                    start = 12.dp,
+                                    top = 2.dp,
+                                    bottom = 2.dp
+                                )
+                            )
+                        }
                     }
                     is Markdown.Block.Table -> {
                         MarkdownTable(table = b)

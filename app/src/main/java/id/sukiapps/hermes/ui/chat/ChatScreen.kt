@@ -42,6 +42,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
@@ -485,7 +487,9 @@ fun HermesChatScreen(
                 if (showEmpty) {
                     ChatEmptyState(
                         onSuggestion = { input = it },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        model = state.model,
+                        onOpenSettings = onOpenSettings
                     )
                 } else {
                     LazyColumn(
@@ -565,6 +569,7 @@ fun HermesChatScreen(
                                         isSpeaking = false,
                                         onSpeak = {},
                                         onStopSpeak = {},
+                                        isStreaming = true,
                                         modifier = Modifier.padding(vertical = 4.dp)
                                     )
                                 }
@@ -576,6 +581,57 @@ fun HermesChatScreen(
                                 Box(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
                                     TypingIndicator(status = "Upin sedang mengetik…")
                                 }
+                            }
+                        }
+                    }
+                }
+                // Fase 2: kartu error inline di atas composer — error tidak
+                // lagi hanya snackbar yang hilang sendiri; ada tombol
+                // "Coba lagi" (chatVm.retry) + tutup. Snackbar dipertahankan
+                // sebagai pengumuman kedua.
+                // (err lokal: state adalah delegated val, tidak smart-cast.)
+                val err = state.error
+                if (err != null && !state.isStreaming) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(
+                                start = 12.dp, end = 4.dp,
+                                top = 8.dp, bottom = 8.dp
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.ErrorOutline,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = err,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = { chatVm.retry() }) {
+                                Text("Coba lagi")
+                            }
+                            IconButton(
+                                onClick = { chatVm.clearError() },
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Close,
+                                    contentDescription = "Tutup peringatan",
+                                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
                         }
                     }

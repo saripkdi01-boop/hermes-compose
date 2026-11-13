@@ -49,9 +49,12 @@ object PlanValidator {
     val REQUIRED_ARGS: Map<String, List<String>> = mapOf(
         "web_fetch" to listOf("url"),
         "shell_exec" to listOf("command"),
+        "termux_exec" to listOf("command"),
         "code_run" to listOf("code"),
         "file_read" to listOf("path"),
         "file_write" to listOf("path", "content"),
+        "calc" to listOf("expression"),
+        "code_search" to listOf("content", "pattern"),
         "net_scan" to listOf("host"),
         "conn_health" to listOf("url"),
         "github_runs" to listOf("owner", "repo"),
@@ -69,14 +72,14 @@ object PlanValidator {
         "selfupgrade_merge" to listOf("pr"),
         "selfupgrade_release" to listOf("tag")
         // Tanpa argumen wajib: github_repos, vercel_projects, system_info,
-        // memory_list, selfupgrade_branch.
+        // memory_list, selfupgrade_branch, time_now.
     )
 
     /** Daftar tool yang dikenal validator bila pemanggil tidak memberi daftar. */
     fun knownTools(): Set<String> = REQUIRED_ARGS.keys +
         setOf(
             "github_repos", "vercel_projects", "system_info",
-            "memory_list", "selfupgrade_branch"
+            "memory_list", "selfupgrade_branch", "time_now"
         )
 
     fun validate(raw: List<RawStep>, allowedTools: Set<String>): ValidatedPlan {

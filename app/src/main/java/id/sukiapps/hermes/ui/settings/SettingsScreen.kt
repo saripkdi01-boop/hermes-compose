@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -34,10 +35,12 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -69,6 +72,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import id.sukiapps.hermes.tool.ToolAllowlist
+import id.sukiapps.hermes.tool.ToolRegistry
 import id.sukiapps.hermes.data.audit.DevMode
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -210,7 +214,7 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp) // Fase 2: 24→16 dp, lebih padat di 720×1520
         ) {
             // Header identitas: tanpa nama/email karangan — app tidak
             // menyimpan keduanya; yang tampil hanya model + base URL nyata.
@@ -219,13 +223,32 @@ fun SettingsScreen(
                 baseUrl = state.baseUrl,
             )
             if (state.keyBroken) {
-                Card {
-                    Text(
-                        text = "Peringatan: Android Keystore bermasalah di HP ini. " +
-                            "API key disimpan biasa (tetap privat di aplikasi).",
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(12.dp)
+                // Fase 2: kartu peringatan memakai errorContainer +
+                // onErrorContainer + ikon — sebelumnya teks error di atas
+                // Card biasa, tampil seperti kartu normal.
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
                     )
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(12.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Error,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "Peringatan: Android Keystore bermasalah di HP ini. " +
+                                "API key disimpan biasa (tetap privat di aplikasi).",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
                 }
             }
 
@@ -674,6 +697,44 @@ fun SettingsScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Simpan allowlist scan") }
+                Spacer(Modifier.height(12.dp))
+                // ---- Fase 3: discovery tool aktif (dari ToolRegistry) ----
+                // Daftar dibaca sekali (remember) — sumber yang sama dengan
+                // definisi LLM (ToolLoop.toolsArray) dan eksekutor.
+                val registryTools = remember { ToolRegistry.all() }
+                Text(
+                    "Tool aktif (${registryTools.size}) — yang bisa dipanggil model:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                for (tool in registryTools) {
+                    Text(
+                        "• ${tool.id} — ${tool.name}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        tool.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        "Izin: " +
+                            (if (tool.requiresApproval) "butuh persetujuan user"
+                            else "tanpa persetujuan") +
+                            " · Kemampuan: " +
+                            tool.capabilities.joinToString(", ") { it.name },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+                Text(
+                    "Tool katalog Python (skrip .py buatan sendiri) dikelola " +
+                        "terpisah di layar Katalog Tools — bukan bagian registry ini.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
             // ---- Grup: Agen (Sprint 1 Gate 4) ----

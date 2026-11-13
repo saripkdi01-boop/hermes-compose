@@ -33,15 +33,24 @@ fun TypingIndicator(
     modifier: Modifier = Modifier
 ) {
     val transition = rememberInfiniteTransition(label = "dots")
-    val alpha by transition.animateFloat(
+    // Fase 2: tiap titik berdenyut dengan jeda 0/150/300 ms — gelombang
+    // berjalan kiri→kanan (sebelumnya ketiga titik berkedip serempak).
+    // (Tiga pemanggilan eksplisit: animateFloat adalah @Composable dan
+    // tidak boleh dipanggil dari dalam lambda List.)
+    @Composable
+    fun dotAlpha(delay: Int) = transition.animateFloat(
         initialValue = 0.25f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(700),
+            animation = tween(700, delayMillis = delay),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "pulse"
+        label = "pulse$delay"
     )
+    val alpha0 by dotAlpha(0)
+    val alpha1 by dotAlpha(150)
+    val alpha2 by dotAlpha(300)
+    val alphas = listOf(alpha0, alpha1, alpha2)
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
@@ -50,11 +59,11 @@ fun TypingIndicator(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        repeat(3) {
+        repeat(3) { i ->
             Box(
                 modifier = Modifier
                     .size(7.dp)
-                    .alpha(alpha)
+                    .alpha(alphas[i].value)
                     .background(MaterialTheme.colorScheme.primary, CircleShape)
             )
         }

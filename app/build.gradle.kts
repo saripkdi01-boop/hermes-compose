@@ -12,7 +12,7 @@ android {
     compileSdk = 34
     defaultConfig {
         applicationId = "id.sukiapps.hermes"
-        minSdk = 30
+        minSdk = 27
         targetSdk = 34
         versionCode = 55
         versionName = "14.31"
