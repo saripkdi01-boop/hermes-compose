@@ -132,11 +132,13 @@ fun MessageBubble(
                 ) {
                     Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                         AttachmentSummary(message)
-                        Text(
-                            text = message.content,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        ExpandableMessageContent(text = message.content) { shown ->
+                            Text(
+                                text = shown,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                         if (message.fileMeta != null) {
                             Spacer(Modifier.height(6.dp))
                             FileMetaBox(meta = message.fileMeta)
@@ -214,13 +216,20 @@ fun MessageBubble(
                 Spacer(Modifier.height(4.dp))
             }
             AttachmentSummary(message)
-            MarkdownText(
-                text = message.content,
-                modifier = Modifier.fillMaxWidth()
-            )
             if (isStreaming) {
+                MarkdownText(
+                    text = message.content,
+                    modifier = Modifier.fillMaxWidth()
+                )
                 Spacer(Modifier.height(4.dp))
                 StreamingCaret()
+            } else {
+                ExpandableMessageContent(text = message.content) { shown ->
+                    MarkdownText(
+                        text = shown,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
             if (message.fileMeta != null) {
                 Spacer(Modifier.height(6.dp))
