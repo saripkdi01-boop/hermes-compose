@@ -382,7 +382,7 @@ fun HermesChatScreen(
             bottomBar = {
                 InputBar(
                     value = input,
-                    onValueChange = { input = it },
+                    onValueChange = { input = it; chatVm.onInputChanged(it) },
                     isStreaming = state.isStreaming,
                     onSend = {
                         val text = input

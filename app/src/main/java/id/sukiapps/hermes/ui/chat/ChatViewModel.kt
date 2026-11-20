@@ -514,6 +514,8 @@ class ChatViewModel @Inject constructor(
             it.copy(isStreaming = true, streamingText = "", error = null, toolEvent = null)
         }
         val acc = StringBuilder()
+        // v16: throttle hitung token saat streaming (tiap ~40 karakter).
+        var lastTokenLen = 0
         ExecutionLog.log("prompt", "Prompt → $model", prompt.take(500), "start")
         postPromptNotif(prompt.take(40))
         // Sprint 1 Gate 2: tanpa lampiran gambar -> jalur tool-loop
@@ -563,6 +565,13 @@ class ChatViewModel @Inject constructor(
                         val cur = acc.toString()
                         withContext(Dispatchers.Main) {
                             _state.update { it.copy(streamingText = cur) }
+                            // v16: token real-time saat streaming — throttle
+                            // tiap ~40 karakter (~10 token) supaya tidak
+                            // recompute tiap token.
+                            if (cur.length - lastTokenLen >= 40) {
+                                lastTokenLen = cur.length
+                                updateTokenEstimate()
+                            }
                         }
                     }
             } finally {
@@ -585,9 +594,14 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    private fun updateTokenEstimate() {
+    /** v16: hitung token real-time saat mengetik — termasuk teks input. */
+    fun onInputChanged(input: String) {
+        updateTokenEstimate(input)
+    }
+
+    private fun updateTokenEstimate(inputText: String = "") {
         val s = _state.value
-        val all = s.messages.joinToString("\n") { it.content } + s.streamingText
+        val all = s.messages.joinToString("\n") { it.content } + s.streamingText + inputText
         _state.update { it.copy(tokenEstimate = Markdown.estimateTokens(all)) }
     }
 }
