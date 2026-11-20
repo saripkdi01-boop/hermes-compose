@@ -39,7 +39,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions {
-        jvmTarget = "17"
+        jvmTarget = org.jetbrains.kotlin.config.JvmTarget.JVM_17
     }
     packaging {
         resources {
