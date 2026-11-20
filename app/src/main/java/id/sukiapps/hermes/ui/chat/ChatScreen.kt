@@ -82,6 +82,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.lucide.LucideIcons
 import id.sukiapps.hermes.ApkShareProvider
 import id.sukiapps.hermes.TtsReader
 import id.sukiapps.hermes.domain.Prefs
@@ -902,7 +903,7 @@ private fun MuseTopBar(
         ) {
             IconButton(onClick = onOpenDrawer) {
                 Icon(
-                    Icons.Filled.Menu,
+                    LucideIcons.All.Menu,
                     contentDescription = "Riwayat chat",
                     tint = scheme.onSurfaceVariant
                 )
@@ -942,28 +943,28 @@ private fun MuseTopBar(
             }
             IconButton(onClick = onNewChat) {
                 Icon(
-                    Icons.Filled.Add,
+                    LucideIcons.All.Plus,
                     contentDescription = "Chat baru",
                     tint = scheme.onSurfaceVariant
                 )
             }
             IconButton(onClick = onOpenSettings) {
                 Icon(
-                    Icons.Filled.Settings,
+                    LucideIcons.All.Settings,
                     contentDescription = "Pengaturan",
                     tint = scheme.onSurfaceVariant
                 )
             }
             IconButton(onClick = onExport) {
                 Icon(
-                    Icons.Filled.Share,
+                    LucideIcons.All.Share,
                     contentDescription = "Ekspor chat",
                     tint = scheme.onSurfaceVariant
                 )
             }
             IconButton(onClick = onOpenV12Hub) {
                 Icon(
-                    Icons.Filled.Apps,
+                    LucideIcons.All.LayoutGrid,
                     contentDescription = "Fitur v12",
                     tint = scheme.onSurfaceVariant
                 )

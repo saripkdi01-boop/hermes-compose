@@ -82,6 +82,7 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons.core)
     implementation(libs.compose.material.icons.extended)
+    implementation("io.github.thelacspace:lucide-compose:1.16.0") // v16: ikon modern Lucide (ISC, lihat NOTICE-lucide.md)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.navigation.compose)
     // Hilt
