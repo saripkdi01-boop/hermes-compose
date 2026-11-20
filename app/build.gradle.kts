@@ -9,7 +9,7 @@ plugins {
 }
 android {
     namespace = "id.sukiapps.hermes"
-    compileSdk = 34
+    compileSdk = 35
     defaultConfig {
         applicationId = "id.sukiapps.hermes"
         minSdk = 27
