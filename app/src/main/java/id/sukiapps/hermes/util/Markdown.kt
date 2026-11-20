@@ -83,9 +83,51 @@ object Markdown {
         ) to i
     }
 
+    /**
+     * v16 — Bersihkan teks sebelum render (dipakai parseBlocks, jadi
+     * berlaku untuk bubble AI maupun user):
+     * - <br> beruntun (3+) dirapatkan jadi 2 (maks satu baris kosong);
+     * - tag HTML lain dibuang, isinya dipertahankan;
+     * - entitas umum (&nbsp; &amp; &lt; &gt; &quot;) di-decode;
+     * - 3+ baris kosong beruntun dirapatkan jadi satu baris kosong.
+     * Blok kode (fence ```) tidak disentuh — isinya boleh berisi < >.
+     */
+    fun sanitizeForDisplay(src: String): String {
+        val segments = src.split("```")
+        val out = StringBuilder()
+        for ((idx, seg) in segments.withIndex()) {
+            if (idx % 2 == 1) {
+                out.append(seg) // di dalam fence kode — biarkan apa adanya
+            } else {
+                out.append(sanitizePlain(seg))
+            }
+            if (idx < segments.size - 1) out.append("```")
+        }
+        return out.toString()
+    }
+
+    private fun sanitizePlain(s: String): String {
+        var t = s
+        // 3+ <br> beruntun (boleh ada spasi/baris baru di antaranya) -> 2.
+        t = t.replace(Regex("(?i)(<br\\s*/?>)(\\s*<br\\s*/?>){2,}"), "<br><br>")
+        // Buang tag HTML lain (kecuali br) — sisakan isi teksnya.
+        t = t.replace(
+            Regex("(?i)</?(div|span|p|strong|em|b|i|a|ul|ol|li|h[1-6]|hr|code|pre|blockquote|table|thead|tbody|tr|td|th|font|u|s|sub|sup|small|mark|section|article)[^>]*>"),
+            ""
+        )
+        // Decode entitas umum.
+        t = t.replace("&nbsp;", " ").replace("&amp;", "&")
+            .replace("&lt;", "<").replace("&gt;", ">")
+            .replace("&quot;", "\"").replace("&#39;", "'")
+            .replace("&apos;", "'")
+        // 3+ baris kosong -> satu baris kosong.
+        t = t.replace(Regex("\n{3,}"), "\n\n")
+        return t
+    }
+
     fun parseBlocks(src: String): List<Block> {
         val blocks = mutableListOf<Block>()
-        val lines = src.split("\n")
+        val lines = sanitizeForDisplay(src).split("\n")
         var i = 0
         val para = StringBuilder()
         fun flushPara() {
@@ -185,6 +227,18 @@ object Markdown {
         var i = from
         val linkColor = Color(0xFF4DD0E1)
         while (i < to) {
+            // v16: <br> -> jeda baris nyata (bukan teks mentah).
+            if (s.startsWith("<br", i, ignoreCase = true)) {
+                val gt = s.indexOf('>', i)
+                if (gt != -1 && gt < to) {
+                    val inner = s.substring(i + 3, gt).trim()
+                    if (inner.isEmpty() || inner == "/") {
+                        append('\n')
+                        i = gt + 1
+                        continue
+                    }
+                }
+            }
             when {
                 s.startsWith("**", i) -> {
                     val end = s.indexOf("**", i + 2)
