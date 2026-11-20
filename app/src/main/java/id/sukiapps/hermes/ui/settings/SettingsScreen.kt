@@ -15,8 +15,12 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,8 +29,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.stickyHeader
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Notifications
@@ -38,6 +45,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -81,12 +89,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import id.sukiapps.hermes.data.connectors.ServerlessConnector
 import id.sukiapps.hermes.data.connectors.TermuxConnector
 import id.sukiapps.hermes.data.connectors.UpinConnector
-import id.sukiapps.hermes.domain.PersonaPreset
 import id.sukiapps.hermes.domain.manus.ProviderChain
 import id.sukiapps.hermes.KeyVault
 import java.io.File
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
@@ -98,6 +105,9 @@ fun SettingsScreen(
     val state by vm.state.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
     val snack = remember { SnackbarHostState() }
+    // Fase 3 (v15): state LazyColumn + scope untuk chip "Lompat ke:".
+    val listState = rememberLazyListState()
+    val jumpScope = rememberCoroutineScope()
 
     var showModelPicker by remember { mutableStateOf(false) }
     var baseUrlEdit by remember { mutableStateOf(state.baseUrl) }
@@ -178,6 +188,108 @@ fun SettingsScreen(
         mutableStateOf(state.upinSecret)
     }
 
+    // Fase 3 (v15): state lokal seksi yang dulu hidup di dalam body
+    // seksi — diangkat ke level layar supaya tidak
+    // hilang saat item LazyColumn keluar viewport (LazyColumn membuang
+    // item di luar layar; Column dulu menyimpan semuanya).
+    val limitsNow = id.sukiapps.hermes.data.agent.AgentLimits.get(ctx)
+    var iterEdit by remember { mutableStateOf(limitsNow.maxIterations.toString()) }
+    var minEdit by remember { mutableStateOf(limitsNow.timeoutMinutes.toString()) }
+    var budgetEdit by remember { mutableStateOf(limitsNow.tokenBudget.toString()) }
+    var memMsg by remember { mutableStateOf<String?>(null) }
+    var fallbackMsg by remember { mutableStateOf<String?>(null) }
+    var jerouterKeyEdit by remember {
+        mutableStateOf(KeyVault.getSecret(ctx, ProviderChain.JEROUTER.keySecret))
+    }
+    var openRouterKeyEdit by remember {
+        mutableStateOf(KeyVault.getSecret(ctx, ProviderChain.OPENROUTER.keySecret))
+    }
+    var dcomputeKeyEdit by remember {
+        mutableStateOf(KeyVault.getSecret(ctx, ProviderChain.DCOMPUTE.keySecret))
+    }
+    var suOn by remember {
+        mutableStateOf(
+            id.sukiapps.hermes.data.agent.SelfUpgradePrefs
+                .enabled(ctx)
+        )
+    }
+    val importScope = rememberCoroutineScope()
+    val exportLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts
+            .CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            val ok = runCatching {
+                ctx.contentResolver.openOutputStream(uri)?.use { s ->
+                    s.write(
+                        id.sukiapps.hermes.data.agent.AgentMemory
+                            .exportJson().toByteArray(Charsets.UTF_8)
+                    )
+                }
+            }.isSuccess
+            memMsg = if (ok) "Export ingatan tersimpan."
+            else "Export gagal."
+        }
+    }
+    val importLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            // File ekspor nyata ~26 MB: baca + tulis di IO,
+            // jangan blokir main thread (ANR) seperti dulu.
+            memMsg = "Mengimpor ingatan…"
+            importScope.launch {
+                val text = withContext(Dispatchers.IO) {
+                    runCatching {
+                        ctx.contentResolver.openInputStream(uri)
+                            ?.bufferedReader()?.readText().orEmpty()
+                    }.getOrDefault("")
+                }
+                // Format lama hermes-memory-v1 tetap lewat
+                // importJson (jalur lama, tidak diubah); format
+                // Upin lewat importUpin yang rinci + backup.
+                // Penanda format ada di awal kedua dokumen,
+                // jadi cek string murah ini cukup — tidak
+                // perlu parse JSON 26 MB dua kali.
+                if (text.contains("hermes-memory-v1")) {
+                    val ok = runCatching {
+                        id.sukiapps.hermes.data.agent
+                            .AgentMemory.importJson(text)
+                    }.getOrDefault(false)
+                    memMsg = if (ok) "Import ingatan diterapkan."
+                    else "Import gagal — format tidak dikenal."
+                } else {
+                    val result = runCatching {
+                        id.sukiapps.hermes.data.agent
+                            .AgentMemory.importUpin(ctx, text)
+                    }.getOrElse {
+                        id.sukiapps.hermes.data.agent
+                            .AgentMemory.ImportResult(
+                                ok = false,
+                                error = it.message
+                                    ?: "gagal membaca file.",
+                            )
+                    }
+                    memMsg = if (result.ok) {
+                        buildString {
+                            append("Import berhasil: ")
+                            append("${result.imported} file")
+                            if (result.skipped.isNotEmpty()) {
+                                append(", ${result.skipped.size} dilewati")
+                            }
+                            append(".")
+                            if (result.summaryApplied) {
+                                append(" Ringkasan masuk ingatan agen.")
+                            }
+                        }
+                    } else {
+                        "Import gagal: ${result.error}"
+                    }
+                }
+            }
+        }
+    }
+
     LaunchedEffect(state.snack) {
         state.snack?.let {
             snack.showSnackbar(it)
@@ -209,53 +321,70 @@ fun SettingsScreen(
                 ),
             modifier = Modifier.padding(pad),
         ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 12.dp),
+        // Fase 3 (v15): LazyColumn + stickyHeader per seksi — ganti Column
+        // + verticalScroll. Indeks item bersifat statis (profil = 0, chip
+        // lompat = 1, tiap seksi = 2 item: header 2+2i, isi 3+2i) karena
+        // tidak ada seksi kondisional di level daftar; kartu peringatan
+        // Keystore ikut di dalam item profil supaya indeks tidak bergeser.
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp) // Fase 2: 24→16 dp, lebih padat di 720×1520
         ) {
-            // Header identitas: tanpa nama/email karangan — app tidak
-            // menyimpan keduanya; yang tampil hanya model + base URL nyata.
-            SettingsProfileHeader(
-                model = state.model,
-                baseUrl = state.baseUrl,
-            )
-            if (state.keyBroken) {
-                // Fase 2: kartu peringatan memakai errorContainer +
-                // onErrorContainer + ikon — sebelumnya teks error di atas
-                // Card biasa, tampil seperti kartu normal.
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(12.dp)
+            item(key = "profile") {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                // Header identitas: tanpa nama/email karangan — app tidak
+                // menyimpan keduanya; yang tampil hanya model + base URL nyata.
+                SettingsProfileHeader(
+                    model = state.model,
+                    baseUrl = state.baseUrl,
+                )
+                if (state.keyBroken) {
+                    // Fase 2: kartu peringatan memakai errorContainer +
+                    // onErrorContainer + ikon — sebelumnya teks error di atas
+                    // Card biasa, tampil seperti kartu normal.
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
                     ) {
-                        Icon(
-                            Icons.Filled.Error,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = "Peringatan: Android Keystore bermasalah di HP ini. " +
-                                "API key disimpan biasa (tetap privat di aplikasi).",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(12.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.Error,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = "Peringatan: Android Keystore bermasalah di HP ini. " +
+                                    "API key disimpan biasa (tetap privat di aplikasi).",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
                     }
                 }
+                }
+            }
+            // Baris chip "Lompat ke:" — sticky di bawah TopAppBar supaya
+            // selalu terlihat; ketuk chip = lompat ke seksi (Fase 3).
+            stickyHeader(key = "jump") {
+                SettingsJumpChips(
+                    onJump = { index ->
+                        jumpScope.launch { listState.animateScrollToItem(index) }
+                    }
+                )
             }
 
             // ---- Grup: Model ----
             // v9.3: dropdown (Box+Popup) diganti dialog picker — pola popup
             // terbukti rapuh di device (tidak bisa switch model).
-            SettingsSectionCard(
+            settingsSection(
                 "Model AI",
                 trailing = {
                     StatusDot(
@@ -321,7 +450,7 @@ fun SettingsScreen(
             }
 
             // ---- Grup: Parameter ----
-            SettingsSectionCard("Parameter Generasi") {
+            settingsSection("Parameter Generasi") {
                 SettingsSlider(
                     label = "Temperature",
                     valueText = String.format("%.2f", state.temperature),
@@ -347,7 +476,7 @@ fun SettingsScreen(
             }
 
             // ---- Grup: Persona ----
-            SettingsSectionCard("Persona") {
+            settingsSection("Persona") {
                 OutlinedTextField(
                     value = state.persona,
                     onValueChange = vm::setPersona,
@@ -409,7 +538,7 @@ fun SettingsScreen(
             }
 
             // ---- Grup: Tampilan ----
-            SettingsSectionCard("Tampilan") {
+            settingsSection("Tampilan") {
                 Text("Mode tema", style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.height(8.dp))
                 SettingsThemeSegmented(
@@ -432,7 +561,7 @@ fun SettingsScreen(
             }
 
             // ---- Grup: Notifikasi & Izin (v14.10) ----
-            SettingsSectionCard("Notifikasi & Izin") {
+            settingsSection("Notifikasi & Izin") {
                 SettingsItemSwitch(
                     icon = Icons.Filled.Notifications,
                     title = "Notifikasi",
@@ -482,7 +611,7 @@ fun SettingsScreen(
             }
 
             // ---- Grup: Koneksi ----
-            SettingsSectionCard("Koneksi") {
+            settingsSection("Koneksi") {
                 // Preset provider (Sprint 1 tambahan): Muse by Meta = Meta Model API.
                 Text(
                     "Preset provider",
@@ -573,7 +702,6 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.height(8.dp))
-                var fallbackMsg by remember { mutableStateOf<String?>(null) }
                 val saveFallbackKey: (String, String) -> Unit = { secret, value ->
                     fallbackMsg = runCatching {
                         if (value.isBlank()) {
@@ -584,15 +712,6 @@ fun SettingsScreen(
                             "Key cadangan tersimpan."
                         }
                     }.getOrElse { "Gagal menyimpan key cadangan: ${it.message}" }
-                }
-                var jerouterKeyEdit by remember {
-                    mutableStateOf(KeyVault.getSecret(ctx, ProviderChain.JEROUTER.keySecret))
-                }
-                var openRouterKeyEdit by remember {
-                    mutableStateOf(KeyVault.getSecret(ctx, ProviderChain.OPENROUTER.keySecret))
-                }
-                var dcomputeKeyEdit by remember {
-                    mutableStateOf(KeyVault.getSecret(ctx, ProviderChain.DCOMPUTE.keySecret))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
@@ -646,7 +765,7 @@ fun SettingsScreen(
             }
 
             // ---- Grup: Tool Web (Sprint 1 Gate 2) ----
-            SettingsSectionCard("Tool Web") {
+            settingsSection("Tool Web") {
                 Text(
                     "Allowlist domain web_fetch — satu domain per baris. " +
                         "Kosongkan untuk mengizinkan semua domain publik " +
@@ -738,88 +857,7 @@ fun SettingsScreen(
             }
 
             // ---- Grup: Agen (Sprint 1 Gate 4) ----
-            SettingsSectionCard("Agen") {
-                val limitsNow = id.sukiapps.hermes.data.agent.AgentLimits.get(ctx)
-                var iterEdit by remember { mutableStateOf(limitsNow.maxIterations.toString()) }
-                var minEdit by remember { mutableStateOf(limitsNow.timeoutMinutes.toString()) }
-                var budgetEdit by remember { mutableStateOf(limitsNow.tokenBudget.toString()) }
-                var memMsg by remember { mutableStateOf<String?>(null) }
-                val exportLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-                    androidx.activity.result.contract.ActivityResultContracts
-                        .CreateDocument("application/json")
-                ) { uri ->
-                    if (uri != null) {
-                        val ok = runCatching {
-                            ctx.contentResolver.openOutputStream(uri)?.use { s ->
-                                s.write(
-                                    id.sukiapps.hermes.data.agent.AgentMemory
-                                        .exportJson().toByteArray(Charsets.UTF_8)
-                                )
-                            }
-                        }.isSuccess
-                        memMsg = if (ok) "Export ingatan tersimpan."
-                        else "Export gagal."
-                    }
-                }
-                val importScope = rememberCoroutineScope()
-                val importLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-                    androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
-                ) { uri ->
-                    if (uri != null) {
-                        // File ekspor nyata ~26 MB: baca + tulis di IO,
-                        // jangan blokir main thread (ANR) seperti dulu.
-                        memMsg = "Mengimpor ingatan…"
-                        importScope.launch {
-                            val text = withContext(Dispatchers.IO) {
-                                runCatching {
-                                    ctx.contentResolver.openInputStream(uri)
-                                        ?.bufferedReader()?.readText().orEmpty()
-                                }.getOrDefault("")
-                            }
-                            // Format lama hermes-memory-v1 tetap lewat
-                            // importJson (jalur lama, tidak diubah); format
-                            // Upin lewat importUpin yang rinci + backup.
-                            // Penanda format ada di awal kedua dokumen,
-                            // jadi cek string murah ini cukup — tidak
-                            // perlu parse JSON 26 MB dua kali.
-                            if (text.contains("hermes-memory-v1")) {
-                                val ok = runCatching {
-                                    id.sukiapps.hermes.data.agent
-                                        .AgentMemory.importJson(text)
-                                }.getOrDefault(false)
-                                memMsg = if (ok) "Import ingatan diterapkan."
-                                else "Import gagal — format tidak dikenal."
-                            } else {
-                                val result = runCatching {
-                                    id.sukiapps.hermes.data.agent
-                                        .AgentMemory.importUpin(ctx, text)
-                                }.getOrElse {
-                                    id.sukiapps.hermes.data.agent
-                                        .AgentMemory.ImportResult(
-                                            ok = false,
-                                            error = it.message
-                                                ?: "gagal membaca file.",
-                                        )
-                                }
-                                memMsg = if (result.ok) {
-                                    buildString {
-                                        append("Import berhasil: ")
-                                        append("${result.imported} file")
-                                        if (result.skipped.isNotEmpty()) {
-                                            append(", ${result.skipped.size} dilewati")
-                                        }
-                                        append(".")
-                                        if (result.summaryApplied) {
-                                            append(" Ringkasan masuk ingatan agen.")
-                                        }
-                                    }
-                                } else {
-                                    "Import gagal: ${result.error}"
-                                }
-                            }
-                        }
-                    }
-                }
+            settingsSection("Agen") {
                 Text(
                     "Batas sesi Mode Agen (chat). Batas ini DITEGAKKAN " +
                         "di jalur agen: tugas berhenti dengan alasan " +
@@ -868,12 +906,6 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Simpan batas agen") }
                 Spacer(Modifier.height(8.dp))
-                var suOn by remember {
-                    mutableStateOf(
-                        id.sukiapps.hermes.data.agent.SelfUpgradePrefs
-                            .enabled(ctx)
-                    )
-                }
                 SettingsItemSwitch(
                     icon = Icons.Filled.SmartToy,
                     title = "Upgrade Diri Otomatis",
@@ -930,7 +962,7 @@ fun SettingsScreen(
             }
 
             // ---- Grup: Mode Developer (Sprint 1 Gate 2) ----
-            SettingsSectionCard("Mode Developer") {
+            settingsSection("Mode Developer") {
                 Text(
                     if (devOn) {
                         "AKTIF — approval LOW/MEDIUM dilewati otomatis; HIGH tetap wajib popup."
@@ -1031,7 +1063,7 @@ fun SettingsScreen(
             }
 
             // ---- Grup: Backup ----
-            SettingsSectionCard("Backup & Restore") {
+            settingsSection("Backup & Restore") {
                 Button(
                     onClick = { vm.doBackup() },
                     modifier = Modifier.fillMaxWidth()
@@ -1053,7 +1085,7 @@ fun SettingsScreen(
             }
 
             // ---- Grup: API Key ----
-            SettingsSectionCard("API Key") {
+            settingsSection("API Key") {
                 OutlinedButton(
                     onClick = onOpenKeySetup,
                     modifier = Modifier.fillMaxWidth()
@@ -1085,7 +1117,7 @@ fun SettingsScreen(
             }
 
             // ---- Grup: Jiwa Hermes (v9.1) ----
-            SettingsSectionCard("Jiwa Hermes") {
+            settingsSection("Jiwa Hermes") {
                 Text(
                     "Persona tetap, ingatan jangka panjang, dan todo — " +
                         "disusun otomatis menjadi system prompt.",
@@ -1099,7 +1131,7 @@ fun SettingsScreen(
             }
 
             // ---- Grup: Konektor (v9.1, aksi manual) ----
-            SettingsSectionCard("Konektor") {
+            settingsSection("Konektor") {
                 Text(
                     "Aksi manual — setiap tombol di bawah ditekan olehmu, " +
                         "tidak pernah berjalan otomatis. Token tersimpan " +
@@ -1322,7 +1354,7 @@ fun SettingsScreen(
             }
 
             // ---- Grup: Konektor Upin (v9.4) ----
-            SettingsSectionCard("Konektor Upin") {
+            settingsSection("Konektor Upin") {
                 Text(
                     "Tanya-jawab dengan agent Upin di VM via SSH forward. " +
                         "Secret tersimpan terenkripsi di Keystore.",
@@ -1380,7 +1412,7 @@ fun SettingsScreen(
             }
 
             // ---- Grup: Tentang (v14.18) ----
-            SettingsSectionCard("Tentang") {
+            settingsSection("Tentang") {
                 val pkgInfo = runCatching {
                     ctx.packageManager.getPackageInfo(ctx.packageName, 0)
                 }.getOrNull()
@@ -1412,7 +1444,7 @@ fun SettingsScreen(
             }
 
             // ---- Grup: Izin & Riwayat (v9.2) ----
-            SettingsSectionCard("Izin & Riwayat") {
+            settingsSection("Izin & Riwayat") {
                 Text(
                     "Semua aksi sensitif (Termux, Telegram, GitHub, tulis " +
                         "ingatan) tercatat — termasuk yang kamu tolak.",
@@ -1425,7 +1457,7 @@ fun SettingsScreen(
                 ) { Text("Buka Riwayat Izin…") }
             }
             // Ruang bawah 96dp agar konten tidak tertutup navigation bar.
-            Spacer(Modifier.height(96.dp))
+            item(key = "bottom-space") { Spacer(Modifier.height(96.dp)) }
         }
         }
     }
@@ -1537,6 +1569,92 @@ fun SettingsScreen(
                 TextButton(onClick = { restartNeeded = false }) { Text("Mengerti") }
             }
         )
+    }
+}
+
+// ---- Fase 3 (v15): seksi Pengaturan di LazyColumn ----
+
+/**
+ * Satu seksi Pengaturan: judul jadi stickyHeader (tetap terlihat saat
+ * menggulir isi seksi), isi di dalam SettingsSectionBody (styling kartu
+ * sama seperti sebelumnya — hanya judulnya pindah).
+ */
+@OptIn(ExperimentalFoundationApi::class)
+private fun LazyListScope.settingsSection(
+    title: String,
+    trailing: (@Composable () -> Unit)? = null,
+    content: @Composable () -> Unit,
+) {
+    stickyHeader(key = "header-$title") {
+        SettingsStickySectionTitle(title = title, trailing = trailing)
+    }
+    item(key = "section-$title") {
+        SettingsSectionBody { content() }
+    }
+}
+
+/** Judul seksi yang menempel di atas saat menggulir (gaya judul kartu). */
+@Composable
+private fun SettingsStickySectionTitle(
+    title: String,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    SettingsSectionTitleRow(
+        title = title,
+        trailing = trailing,
+        modifier = Modifier
+            .background(MaterialTheme.colorScheme.background)
+            .padding(vertical = 8.dp),
+    )
+}
+
+// Urutan seksi di LazyColumn (0-based) — HARUS sama dengan urutan
+// pemanggilan settingsSection() di SettingsScreen:
+// 0 Model AI, 1 Parameter Generasi, 2 Persona, 3 Tampilan,
+// 4 Notifikasi & Izin, 5 Koneksi, 6 Tool Web, 7 Agen,
+// 8 Mode Developer, 9 Backup & Restore, 10 API Key, 11 Jiwa Hermes,
+// 12 Konektor, 13 Konektor Upin, 14 Tentang, 15 Izin & Riwayat.
+// Indeks item header = 2 + 2 * urutan (item 0 = profil, item 1 = chip
+// lompat; tiap seksi = 2 item: header lalu isi).
+private fun settingsSectionHeaderIndex(order: Int): Int = 2 + 2 * order
+
+/** Target chip "Lompat ke:": label pendek → urutan seksi. */
+private val SETTINGS_JUMP_TARGETS = listOf(
+    "Model" to 0,
+    "Persona" to 2,
+    "Tampilan" to 3,
+    "Koneksi" to 5,
+    "Agen" to 7,
+    "Backup" to 9,
+    "API Key" to 10,
+)
+
+/**
+ * Baris chip "Lompat ke:" — digulir horizontal bila tidak muat di
+ * 360 dp; ketuk chip = animateScrollToItem ke header seksi.
+ */
+@Composable
+private fun SettingsJumpChips(onJump: (Int) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background)
+            .horizontalScroll(rememberScrollState())
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Lompat ke:",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        for ((label, order) in SETTINGS_JUMP_TARGETS) {
+            AssistChip(
+                onClick = { onJump(settingsSectionHeaderIndex(order)) },
+                label = { Text(label) },
+            )
+        }
     }
 }
 

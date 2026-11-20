@@ -14,8 +14,8 @@ android {
         applicationId = "id.sukiapps.hermes"
         minSdk = 27
         targetSdk = 34
-        versionCode = 55
-        versionName = "14.31"
+        versionCode = 56
+        versionName = "15.0" // v15: Pengaturan LazyColumn + stickyHeader + chip lompat; paket chatlist mati dihapus
         // D1 (14.30): Chaquopy butuh ABI native Python. arm64-v8a = semua HP
         // target (A76 dkk); x86_64 = emulator. Tiap ABI menambah MB APK —
         // delta diukur dari artifact CI dan dilaporkan di deskripsi PR.

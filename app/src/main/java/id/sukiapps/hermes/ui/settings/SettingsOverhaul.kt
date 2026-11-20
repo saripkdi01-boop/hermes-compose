@@ -71,11 +71,14 @@ import androidx.compose.ui.unit.sp
  * through its existing confirmation dialog.
  */
 
-/** Section container: title plus optional trailing, then the section body. */
+/**
+ * Fase 3 (v15): isi kartu seksi tanpa judul — dipakai LazyColumn
+ * (judul seksi jadi stickyHeader di atas kartu). Styling kartu sama
+ * persis dengan SettingsSectionCard: radius 20 dp, surfaceContainerLow,
+ * padding 20/16 dp, animateContentSize.
+ */
 @Composable
-fun SettingsSectionCard(
-    title: String,
-    trailing: (@Composable () -> Unit)? = null,
+fun SettingsSectionBody(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
@@ -89,23 +92,31 @@ fun SettingsSectionCard(
             )
             .padding(horizontal = 20.dp, vertical = 16.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    letterSpacing = 0.15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                ),
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.weight(1f),
-            )
-            if (trailing != null) trailing()
-        }
-        Spacer(Modifier.height(12.dp))
         content()
+    }
+}
+
+/** Baris judul seksi: teks judul + trailing opsional. Dipakai judul sticky di LazyColumn. */
+@Composable
+fun SettingsSectionTitleRow(
+    title: String,
+    trailing: (@Composable () -> Unit)? = null,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium.copy(
+                letterSpacing = 0.15.sp,
+                fontWeight = FontWeight.SemiBold,
+            ),
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.weight(1f),
+        )
+        if (trailing != null) trailing()
     }
 }
 
