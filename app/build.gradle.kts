@@ -22,6 +22,9 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
         }
+        compilerOptions {
+            jvmTarget = "17"
+        }
     }
     buildTypes {
         release {
@@ -37,9 +40,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-    compilerOptions {
-        jvmTarget = "17"
     }
     packaging {
         resources {
