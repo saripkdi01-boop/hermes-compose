@@ -604,4 +604,10 @@ class ChatViewModel @Inject constructor(
         val all = s.messages.joinToString("\n") { it.content } + s.streamingText + inputText
         _state.update { it.copy(tokenEstimate = Markdown.estimateTokens(all)) }
     }
+
+    /** v16: bangun teks ekspor riwayat percakapan aktif. */
+    fun buildExport(format: ChatExportFormat): String {
+        val s = _state.value
+        return buildChatExport(s.title, s.messages, format)
+    }
 }
