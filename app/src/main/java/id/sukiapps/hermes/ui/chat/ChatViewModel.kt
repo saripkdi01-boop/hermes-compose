@@ -73,6 +73,7 @@ data class ChatUiState(
     val convId: Long = -1L,
     val title: String = "Percakapan baru",
     val model: String = "",
+    val availableModels: List<String> = emptyList(),
     val persona: String = "",
     val messages: List<UiMessage> = emptyList(),
     val isStreaming: Boolean = false,
@@ -159,13 +160,23 @@ class ChatViewModel @Inject constructor(
 
     init {
         _state.update {
-            it.copy(model = prefs.model, persona = prefs.persona)
+            it.copy(
+                model = prefs.model,
+                persona = prefs.persona,
+                availableModels = prefs.cachedModels() ?: emptyList()
+            )
         }
         openConversation(prefs.currentConvId)
     }
 
     fun refreshSettings() {
-        _state.update { it.copy(model = prefs.model, persona = prefs.persona) }
+        _state.update {
+            it.copy(
+                model = prefs.model,
+                persona = prefs.persona,
+                availableModels = prefs.cachedModels() ?: emptyList()
+            )
+        }
     }
 
     /** Buka percakapan; -1 = baru (belum disimpan sampai pesan pertama). */
@@ -609,5 +620,16 @@ class ChatViewModel @Inject constructor(
     fun buildExport(format: ChatExportFormat): String {
         val s = _state.value
         return buildChatExport(s.title, s.messages, format)
+    }
+
+    /**
+     * v16: ganti model dari chip di layar chat — simpan sebagai preferensi
+     * (prefs.model) seperti setModel di Settings, tanpa validasi live
+     * (cepat, tanpa panggilan API; bila model tidak valid, error muncul
+     * saat kirim seperti biasa).
+     */
+    fun selectModel(model: String) {
+        prefs.model = model
+        _state.update { it.copy(model = model) }
     }
 }

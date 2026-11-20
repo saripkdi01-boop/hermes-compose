@@ -498,6 +498,14 @@ fun HermesChatScreen(
                         modifier = Modifier.padding(start = 16.dp, top = 2.dp)
                     )
                 }
+                // v16: chip ganti model — di bawah indikator aktivitas agen
+                // (LiveActivityBar + event tool) supaya alur agen/self-upgrade
+                // tetap terlihat paling atas; hanya tampil bila ada cache model.
+                ModelChipRow(
+                    models = state.availableModels,
+                    current = state.model,
+                    onSelect = { chatVm.selectModel(it) }
+                )
                 if (showEmpty) {
                     ChatEmptyState(
                         onSuggestion = { input = it },
