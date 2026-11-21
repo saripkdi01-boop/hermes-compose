@@ -32,10 +32,12 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -132,11 +134,16 @@ fun MessageBubble(
                 ) {
                     Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                         AttachmentSummary(message)
-                        Text(
-                            text = message.content,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        ExpandableMessageContent(text = message.content) { shown ->
+                            CompositionLocalProvider(
+                                LocalContentColor provides MaterialTheme.colorScheme.onSurface
+                            ) {
+                                MarkdownText(
+                                    text = shown,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
                         if (message.fileMeta != null) {
                             Spacer(Modifier.height(6.dp))
                             FileMetaBox(meta = message.fileMeta)
@@ -214,13 +221,20 @@ fun MessageBubble(
                 Spacer(Modifier.height(4.dp))
             }
             AttachmentSummary(message)
-            MarkdownText(
-                text = message.content,
-                modifier = Modifier.fillMaxWidth()
-            )
             if (isStreaming) {
+                MarkdownText(
+                    text = message.content,
+                    modifier = Modifier.fillMaxWidth()
+                )
                 Spacer(Modifier.height(4.dp))
                 StreamingCaret()
+            } else {
+                ExpandableMessageContent(text = message.content) { shown ->
+                    MarkdownText(
+                        text = shown,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
             if (message.fileMeta != null) {
                 Spacer(Modifier.height(6.dp))
