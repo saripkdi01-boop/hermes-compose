@@ -22,9 +22,6 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
         }
-        compilerOptions {
-            jvmTarget = "17"
-        }
     }
     buildTypes {
         release {
@@ -40,6 +37,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = "17"
     }
     packaging {
         resources {
@@ -82,7 +82,6 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons.core)
     implementation(libs.compose.material.icons.extended)
-    implementation("io.github.thelacspace:lucide-compose:1.16.0") // v16: ikon modern Lucide (ISC, lihat NOTICE-lucide.md)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.navigation.compose)
     // Hilt

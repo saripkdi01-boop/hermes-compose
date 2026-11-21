@@ -49,7 +49,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
-import dev.lucide.LucideIcons
 import id.sukiapps.hermes.ui.theme.currentChatPalette
 import id.sukiapps.hermes.ui.theme.UserBubbleShape
 import java.text.SimpleDateFormat
@@ -191,7 +190,7 @@ fun MessageBubble(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = LucideIcons.All.Sparkles,
+                            imageVector = Icons.Filled.AutoAwesome,
                             contentDescription = null,
                             modifier = Modifier.size(14.dp),
                             tint = MaterialTheme.colorScheme.primary
@@ -259,8 +258,8 @@ fun MessageBubble(
                     modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
-                        imageVector = if (isSpeaking) LucideIcons.All.VolumeX
-                        else LucideIcons.All.Volume2,
+                        imageVector = if (isSpeaking) Icons.Filled.VolumeOff
+                        else Icons.Filled.VolumeUp,
                         contentDescription = if (isSpeaking) "Hentikan bacaan"
                         else "Bacakan pesan",
                         modifier = Modifier.size(18.dp),
@@ -275,7 +274,7 @@ fun MessageBubble(
                     modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
-                        imageVector = LucideIcons.All.Copy,
+                        imageVector = Icons.Filled.ContentCopy,
                         contentDescription = "Salin jawaban",
                         modifier = Modifier.size(18.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -287,7 +286,7 @@ fun MessageBubble(
                         modifier = Modifier.size(32.dp)
                     ) {
                         Icon(
-                            imageVector = LucideIcons.All.RefreshCw,
+                            imageVector = Icons.Filled.Refresh,
                             contentDescription = "Buat ulang jawaban",
                             modifier = Modifier.size(18.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -315,7 +314,7 @@ fun MessageBubble(
     ) {
         DropdownMenuItem(
             text = { Text("Salin") },
-            leadingIcon = { Icon(LucideIcons.All.Copy, contentDescription = null) },
+            leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
             onClick = {
                 menuOpen = false
                 clipboard.setText(AnnotatedString(message.content))
@@ -325,14 +324,14 @@ fun MessageBubble(
         if (isUser) {
             DropdownMenuItem(
                 text = { Text("Edit & kirim ulang") },
-                leadingIcon = { Icon(LucideIcons.All.Pencil, contentDescription = null) },
+                leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
                 onClick = { menuOpen = false; onEdit() }
             )
         }
         if (!isUser && isLastAssistant) {
             DropdownMenuItem(
                 text = { Text("Buat ulang jawaban") },
-                leadingIcon = { Icon(LucideIcons.All.RefreshCw, contentDescription = null) },
+                leadingIcon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
                 onClick = { menuOpen = false; onRegenerate() }
             )
         }

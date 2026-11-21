@@ -38,7 +38,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,8 +47,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import dev.lucide.LucideIcons
 import id.sukiapps.hermes.ui.theme.ComposerShape
 import id.sukiapps.hermes.util.FileUtil
 
@@ -58,9 +55,6 @@ import id.sukiapps.hermes.util.FileUtil
  * cincin aksen saat fokus, tombol kirim ↔ stop saat streaming.
  */
 @Composable
-/** v16 — Paket stiker Hermes: emoji khas yang bisa ditempel ke pesan. */
-private val HERMES_STICKERS = listOf("✨", "🚀", "💡", "🎉", "🔥", "❤️", "👍", "🙏", "⭐", "🤖")
-
 fun InputBar(
     value: String,
     onValueChange: (String) -> Unit,
@@ -79,7 +73,6 @@ fun InputBar(
     modifier: Modifier = Modifier
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    var showStickers by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
     Column(modifier = modifier) {
@@ -124,20 +117,6 @@ fun InputBar(
                 }
             }
         }
-        if (showStickers) {
-            LazyRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                items(HERMES_STICKERS) { emoji ->
-                    TextButton(onClick = { onValueChange(value + emoji) }) {
-                        Text(text = emoji, fontSize = 28.sp)
-                    }
-                }
-            }
-        }
         Surface(
             // Container tunggal ala Muse — border halus, cincin aksen saat fokus.
             // 14.23: elevasi bayangan supaya composer terbaca "melayang"
@@ -161,7 +140,7 @@ fun InputBar(
             ) {
                 IconButton(onClick = { menuOpen = true }) {
                     Icon(
-                        imageVector = LucideIcons.All.Plus,
+                        imageVector = Icons.Filled.Add,
                         contentDescription = "Tambah lampiran"
                     )
                 }
@@ -242,14 +221,6 @@ fun InputBar(
                         )
                     }
                 }
-                IconButton(onClick = { showStickers = !showStickers }) {
-                    Icon(
-                        imageVector = LucideIcons.All.Sticker,
-                        contentDescription = "Stiker",
-                        tint = if (showStickers) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
                 Spacer(Modifier.width(4.dp))
                 AnimatedContent(
                     targetState = isStreaming,
@@ -274,7 +245,7 @@ fun InputBar(
                             modifier = Modifier.size(48.dp)
                         ) {
                             Icon(
-                                LucideIcons.All.Send,
+                                Icons.Filled.Send,
                                 contentDescription = "Kirim"
                             )
                         }
