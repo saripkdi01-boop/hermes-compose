@@ -19,12 +19,16 @@ object SseDecoder {
      * @return teks delta, atau null bila baris bukan konten
      *         (mis. delta berisi role saja / [DONE] / JSON rusak).
      */
+    // 3e (bug "null"): provider yang kehabisan jawaban kadang mengirim
+    // konten berupa STRING "null", bukan JSON null. String itu bukan
+    // jawaban — saring di sini supaya tidak pernah jadi token; tanpa ini
+    // tiap chunk menempel "null" dan bubble chat penuh "nullnullnull...".
     fun extractDelta(data: String): String? {
         if (data == "[DONE]") return null
         return try {
             val chunk = json.decodeFromString<ChatChunk>(data)
             chunk.choices.firstOrNull()?.delta?.content
-                ?.takeIf { it.isNotEmpty() }
+                ?.takeIf { it.isNotEmpty() && it != "null" }
         } catch (e: Exception) {
             null
         }
@@ -64,7 +68,7 @@ object SseDecoder {
         val delta = try {
             json.decodeFromString<ChatChunk>(data)
                 .choices.firstOrNull()?.delta?.content
-                ?.takeIf { it.isNotEmpty() }
+                ?.takeIf { it.isNotEmpty() && it != "null" }
         } catch (e: Exception) {
             null
         }

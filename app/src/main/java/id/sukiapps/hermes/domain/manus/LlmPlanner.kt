@@ -221,7 +221,11 @@ object LlmPlanner {
                 .getJSONObject("message")
                 .getString("content")
         }.getOrNull().orEmpty()
-        if (content.isBlank()) {
+        // 3e (bug "null"): org.json getString() pada JSON null mengembalikan
+        // STRING "null" (bukan ""), jadi respons kosong lolos cek isBlank()
+        // lalu gagal parse dengan pesan menyesatkan. Perlakukan "null"
+        // sama dengan kosong supaya pemanggil dapat "respons LLM kosong".
+        if (content.isBlank() || content == "null") {
             return LlmPlanResult.Failure("respons LLM kosong")
         }
         // 14.27 (B8): baca usage ASLI bila provider mengirimnya.

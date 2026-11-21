@@ -303,7 +303,13 @@ class SseClient(private val baseClient: OkHttpClient) {
                     i++
                 }
             }
-            sb.toString()
+            // 3e (bug "null"): provider yang kehabisan jawaban (mis. ernie
+            // via Jerouter) kadang mengirim konten berupa STRING "null",
+            // bukan JSON null. Itu bukan jawaban — jangan teruskan sebagai
+            // token, kalau tidak tiap chunk menempel "null" dan bubble chat
+            // penuh "nullnullnull...".
+            val text = sb.toString()
+            if (text == "null") "" else text
         } catch (_: Exception) {
             ""
         }

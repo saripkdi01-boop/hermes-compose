@@ -290,7 +290,12 @@ class SseClient @Inject constructor(
                         ?.optJSONObject("delta")
                         ?: continue
                     val content = delta.optString("content", "")
-                    if (content.isNotEmpty()) {
+                    // 3e (bug "null"): provider yang kehabisan jawaban
+                    // kadang mengirim STRING "null" (bukan JSON null) —
+                    // optString tidak bisa membedakannya dari teks asli,
+                    // jadi saring di sini; kalau tidak, tiap chunk
+                    // menempel "null" dan bubble chat penuh "nullnull...".
+                    if (content.isNotEmpty() && content != "null") {
                         iterText.append(content)
                         trySend(content)
                     }
@@ -425,7 +430,10 @@ class SseClient @Inject constructor(
                 ?.optJSONObject("message")
                 ?.optString("content", "")
                 .orEmpty()
-            if (content.isBlank()) {
+            // 3e (bug "null"): jawaban non-streaming berupa STRING "null"
+            // diperlakukan sama dengan kosong — lempar supaya pemanggil
+            // menampilkan pesan profesional, bukan "null".
+            if (content.isBlank() || content == "null") {
                 throw AIHttpException(
                     "Server tidak mengirim jawaban. Coba lagi atau ganti model."
                 )
