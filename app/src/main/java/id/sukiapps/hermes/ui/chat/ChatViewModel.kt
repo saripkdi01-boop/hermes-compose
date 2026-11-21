@@ -73,6 +73,7 @@ data class ChatUiState(
     val convId: Long = -1L,
     val title: String = "Percakapan baru",
     val model: String = "",
+    val availableModels: List<String> = emptyList(),
     val persona: String = "",
     val messages: List<UiMessage> = emptyList(),
     val isStreaming: Boolean = false,
@@ -159,13 +160,23 @@ class ChatViewModel @Inject constructor(
 
     init {
         _state.update {
-            it.copy(model = prefs.model, persona = prefs.persona)
+            it.copy(
+                model = prefs.model,
+                persona = prefs.persona,
+                availableModels = prefs.cachedModels() ?: emptyList()
+            )
         }
         openConversation(prefs.currentConvId)
     }
 
     fun refreshSettings() {
-        _state.update { it.copy(model = prefs.model, persona = prefs.persona) }
+        _state.update {
+            it.copy(
+                model = prefs.model,
+                persona = prefs.persona,
+                availableModels = prefs.cachedModels() ?: emptyList()
+            )
+        }
     }
 
     /** Buka percakapan; -1 = baru (belum disimpan sampai pesan pertama). */
@@ -514,6 +525,8 @@ class ChatViewModel @Inject constructor(
             it.copy(isStreaming = true, streamingText = "", error = null, toolEvent = null)
         }
         val acc = StringBuilder()
+        // v16: throttle hitung token saat streaming (tiap ~40 karakter).
+        var lastTokenLen = 0
         ExecutionLog.log("prompt", "Prompt → $model", prompt.take(500), "start")
         postPromptNotif(prompt.take(40))
         // Sprint 1 Gate 2: tanpa lampiran gambar -> jalur tool-loop
@@ -563,6 +576,13 @@ class ChatViewModel @Inject constructor(
                         val cur = acc.toString()
                         withContext(Dispatchers.Main) {
                             _state.update { it.copy(streamingText = cur) }
+                            // v16: token real-time saat streaming — throttle
+                            // tiap ~40 karakter (~10 token) supaya tidak
+                            // recompute tiap token.
+                            if (cur.length - lastTokenLen >= 40) {
+                                lastTokenLen = cur.length
+                                updateTokenEstimate()
+                            }
                         }
                     }
             } finally {
@@ -585,9 +605,31 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    private fun updateTokenEstimate() {
+    /** v16: hitung token real-time saat mengetik — termasuk teks input. */
+    fun onInputChanged(input: String) {
+        updateTokenEstimate(input)
+    }
+
+    private fun updateTokenEstimate(inputText: String = "") {
         val s = _state.value
-        val all = s.messages.joinToString("\n") { it.content } + s.streamingText
+        val all = s.messages.joinToString("\n") { it.content } + s.streamingText + inputText
         _state.update { it.copy(tokenEstimate = Markdown.estimateTokens(all)) }
+    }
+
+    /** v16: bangun teks ekspor riwayat percakapan aktif. */
+    fun buildExport(format: ChatExportFormat): String {
+        val s = _state.value
+        return buildChatExport(s.title, s.messages, format)
+    }
+
+    /**
+     * v16: ganti model dari chip di layar chat — simpan sebagai preferensi
+     * (prefs.model) seperti setModel di Settings, tanpa validasi live
+     * (cepat, tanpa panggilan API; bila model tidak valid, error muncul
+     * saat kirim seperti biasa).
+     */
+    fun selectModel(model: String) {
+        prefs.model = model
+        _state.update { it.copy(model = model) }
     }
 }

@@ -328,11 +328,11 @@ fun SettingsScreen(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp) // Fase 2: 24→16 dp, lebih padat di 720×1520
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp) // v16: 16→12 dp, lebih rapat di layar besar (A76)
         ) {
             item(key = "profile") {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 // Header identitas: tanpa nama/email karangan — app tidak
                 // menyimpan keduanya; yang tampil hanya model + base URL nyata.
                 SettingsProfileHeader(
@@ -1603,7 +1603,7 @@ private fun SettingsStickySectionTitle(
         trailing = trailing,
         modifier = Modifier
             .background(MaterialTheme.colorScheme.background)
-            .padding(vertical = 8.dp),
+            .padding(vertical = 4.dp),
     )
 }
 
@@ -1639,7 +1639,7 @@ private fun SettingsJumpChips(onJump: (Int) -> Unit) {
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background)
             .horizontalScroll(rememberScrollState())
-            .padding(vertical = 4.dp),
+            .padding(vertical = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

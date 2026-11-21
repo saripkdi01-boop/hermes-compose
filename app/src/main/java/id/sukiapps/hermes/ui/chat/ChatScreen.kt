@@ -46,6 +46,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
@@ -127,6 +128,7 @@ fun HermesChatScreen(
     var editingMsg by remember { mutableStateOf<UiMessage?>(null) }
     var editText by remember { mutableStateOf("") }
     var showWebInput by remember { mutableStateOf(false) }
+    var showExportDialog by remember { mutableStateOf(false) }
     // TTS per pesan (TtsReader legacy, lazy init).
     val tts = remember { TtsReader() }
     var speakingId by remember { mutableStateOf<Long?>(null) }
@@ -280,6 +282,17 @@ fun HermesChatScreen(
             }
         }
     }
+
+    // v16: ekspor riwayat chat — bangun teks lalu bagikan via share sheet.
+    fun shareExport(format: ChatExportFormat) {
+        val text = chatVm.buildExport(format)
+        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, state.title)
+            putExtra(Intent.EXTRA_TEXT, text)
+        }
+        ctx.startActivity(Intent.createChooser(sendIntent, "Bagikan chat"))
+    }
     // Launcher lampiran.
     val pickImages = rememberLauncherForActivityResult(
         ActivityResultContracts.GetMultipleContents()
@@ -376,13 +389,14 @@ fun HermesChatScreen(
                     onOpenDrawer = { scope.launch { drawerState.open() } },
                     onNewChat = { chatVm.newConversation() },
                     onOpenSettings = onOpenSettings,
-                    onOpenV12Hub = onOpenV12Hub
+                    onOpenV12Hub = onOpenV12Hub,
+                    onExport = { showExportDialog = true }
                 )
             },
             bottomBar = {
                 InputBar(
                     value = input,
-                    onValueChange = { input = it },
+                    onValueChange = { input = it; chatVm.onInputChanged(it) },
                     isStreaming = state.isStreaming,
                     onSend = {
                         val text = input
@@ -484,6 +498,14 @@ fun HermesChatScreen(
                         modifier = Modifier.padding(start = 16.dp, top = 2.dp)
                     )
                 }
+                // v16: chip ganti model — di bawah indikator aktivitas agen
+                // (LiveActivityBar + event tool) supaya alur agen/self-upgrade
+                // tetap terlihat paling atas; hanya tampil bila ada cache model.
+                ModelChipRow(
+                    models = state.availableModels,
+                    current = state.model,
+                    onSelect = { chatVm.selectModel(it) }
+                )
                 if (showEmpty) {
                     ChatEmptyState(
                         onSuggestion = { input = it },
@@ -726,6 +748,24 @@ fun HermesChatScreen(
             }
         )
     }
+    // v16: dialog pilih format ekspor chat.
+    if (showExportDialog) {
+        AlertDialog(
+            onDismissRequest = { showExportDialog = false },
+            title = { Text("Ekspor chat") },
+            text = {
+                Column {
+                    TextButton(onClick = { showExportDialog = false; shareExport(ChatExportFormat.MARKDOWN) }) { Text("Markdown (.md)") }
+                    TextButton(onClick = { showExportDialog = false; shareExport(ChatExportFormat.JSON) }) { Text("JSON (.json)") }
+                    TextButton(onClick = { showExportDialog = false; shareExport(ChatExportFormat.TEXT) }) { Text("Teks biasa (.txt)") }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showExportDialog = false }) { Text("Batal") }
+            }
+        )
+    }
     // ---- "Ambil dari web": dialog input URL → preview → masukkan ke input.
     if (showWebInput) {
         AlertDialog(
@@ -848,7 +888,8 @@ private fun MuseTopBar(
     onOpenDrawer: () -> Unit,
     onNewChat: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenV12Hub: () -> Unit
+    onOpenV12Hub: () -> Unit,
+    onExport: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
     Surface(color = scheme.background, tonalElevation = 0.dp) {
@@ -910,6 +951,13 @@ private fun MuseTopBar(
                 Icon(
                     Icons.Filled.Settings,
                     contentDescription = "Pengaturan",
+                    tint = scheme.onSurfaceVariant
+                )
+            }
+            IconButton(onClick = onExport) {
+                Icon(
+                    Icons.Filled.Share,
+                    contentDescription = "Ekspor chat",
                     tint = scheme.onSurfaceVariant
                 )
             }
