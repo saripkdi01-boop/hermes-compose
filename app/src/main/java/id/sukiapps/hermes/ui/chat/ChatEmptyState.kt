@@ -17,6 +17,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.RocketLaunch
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -25,15 +29,16 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import id.sukiapps.hermes.ui.theme.PillShape
 
-/** Saran cepat — nada Hermes, bukan Muse generik. */
+/** Saran cepat — nada Hermes, bukan Muse generik. Ikon beda per saran. */
 private val SUGGESTIONS = listOf(
-    "Tulis ulang pesan ini biar lebih mantap",
-    "Audit repo hermes-compose, cari celah",
-    "Bantu rencana deploy Hermes ke muse-vm",
-    "Rancang strategi cuan bulan ini"
+    "Tulis ulang pesan ini biar lebih mantap" to Icons.Filled.Edit,
+    "Audit repo hermes-compose, cari celah" to Icons.Filled.BugReport,
+    "Bantu rencana deploy Hermes ke muse-vm" to Icons.Filled.RocketLaunch,
+    "Rancang strategi cuan bulan ini" to Icons.Filled.TrendingUp
 )
 
 /**
@@ -59,15 +64,15 @@ fun ChatEmptyState(
     ) {
         Surface(
             shape = CircleShape,
-            color = scheme.surfaceVariant,
-            modifier = Modifier.size(64.dp)
+            color = scheme.primaryContainer,
+            modifier = Modifier.size(72.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     imageVector = Icons.Filled.AutoAwesome,
                     contentDescription = null,
-                    modifier = Modifier.size(28.dp),
-                    tint = scheme.primary
+                    modifier = Modifier.size(32.dp),
+                    tint = scheme.onPrimaryContainer
                 )
             }
         }
@@ -75,13 +80,15 @@ fun ChatEmptyState(
         Text(
             text = "Ada yang bisa Hermes bantu?",
             style = MaterialTheme.typography.displayLarge,
-            color = scheme.onBackground
+            color = scheme.onBackground,
+            textAlign = TextAlign.Center
         )
         Spacer(Modifier.height(8.dp))
         Text(
             text = "Kirim instruksi, tempel URL, atau pilih salah satu di bawah.",
             style = MaterialTheme.typography.bodyLarge,
-            color = scheme.onSurfaceVariant
+            color = scheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
         )
         if (model.isBlank()) {
             Spacer(Modifier.height(8.dp))
@@ -104,28 +111,28 @@ fun ChatEmptyState(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth()
         ) {
-            SUGGESTIONS.forEach { s ->
+            SUGGESTIONS.forEach { (text, icon) ->
                 Surface(
                     shape = PillShape,
                     color = scheme.surface,
                     border = BorderStroke(1.dp, scheme.outlineVariant),
                     modifier = Modifier
                         .widthIn(max = 320.dp)
-                        .clickable { onSuggestion(s) }
+                        .clickable { onSuggestion(text) }
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.AutoAwesome,
+                            imageVector = icon,
                             contentDescription = null,
-                            modifier = Modifier.size(14.dp),
+                            modifier = Modifier.size(16.dp),
                             tint = scheme.primary
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            text = s,
+                            text = text,
                             style = MaterialTheme.typography.labelLarge,
                             color = scheme.onSurface
                         )
@@ -136,3 +143,4 @@ fun ChatEmptyState(
     }
 }
 /* akhir ChatEmptyState */
+

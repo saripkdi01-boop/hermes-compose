@@ -19,19 +19,36 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.view.WindowCompat
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import id.sukiapps.hermes.ui.chatv3.V3PreviewScreen
@@ -153,42 +170,82 @@ class MainActivity : ComponentActivity() {
                 // Dialog izin global — di atas NavHost agar selalu bisa muncul
                 // dari layar mana pun.
                 PermissionGateDialog(gate)
-                // Gate 1 (Sprint 1): bottom navigation 4 tab standar —
-                // Chat, Agent (Hub v12), Tools (Katalog Tools), Settings.
+                // v16-polish: bottom navigation 5 item — Aktivitas,
+                // Tools, Chat (tengah, aksi utama), Agent (Hub v12),
+                // Settings. Agen tetap ada di bar (ikon SmartToy);
+                // layar Agen/Manus tetap bisa dibuka dari Chat dan Hub.
                 // Bar hanya tampil di destinasi tab; layar turunan tetap
                 // full-screen seperti sebelumnya.
                 val currentRoute = backStack?.destination?.route
                 val tabRoutes = listOf(
-                    Nav.CHAT, Nav.V12_HUB, Nav.TOOLS, Nav.SETTINGS
+                    Nav.CHAT, Nav.V12_HUB, Nav.TOOLS, Nav.SETTINGS,
+                    Nav.AKTIVITAS
                 )
                 Scaffold(
                     bottomBar = {
                         if (currentRoute in tabRoutes) {
-                            NavigationBar {
-                                val tabs = listOf(
-                                    Triple(Nav.CHAT, "Chat", Icons.Filled.Chat),
-                                    Triple(Nav.V12_HUB, "Agent", Icons.Filled.SmartToy),
-                                    Triple(Nav.TOOLS, "Tools", Icons.Filled.Build),
-                                    Triple(Nav.SETTINGS, "Settings", Icons.Filled.Settings)
-                                )
-                                tabs.forEach { (route, label, icon) ->
-                                    NavigationBarItem(
-                                        selected = currentRoute == route,
+                            // Navigasi antar-tab: SAMA seperti sebelumnya
+                            // (popUpTo CHAT + saveState + launchSingleTop +
+                            // restoreState) — hanya tampilannya yang baru.
+                            val navigateToTab: (String) -> Unit = { route ->
+                                if (currentRoute != route) {
+                                    nav.navigate(route) {
+                                        popUpTo(Nav.CHAT) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                }
+                            }
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceContainer,
+                                tonalElevation = 3.dp
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            horizontal = 12.dp,
+                                            vertical = 10.dp
+                                        ),
+                                    horizontalArrangement =
+                                        Arrangement.SpaceEvenly,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    BottomBarTab(
+                                        label = "Aktivitas",
+                                        icon = Icons.Filled.History,
+                                        selected =
+                                            currentRoute == Nav.AKTIVITAS,
                                         onClick = {
-                                            if (currentRoute != route) {
-                                                nav.navigate(route) {
-                                                    popUpTo(Nav.CHAT) {
-                                                        saveState = true
-                                                    }
-                                                    launchSingleTop = true
-                                                    restoreState = true
-                                                }
-                                            }
-                                        },
-                                        icon = {
-                                            Icon(icon, contentDescription = label)
-                                        },
-                                        label = { Text(label) }
+                                            navigateToTab(Nav.AKTIVITAS)
+                                        }
+                                    )
+                                    BottomBarTab(
+                                        label = "Tools",
+                                        icon = Icons.Filled.Build,
+                                        selected = currentRoute == Nav.TOOLS,
+                                        onClick = { navigateToTab(Nav.TOOLS) }
+                                    )
+                                    BottomBarChatButton(
+                                        onClick = { navigateToTab(Nav.CHAT) }
+                                    )
+                                    BottomBarTab(
+                                        label = "Agent",
+                                        icon = Icons.Filled.SmartToy,
+                                        selected =
+                                            currentRoute == Nav.V12_HUB,
+                                        onClick = { navigateToTab(Nav.V12_HUB) }
+                                    )
+                                    BottomBarTab(
+                                        label = "Settings",
+                                        icon = Icons.Filled.Settings,
+                                        selected =
+                                            currentRoute == Nav.SETTINGS,
+                                        onClick = {
+                                            navigateToTab(Nav.SETTINGS)
+                                        }
                                     )
                                 }
                             }
@@ -307,4 +364,66 @@ class MainActivity : ComponentActivity() {
     }
 }
 // v14.10: penutup class MainActivity — perbaikan Missing '}' (CI #110, kspReleaseKotlin).
+}
+
+
+/**
+ * Bottom bar 5 item (polish v16) — komponen bar bawah.
+ * Chat di tengah sebagai aksi utama (tombol bundar warna primer).
+ * Navigasi tidak berubah: tiap item memanggil nav.navigate yang sama
+ * seperti NavigationBarItem sebelumnya.
+ */
+@Composable
+private fun BottomBarTab(
+    label: String,
+    icon: ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            modifier = Modifier.size(24.dp),
+            tint = if (selected) scheme.primary else scheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (selected) scheme.primary else scheme.onSurfaceVariant
+        )
+    }
+}
+
+/** Tombol Chat di tengah bottom bar — aksi utama, selalu menonjol. */
+@Composable
+private fun BottomBarChatButton(
+    onClick: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = scheme.primary,
+        tonalElevation = 6.dp,
+        shadowElevation = 6.dp,
+        modifier = Modifier.size(56.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = Icons.Filled.Chat,
+                contentDescription = "Chat",
+                modifier = Modifier.size(28.dp),
+                tint = scheme.onPrimary
+            )
+        }
+    }
 }
