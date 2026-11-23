@@ -41,14 +41,19 @@ system prompt ──► /chat/completions
 - Semua file bisa diedit user di **Pengaturan → Jiwa Hermes**;
   `features.md` read-only (manual fitur aplikasi).
 
-## Konektor (aksi MANUAL)
+## Konektor (tombol manual + function calling)
 
 `data/connectors/`: GitHub (REST + PAT), Telegram (Bot API),
 Termux (`RUN_COMMAND` intent), WebFetch (HTTP GET → teks),
 **Upin** (`UpinConnector.kt`, v9.4+) — lihat bawah.
 
-Prinsip: konektor hanya dipicu user lewat tombol. AI tidak bisa
-memanggilnya sendiri dari chat (butuh function-calling model — belum ada).
+Prinsip: konektor bisa dipicu user lewat tombol ATAU dipanggil model
+sendiri dari chat teks lewat function calling — tool-loop-nya live sejak
+Sprint 1 Gate 2/3 (`SseClient.streamWithTools` + `ToolLoop.toolsArray(
+includeSelfUpgrade = false)` + `ConnectorTools`). Setiap panggilan
+sensitif tetap lewat PermissionGate + audit; jalur chat tidak pernah
+menerima tool `selfupgrade_*` (lihat `ToolLoop.chatRefusal`). Tool tidak
+tersedia pada chat bergambar (jalur vision).
 
 ## Konektor Upin — dua AI: Hermes + Upin (v9.4+)
 
@@ -71,8 +76,10 @@ HP Termux: ssh -L 8766:127.0.0.1:8766 muse-vm -N
 (Upin, web fetch, lampiran, TTS, model/persona, Termux) yang disuntik
 ke system prompt setiap chat dimulai (`ChatViewModel`). Tujuannya:
 model AI yang diajak chat paham aplikasi apa yang menjalankannya dan
-bisa memandu user memakai fitur yang tepat. Bukan function-calling —
-model tetap tidak bisa eksekusi aksi, hanya tahu.
+bisa memandu user memakai fitur yang tepat. Sejak tool-loop live, blok
+ini JUGA memberi tahu model daftar tool yang bisa ia panggil sendiri
+(v17) — jaga sinkron dengan `ToolLoop.toolsArray` dan
+`assets/agent/features.md`.
 
 ## Tema Warm Muse (v9.5+)
 

@@ -27,7 +27,12 @@ object AgentFiles {
         val d = dir(ctx)
         for (name in ALL) {
             val f = File(d, name)
-            if (!f.exists()) {
+            // v17: features.md adalah manual aplikasi milik app (read-only,
+            // tidak pernah diedit user) — selalu segarkan dari assets agar
+            // perbaikan manual benar-benar sampai ke instalasi lama.
+            // File lain (soul/memory/todo/agents/skill) adalah data user:
+            // hanya seed sekali, JANGAN pernah ditimpa.
+            if (!f.exists() || name == FEATURES) {
                 try {
                     ctx.assets.open("agent/$name").use { ins ->
                         f.outputStream().use { out -> ins.copyTo(out) }
