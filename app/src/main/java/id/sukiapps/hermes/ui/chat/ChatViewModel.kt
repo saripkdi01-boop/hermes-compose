@@ -83,7 +83,10 @@ data class ChatUiState(
     // v9.4: Upin sedang ditanya (polling jawaban)
     val upinBusy: Boolean = false,
     // Sprint 1 Gate 2: ringkasan event tool terakhir (chip di layar chat)
-    val toolEvent: String? = null
+    val toolEvent: String? = null,
+    // v19: percakapan aktif adalah incognito (tidak masuk riwayat &
+    // ingatan Jiwa; dihapus permanen saat pindah chat).
+    val incognito: Boolean = false
 )
 
 @HiltViewModel
@@ -167,6 +170,16 @@ class ChatViewModel @Inject constructor(
             )
         }
         openConversation(prefs.currentConvId)
+        // v19: bersihkan sisa percakapan incognito dari sesi sebelumnya
+        // (mis. aplikasi tertutup saat incognito masih aktif). Bila
+        // percakapan yang sedang terbuka ternyata incognito sisa, reset
+        // ke chat baru setelah pembersihan selesai.
+        viewModelScope.launch(Dispatchers.IO) {
+            repo.purgeIncognito()
+            if (prefs.currentConvId <= 0 && _state.value.incognito) {
+                withContext(Dispatchers.Main) { openConversation(-1L) }
+            }
+        }
     }
 
     fun refreshSettings() {
@@ -179,8 +192,22 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    /**
+     * v19: bila percakapan aktif adalah incognito dan user pindah ke
+     * percakapan lain, incognito dihapus permanen (pesan + barisnya) —
+     * tanpa write-back ingatan Jiwa sama sekali.
+     */
+    private fun discardIncognitoIfLeaving(targetId: Long) {
+        val s = _state.value
+        if (s.incognito && s.convId > 0 && s.convId != targetId) {
+            val doomed = s.convId
+            viewModelScope.launch(Dispatchers.IO) { repo.deleteConversation(doomed) }
+        }
+    }
+
     /** Buka percakapan; -1 = baru (belum disimpan sampai pesan pertama). */
     fun openConversation(convId: Long) {
+        discardIncognitoIfLeaving(convId)
         stopStream()
         collectJob?.cancel()
         if (convId <= 0) {
@@ -198,6 +225,7 @@ class ChatViewModel @Inject constructor(
                     it.copy(
                         convId = convId,
                         title = conv?.title ?: "Percakapan",
+                        incognito = conv?.incognito ?: false,
                         messages = list.map { m ->
                             UiMessage(
                                 id = m.id,
@@ -217,9 +245,10 @@ class ChatViewModel @Inject constructor(
 
     fun newConversation() {
         // Chat lama "ditutup" → coba tulis ingatan dari 10 pesan terakhir.
+        // v19: chat incognito TIDAK pernah ditulis ke ingatan Jiwa.
         cancelUpin()
         val oldId = _state.value.convId
-        if (oldId > 0) {
+        if (oldId > 0 && !_state.value.incognito) {
             viewModelScope.launch(Dispatchers.IO) {
                 val snapshot = repo.lastMessages(oldId, 10)
                     .map { ChatMessage(it.role, it.content) }
@@ -229,6 +258,33 @@ class ChatViewModel @Inject constructor(
         soulCache = null
         clearAttachments()
         openConversation(-1L)
+    }
+
+    /**
+     * v19: mulai chat incognito. Baris percakapan dibuat langsung dengan
+     * flag incognito supaya seluruh mesin kirim/streaming bekerja seperti
+     * biasa; bedanya: tidak tampil di riwayat/pencarian/backup, tidak
+     * ditulis ke ingatan Jiwa, dan dihapus permanen saat user pindah
+     * chat (atau saat aplikasi dimulai ulang — lihat init).
+     */
+    fun startIncognito() {
+        cancelUpin()
+        val oldId = _state.value.convId
+        if (oldId > 0 && !_state.value.incognito) {
+            viewModelScope.launch(Dispatchers.IO) {
+                val snapshot = repo.lastMessages(oldId, 10)
+                    .map { ChatMessage(it.role, it.content) }
+                memoryWriter.maybeWriteBack(snapshot)
+            }
+        }
+        soulCache = null
+        clearAttachments()
+        viewModelScope.launch {
+            val id = withContext(Dispatchers.IO) {
+                repo.newConversation("Incognito", prefs.persona, incognito = true)
+            }
+            openConversation(id)
+        }
     }
 
     // ---------- lampiran ----------
@@ -432,7 +488,11 @@ class ChatViewModel @Inject constructor(
         var convId = _state.value.convId
         if (convId <= 0) {
             convId = withContext(Dispatchers.IO) {
-                repo.newConversation(repo.makeTitle(prompt.ifBlank { "Lampiran" }), prefs.persona)
+                repo.newConversation(
+                    repo.makeTitle(prompt.ifBlank { "Lampiran" }),
+                    prefs.persona,
+                    incognito = _state.value.incognito
+                )
             }
             prefs.currentConvId = convId
             openConversation(convId)
@@ -459,8 +519,9 @@ class ChatViewModel @Inject constructor(
             repo.addMessage(convId, "user", fullPrompt, attSummary)
         }
         // Tiap 10 pesan user → coba tulis ingatan (murah, fire-and-forget).
+        // v19: pesan incognito tidak pernah ditulis ke ingatan Jiwa.
         userMsgCount++
-        if (userMsgCount % 10 == 0) {
+        if (userMsgCount % 10 == 0 && !_state.value.incognito) {
             viewModelScope.launch(Dispatchers.IO) {
                 val snapshot = repo.lastMessages(convId, 10)
                     .map { ChatMessage(it.role, it.content) }
