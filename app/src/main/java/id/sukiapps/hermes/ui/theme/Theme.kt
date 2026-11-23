@@ -1,13 +1,17 @@
 package id.sukiapps.hermes.ui.theme
 
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -21,6 +25,9 @@ import androidx.compose.ui.unit.sp
  * @param darkTheme true = gelap, false = terang.
  * @param contentStyle MUSE (chat) atau PREMIUM (settings/soul).
  * @param settingsDensity compact atau comfortable (dari prefs).
+ * @param accent kunci aksen tersimpan: "coral" | "teal" | "sand" |
+ *   "dynamic" (Material You dari wallpaper, Android 12+; di bawah itu
+ *   jatuh ke coral).
  */
 enum class ContentStyle { MUSE, PREMIUM }
 
@@ -42,8 +49,10 @@ private val V14Typography = Typography(
     bodyLarge = TextStyle(
         fontSize = 16.sp, fontWeight = FontWeight.Normal, lineHeight = 24.8.sp
     ),
+    // v18: bodyMedium 13sp → 14sp (jarak baris 21sp) — teks isi lebih
+    // nyaman dibaca di layar HP tanpa mengubah hierarki tipografi lain.
     bodyMedium = TextStyle(
-        fontSize = 13.sp, fontWeight = FontWeight.Normal, lineHeight = 20.sp
+        fontSize = 14.sp, fontWeight = FontWeight.Normal, lineHeight = 21.sp
     ),
     labelLarge = TextStyle(
         fontSize = 13.sp, fontWeight = FontWeight.Medium, lineHeight = 18.sp
@@ -137,7 +146,29 @@ fun HermesTheme(
     }
     val settingPalette =
         if (darkTheme) settingDarkPalette() else settingLightPalette()
-    val accentColors = accentColors(accent, darkTheme, chatPalette, contentStyle)
+    // v18: Material You — aksen "dynamic" mengambil warna primer dari
+    // wallpaper perangkat (dynamic color scheme, API 31+). Permukaan dan
+    // teks tetap palet Warm Muse Hermes; hanya aksen yang mengikuti
+    // sistem, sama seperti aksen tetap lainnya. Di bawah API 31, gaya
+    // PREMIUM, atau kunci aksen lain → pemetaan aksen tetap seperti biasa.
+    val context = LocalContext.current
+    val dynamicScheme = if (
+        accent == "dynamic" && contentStyle == ContentStyle.MUSE &&
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    ) {
+        if (darkTheme) dynamicDarkColorScheme(context)
+        else dynamicLightColorScheme(context)
+    } else {
+        null
+    }
+    val accentColors = if (dynamicScheme != null) {
+        AccentColors(
+            dynamicScheme.primary, dynamicScheme.onPrimary,
+            dynamicScheme.primaryContainer, dynamicScheme.onPrimaryContainer,
+        )
+    } else {
+        accentColors(accent, darkTheme, chatPalette, contentStyle)
+    }
 
     val colorScheme = if (darkTheme) {
         darkColorScheme(

@@ -361,9 +361,13 @@ fun SettingsThemeSegmented(
 }
 
 /**
- * Accent picker: three 48dp icon buttons. Colours are the existing Hermes
+ * Accent picker: 48dp icon buttons. Colours are the existing Hermes
  * palette values (coral = primary, teal = HermesTeal, sand = tertiary sand),
  * not a new scheme — HermesTheme maps the stored key to the full scheme.
+ * v18 adds a fourth option, "dynamic" (Material You): its swatch is a
+ * gradient because the real colour follows the device wallpaper and
+ * cannot be represented by one fixed colour (Android 12+; on older
+ * devices HermesTheme falls back to coral).
  */
 @Composable
 fun SettingsAccentRow(
@@ -416,10 +420,56 @@ fun SettingsAccentRow(
                 }
             }
         }
+        // v18: Material You — gradasi tiga warna skema aktif sebagai
+        // contoh; warna aksen sebenarnya mengikuti wallpaper perangkat.
+        val dynamicSelected = selected == "dynamic"
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.primary,
+                            MaterialTheme.colorScheme.tertiary,
+                            MaterialTheme.colorScheme.secondary,
+                        )
+                    )
+                )
+                .then(
+                    if (dynamicSelected) {
+                        Modifier.border(
+                            2.dp,
+                            MaterialTheme.colorScheme.onSurface,
+                            CircleShape,
+                        )
+                    } else {
+                        Modifier
+                    }
+                )
+                .clickable(
+                    onClick = { onSelect("dynamic") },
+                    role = Role.Button,
+                )
+                .semantics {
+                    contentDescription = "Aksen Material You, mengikuti wallpaper"
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            if (dynamicSelected) {
+                Icon(
+                    Icons.Filled.Check,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+        }
         Text(
             text = when (selected) {
                 "teal" -> "Teal"
                 "sand" -> "Pasir"
+                "dynamic" -> "Material You"
                 else -> "Coral"
             },
             style = MaterialTheme.typography.bodyMedium,
