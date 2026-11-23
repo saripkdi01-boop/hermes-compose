@@ -11,6 +11,7 @@ import org.json.JSONObject
 
 /** Hasil perencanaan LLM: langkah mentah, atau alasan gagal yang jujur. */
 sealed interface LlmPlanResult {
+
     /**
      * @param providerUsed nama provider yang akhirnya berhasil.
      * @param fallback true bila provider yang berhasil BUKAN provider
@@ -52,7 +53,7 @@ sealed interface LlmPlanResult {
  * BERURUTAN (Jerouter → OpenRouter → DCompute, provider terpilih selalu
  * pertama) — BUKAN langsung jatuh ke planner kata kunci. Aturan kunci:
  * - Provider terpilih memakai [client] apa adanya (AuthInterceptor
- *   memasang Bearer kunci utama — key tidak pernah dibaca di sini).
+ *   memasang Bearer <redacted> utama — key tidak pernah dibaca di sini).
  * - Provider cadangan HANYA dicoba bila ada kunci tersimpan untuknya di
  *   [providerKeys] (baseUrl → key, dari KeyVault). Tanpa kunci, provider
  *   itu dilewati dengan alasan "tanpa key tersimpan" — tidak pernah
@@ -93,6 +94,8 @@ object LlmPlanner {
         client: OkHttpClient,
         /** Kunci cadangan per baseUrl (dari KeyVault). Kosong = tanpa cadangan. */
         providerKeys: Map<String, String> = emptyMap(),
+        /** Prompt skill tambahan (dari SkillRouter); null = tanpa skill. */
+        skillPrompt: String? = null,
         /** Anggaran token perencanaan (dari LaneModelChain per lane). */
         maxTokens: Int = 1000
     ): LlmPlanResult = withContext(Dispatchers.IO) {
@@ -102,6 +105,7 @@ object LlmPlanner {
         if (baseUrl.isBlank()) return@withContext LlmPlanResult.Failure(
             "base URL belum diatur di Pengaturan"
         )
+
         // 14.32: rantai percobaan provider-major dari LaneModelChain:
         // model pilihan user dulu pada tiap provider, lalu (khusus Meta)
         // model cadangan muse-spark-1.3 pada provider yang sama, lalu
@@ -128,7 +132,7 @@ object LlmPlanner {
                 }
                 callClient = withoutAuth(client)
             }
-            val body = requestBody(goal, laneAttempt.model, maxTokens)
+            val body = requestBody(goal, laneAttempt.model, maxTokens, skillPrompt)
             val attempt = attemptProvider(provider, key, body, callClient)
             when (attempt) {
                 is ProviderAttempt.Ok -> {
@@ -151,14 +155,19 @@ object LlmPlanner {
     }
 
     /** Body /chat/completions untuk satu percobaan (provider, model). */
-    private fun requestBody(goal: String, model: String, maxTokens: Int): String =
+    private fun requestBody(
+        goal: String,
+        model: String,
+        maxTokens: Int,
+        skillPrompt: String?
+    ): String =
         JSONObject()
             .put("model", model)
             .put("stream", false)
             .put("max_tokens", maxTokens)
             .put(
                 "messages", JSONArray()
-                    .put(JSONObject().put("role", "system").put("content", SYSTEM_PROMPT))
+                    .put(JSONObject().put("role", "system").put("content", buildSystemPrompt(skillPrompt)))
                     .put(JSONObject().put("role", "user").put("content", goal))
             )
             .toString()
@@ -245,7 +254,11 @@ object LlmPlanner {
                 .getJSONObject("message")
                 .getString("content")
         }.getOrNull().orEmpty()
-        if (content.isBlank()) {
+        // 3e (bug "null"): org.json getString() pada JSON null mengembalikan
+        // STRING "null" (bukan ""), jadi respons kosong lolos cek isBlank()
+        // lalu gagal parse dengan pesan menyesatkan. Perlakukan "null"
+        // sama dengan kosong supaya pemanggil dapat "respons LLM kosong".
+        if (content.isBlank() || content == "null") {
             return LlmPlanResult.Failure("respons LLM kosong")
         }
         // 14.27 (B8): baca usage ASLI bila provider mengirimnya.
@@ -296,6 +309,16 @@ object LlmPlanner {
             usagePrompt = usagePrompt,
             usageCompletion = usageCompletion
         )
+    }
+
+    /**
+     * 14.32: prompt sistem perencana = prompt dasar + peran skill (bila ada).
+     * Internal supaya bisa di-unit-test; pemanggil lama yang tidak mengirim
+     * skillPrompt mendapat prompt dasar persis seperti sebelumnya.
+     */
+    internal fun buildSystemPrompt(skillPrompt: String?): String {
+        val extra = skillPrompt?.takeIf { it.isNotBlank() } ?: return SYSTEM_PROMPT
+        return SYSTEM_PROMPT + "\n\nPeran tambahan untuk tugas ini:\n" + extra
     }
 
     private const val SYSTEM_PROMPT =
