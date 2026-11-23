@@ -7,6 +7,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import id.sukiapps.hermes.data.local.AppPrefs
 import id.sukiapps.hermes.domain.manus.AgentRunner
+import id.sukiapps.hermes.domain.manus.LaneModelChain
 import id.sukiapps.hermes.domain.manus.LlmPlanResult
 import id.sukiapps.hermes.domain.manus.LlmPlanner
 import id.sukiapps.hermes.domain.manus.ManusEvent
@@ -20,9 +21,9 @@ import id.sukiapps.hermes.domain.manus.ProviderChain
 import id.sukiapps.hermes.domain.manus.SessionLimits
 import id.sukiapps.hermes.domain.manus.SkillRouter
 import id.sukiapps.hermes.domain.manus.StepStatus
-import id.sukiapps.hermes.domain.manus.estimateSessionTokens
 import id.sukiapps.hermes.domain.manus.TaskStatus
 import id.sukiapps.hermes.domain.manus.ToolCall
+import id.sukiapps.hermes.domain.manus.estimateSessionTokens
 import id.sukiapps.hermes.tool.ToolLoop
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -56,14 +57,16 @@ import javax.inject.Inject
 class ManusViewModel @Inject constructor(
     @ApplicationContext private val appCtx: Context,
     // 14.22: agen tunggal memakai model + base URL Pengaturan (AppPrefs)
-    // dan OkHttpClient ber-AuthInterceptor (Bearer dari KeyVault) untuk
+    // dan OkHttpClient ber-AuthInterceptor (Bearer <redacted> KeyVault) untuk
     // perencanaan LLM. Keduanya binding @Singleton yang sudah ada — tidak
     // ada modul Hilt baru. Nama `appPrefs` sengaja dibedakan dari fun
     // prefs() (SharedPreferences manus_state) di bawah.
     private val appPrefs: AppPrefs,
     private val httpClient: OkHttpClient
 ) : ViewModel() {
+
     private val json = Json { ignoreUnknownKeys = true }
+
     private val _state = MutableStateFlow(restore() ?: ManusStateEngine.seed())
     val state: StateFlow<ManusUiState> = _state.asStateFlow()
 
@@ -151,13 +154,18 @@ class ManusViewModel @Inject constructor(
             // sebagai peran tambahan di prompt perencana, dan namanya
             // tampil di label rencana supaya tidak diklaim diam-diam.
             val skill = SkillRouter.pick(goal)
+            // 14.32: lane→model — anggaran token perencanaan per jenis
+            // tugas; rantai model/provider dibangun di LlmPlanner dari
+            // LaneModelChain (model pilihan user dulu, lalu cadangan).
+            val lane = LaneModelChain.laneFor(goal)
             val llm = LlmPlanner.plan(
                 goal = goal,
                 model = appPrefs.model,
                 baseUrl = appPrefs.baseUrl,
                 client = httpClient,
                 providerKeys = providerKeys,
-                skillPrompt = skill?.prompt
+                skillPrompt = skill?.prompt,
+                maxTokens = LaneModelChain.maxTokensFor(lane)
             )
             // Nama tool runtime dari ToolLoop.toolsArray() (struktur
             // OpenAI: entry.type=function, entry.function.name). Bila
@@ -187,7 +195,12 @@ class ManusViewModel @Inject constructor(
                 } else {
                     "LLM"
                 }
-                val via = viaBase + (skill?.let { " • skill ${it.title}" } ?: "")
+                // 14.32: bila model yang berhasil BUKAN model pilihan user
+                // (mis. cadangan Meta), tampilkan — jangan turun diam-diam.
+                val viaModel = if (llm is LlmPlanResult.Success &&
+                    llm.modelUsed.isNotBlank() && llm.modelUsed != appPrefs.model
+                ) " (model ${llm.modelUsed})" else ""
+                val via = viaBase + viaModel + (skill?.let { " • skill ${it.title}" } ?: "")
                 label = if (validated.dropped.isEmpty()) via
                 else "$via (${validated.dropped.size} langkah dibuang validator)"
             } else {
