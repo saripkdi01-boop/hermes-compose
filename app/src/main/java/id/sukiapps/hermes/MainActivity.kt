@@ -12,6 +12,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
@@ -19,6 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.view.WindowCompat
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -47,6 +55,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
@@ -75,6 +84,7 @@ import id.sukiapps.hermes.ui.onboarding.OnboardingScreen
 import id.sukiapps.hermes.ui.agent.SoulScreen
 import id.sukiapps.hermes.ui.agent.AktivitasScreen
 import id.sukiapps.hermes.ui.settings.SettingsScreen
+import id.sukiapps.hermes.ui.theme.HermesMotion
 import id.sukiapps.hermes.ui.theme.HermesTheme
 import androidx.hilt.navigation.compose.hiltViewModel
 import id.sukiapps.hermes.ui.chat.ChatViewModel
@@ -255,7 +265,20 @@ class MainActivity : ComponentActivity() {
                 NavHost(
                     navController = nav,
                     startDestination = startDestination,
-                    modifier = Modifier.padding(innerPad)
+                    modifier = Modifier.padding(innerPad),
+                    // v18: transisi antar-layar — fade + geser halus memakai
+                    // token gerak Hermes (180ms fade, 220ms geser, ease-out,
+                    // tanpa pantulan) menggantikan potongan layar bawaan.
+                    enterTransition = {
+                        fadeIn(HermesMotion.QuickOut) +
+                            slideInHorizontally(HermesMotion.TabIndicatorOffset) { it / 6 }
+                    },
+                    exitTransition = { fadeOut(HermesMotion.QuickOut) },
+                    popEnterTransition = { fadeIn(HermesMotion.QuickOut) },
+                    popExitTransition = {
+                        fadeOut(HermesMotion.QuickOut) +
+                            slideOutHorizontally(HermesMotion.TabIndicatorOffset) { it / 6 }
+                    }
                 ) {
                     composable(Nav.ONBOARDING) {
                         OnboardingScreen(
@@ -381,6 +404,23 @@ private fun BottomBarTab(
     onClick: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
+    // v18: pil indikator tab aktif gaya Material 3 — latar
+    // primaryContainer di belakang ikon yang beranimasi warna memakai
+    // token gerak Hermes; warna ikon + label ikut beranimasi supaya
+    // perpindahan tab terasa halus, bukan berganti seketika.
+    // Catatan tipe: animateColorAsState butuh AnimationSpec<Color> —
+    // HermesMotion.QuickOut adalah spesifikasi Float, jadi untuk warna
+    // dipakai tween 180ms dengan easing yang sama persis (0,0,0.2,1).
+    val pillColor by animateColorAsState(
+        targetValue = if (selected) scheme.primaryContainer else Color.Transparent,
+        animationSpec = tween(180, easing = CubicBezierEasing(0.0f, 0.0f, 0.2f, 1.0f)),
+        label = "tabPill"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) scheme.primary else scheme.onSurfaceVariant,
+        animationSpec = tween(180, easing = CubicBezierEasing(0.0f, 0.0f, 0.2f, 1.0f)),
+        label = "tabContent"
+    )
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
@@ -388,17 +428,25 @@ private fun BottomBarTab(
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            modifier = Modifier.size(24.dp),
-            tint = if (selected) scheme.primary else scheme.onSurfaceVariant
-        )
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(percent = 50))
+                .background(pillColor)
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                modifier = Modifier.size(24.dp),
+                tint = contentColor
+            )
+        }
         Spacer(Modifier.height(4.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = if (selected) scheme.primary else scheme.onSurfaceVariant
+            color = contentColor
         )
     }
 }
