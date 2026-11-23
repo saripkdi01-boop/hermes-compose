@@ -16,8 +16,8 @@ android {
         applicationId = "id.sukiapps.hermes"
         minSdk = 27
         targetSdk = 34
-        versionCode = 58
-        versionName = "18.0" // v18: UI/UX modern — Material You (aksen dinamis dari wallpaper, Android 12+), transisi NavHost fade+geser, pil indikator bottom bar teranimasi, tipografi bodyMedium 14sp
+        versionCode = 59
+        versionName = "19.0" // v19: target share sheet (ACTION_SEND → draf chat baru) + mode chat incognito (skema Room v6, kolom incognito; tidak masuk riwayat/ingatan, terhapus saat pindah chat)
 
         // D1 (14.30): Chaquopy butuh ABI native Python. arm64-v8a = semua HP
         // target (A76 dkk); x86_64 = emulator. Tiap ABI menambah MB APK —
