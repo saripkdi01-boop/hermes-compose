@@ -68,7 +68,13 @@ class LaneModelChainTest {
     fun attempts_metaDipilih_modelSudahCadangan_tanpaDuplikat() {
         val attempts = LaneModelChain.attempts("https://api.meta.ai/v1", "muse-spark-1.3")
         assertEquals(4, attempts.size)
-        assertEquals(1, attempts.count { it.model == "muse-spark-1.3" })
+        // "Tanpa duplikat" = provider Meta (Kustom) hanya dicoba SEKALI:
+        // tidak ada percobaan cadangan kedua yang ditempel setelah model
+        // pilihan. BUKAN menghitung model di seluruh rantai — sesuai
+        // desain provider-major, SEMUA provider memang dicoba dengan
+        // model pilihan user (di sini muse-spark-1.3), jadi hitungan
+        // model di seluruh rantai selalu sebesar jumlah provider.
+        assertEquals(1, attempts.count { it.provider.name == "Kustom" })
     }
 
     @Test
