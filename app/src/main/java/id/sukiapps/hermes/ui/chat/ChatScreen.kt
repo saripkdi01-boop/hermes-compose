@@ -85,6 +85,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import id.sukiapps.hermes.ApkShareProvider
 import id.sukiapps.hermes.TtsReader
 import id.sukiapps.hermes.domain.Prefs
+import id.sukiapps.hermes.domain.ShareInbox
 import id.sukiapps.hermes.ui.history.DrawerContent
 import id.sukiapps.hermes.ui.history.HistoryViewModel
 import id.sukiapps.hermes.ui.live.LiveActivityBar
@@ -129,7 +130,7 @@ fun HermesChatScreen(
     var editText by remember { mutableStateOf("") }
     var showWebInput by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
-    // TTS per pesan (TtsReader legacy, lazy init).
+    // TTS per pesan (TtsReader lazy init).
     val tts = remember { TtsReader() }
     var speakingId by remember { mutableStateOf<Long?>(null) }
     DisposableEffect(Unit) {
@@ -342,6 +343,16 @@ fun HermesChatScreen(
     LaunchedEffect(state.error) {
         state.error?.let { snack.showSnackbar(it) }
     }
+    // v19: konsumsi teks dari share sheet aplikasi lain — buka chat
+    // baru dan isi kotak input (TIDAK otomatis terkirim; user meninjau
+    // dulu, pola yang sama seperti "Ambil dari web").
+    val sharedText by ShareInbox.text.collectAsStateWithLifecycle()
+    LaunchedEffect(sharedText) {
+        val t = sharedText ?: return@LaunchedEffect
+        chatVm.newConversation()
+        input = t
+        ShareInbox.clear()
+    }
     // Tandai percakapan aktif di drawer.
     LaunchedEffect(state.convId) {
         historyVm.setActive(state.convId)
@@ -359,6 +370,10 @@ fun HermesChatScreen(
                 },
                 onNewChat = {
                     chatVm.newConversation()
+                    scope.launch { drawerState.close() }
+                },
+                onNewIncognito = {
+                    chatVm.startIncognito()
                     scope.launch { drawerState.close() }
                 },
                 onOpenAktivitas = {
@@ -497,6 +512,25 @@ fun HermesChatScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(start = 16.dp, top = 2.dp)
                     )
+                }
+                // v19: penanda mode incognito — selalu terlihat selama
+                // aktif, tepat di bawah top bar.
+                if (state.incognito) {
+                    Surface(
+                        shape = PillShape,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.padding(start = 16.dp, top = 6.dp)
+                    ) {
+                        Text(
+                            text = "Mode incognito — tidak masuk riwayat & ingatan; terhapus saat pindah chat",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(
+                                horizontal = 12.dp,
+                                vertical = 4.dp
+                            )
+                        )
+                    }
                 }
                 // v16: chip ganti model — di bawah indikator aktivitas agen
                 // (LiveActivityBar + event tool) supaya alur agen/self-upgrade

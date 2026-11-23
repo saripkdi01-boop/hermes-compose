@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Unarchive
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -66,6 +67,7 @@ import java.util.Locale
 fun DrawerContent(
     onSelect: (Long) -> Unit,
     onNewChat: () -> Unit,
+    onNewIncognito: () -> Unit,
     onOpenAktivitas: () -> Unit,
     onOpenMintaFitur: () -> Unit,
     onOpenAudit: () -> Unit,
@@ -102,6 +104,17 @@ fun DrawerContent(
                 Text("Chat baru")
             }
             Spacer(Modifier.height(8.dp))
+            // v19: mode incognito — tidak masuk riwayat & ingatan Jiwa,
+            // terhapus permanen saat pindah chat.
+            NavigationDrawerItem(
+                label = { Text("Chat incognito") },
+                selected = false,
+                onClick = onNewIncognito,
+                icon = {
+                    Icon(Icons.Filled.VisibilityOff, contentDescription = null)
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
             NavigationDrawerItem(
                 label = { Text("Aktivitas") },
                 selected = false,

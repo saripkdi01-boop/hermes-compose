@@ -21,7 +21,8 @@ object AppModule {
         Room.databaseBuilder(ctx, HermesDatabase::class.java, HermesDatabase.DB_NAME)
             // 4 -> 5: recreate tabel ke DDL kanonis Room (lihat HermesDatabase).
             // Data user disalin utuh; TANPA destructive migration.
-            .addMigrations(HermesDatabase.MIGRATION_4_5)
+            // 5 -> 6: kolom incognito untuk mode chat incognito (v19).
+            .addMigrations(HermesDatabase.MIGRATION_4_5, HermesDatabase.MIGRATION_5_6)
             .build()
 
     @Provides

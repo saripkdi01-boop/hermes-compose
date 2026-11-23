@@ -3,6 +3,7 @@ package id.sukiapps.hermes
 import id.sukiapps.hermes.diagnostics.HealthScreen
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Build
@@ -52,6 +53,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -67,6 +69,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import id.sukiapps.hermes.data.audit.PermissionGate
 import id.sukiapps.hermes.domain.Prefs
+import id.sukiapps.hermes.domain.ShareInbox
 import id.sukiapps.hermes.navigation.Nav
 import id.sukiapps.hermes.ui.v12.ActivityScreen
 import id.sukiapps.hermes.ui.v12.ApprovalScreen
@@ -104,6 +107,9 @@ class MainActivity : ComponentActivity() {
     lateinit var gate: PermissionGate
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // v19: tangkap teks dari share sheet aplikasi lain (ACTION_SEND)
+        // sebelum komposisi dibuat — HermesChatScreen mengonsumsinya.
+        handleShareIntent(intent)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val prefs = getSharedPreferences(Prefs.FILE, Context.MODE_PRIVATE)
         val startDestination = when {
@@ -113,6 +119,14 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             val nav = rememberNavController()
+            // v19: ada teks dari share sheet → pastikan user berada di
+            // tab Chat; pengisian inputnya dilakukan HermesChatScreen.
+            val sharedText by ShareInbox.text.collectAsState()
+            LaunchedEffect(sharedText) {
+                if (sharedText != null) {
+                    nav.navigate(Nav.CHAT) { launchSingleTop = true }
+                }
+            }
             // v14.10: minta izin notifikasi sekali saat start (API 33+).
             // Tanpa dialog custom tambahan — PermissionGateDialog yang ada
             // sudah cukup untuk keputusan izin aksi sensitif.
@@ -386,6 +400,26 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+    // v19: share sheet saat aplikasi sedang berjalan — launchMode
+    // singleTop mengarahkan intent baru ke sini, bukan Activity baru.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleShareIntent(intent)
+    }
+
+    /**
+     * v19: intent ACTION_SEND text/plain dari aplikasi lain → taruh
+     * teksnya di ShareInbox. Action dikosongkan setelah diproses agar
+     * intent yang sama tidak diproses ulang saat Activity dibuat ulang.
+     */
+    private fun handleShareIntent(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_SEND) return
+        if (intent.type != "text/plain") return
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
+        if (text.isNotBlank()) ShareInbox.post(text)
+        intent.action = null
+    }
 // v14.10: penutup class MainActivity — perbaikan Missing '}' (CI #110, kspReleaseKotlin).
 }
 

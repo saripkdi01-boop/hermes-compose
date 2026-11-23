@@ -12,17 +12,20 @@ import kotlinx.coroutines.flow.Flow
 interface HermesDao {
 
     // ---- conversations ----
+    // v19: percakapan incognito SELALU disaring keluar dari daftar,
+    // pencarian, dan bacaan sekali-jalan (yang dipakai backup) —
+    // incognito hanya boleh dibuka lewat id-nya secara eksplisit.
 
     /** Semua percakapan: pinned dulu, lalu updated_at terbaru. */
-    @Query("SELECT * FROM conversations ORDER BY pinned DESC, updated_at DESC")
+    @Query("SELECT * FROM conversations WHERE incognito = 0 ORDER BY pinned DESC, updated_at DESC")
     fun allConversations(): Flow<List<ConversationEntity>>
 
-    @Query("SELECT * FROM conversations ORDER BY pinned DESC, updated_at DESC")
+    @Query("SELECT * FROM conversations WHERE incognito = 0 ORDER BY pinned DESC, updated_at DESC")
     suspend fun allConversationsOnce(): List<ConversationEntity>
 
     @Query(
         "SELECT * FROM conversations " +
-            "WHERE title LIKE '%' || :q || '%' " +
+            "WHERE incognito = 0 AND title LIKE '%' || :q || '%' " +
             "ORDER BY pinned DESC, updated_at DESC"
     )
     fun searchConversations(q: String): Flow<List<ConversationEntity>>
@@ -50,6 +53,14 @@ interface HermesDao {
 
     @Query("UPDATE conversations SET updated_at = :updatedAt WHERE id = :id")
     suspend fun touchConversation(id: Long, updatedAt: Long)
+
+    /** v19: id semua percakapan incognito (untuk pembersihan). */
+    @Query("SELECT id FROM conversations WHERE incognito = 1")
+    suspend fun incognitoIds(): List<Long>
+
+    /** v19: hapus semua baris percakapan incognito. */
+    @Query("DELETE FROM conversations WHERE incognito = 1")
+    suspend fun deleteIncognitoConversations()
 
     // ---- messages ----
 

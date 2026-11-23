@@ -22,10 +22,14 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * Migration(4,5) me-recreate kedua tabel dengan DDL kanonis Room
  * (PK `NOT NULL` eksplisit) dan menyalin seluruh data — deterministik
  * dan tanpa kehilangan data, apa pun perilaku validasi Room.
+ *
+ * version 6 (v19): Migration(5, 6) menambahkan kolom `incognito`
+ * (INTEGER NOT NULL DEFAULT 0) ke tabel conversations untuk mode chat
+ * incognito — ALTER TABLE sederhana, tanpa menyentuh data lama.
  */
 @Database(
     entities = [ConversationEntity::class, MessageEntity::class],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class HermesDatabase : RoomDatabase() {
@@ -77,6 +81,15 @@ abstract class HermesDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE messages_new RENAME TO messages")
 
                 db.execSQL("CREATE INDEX idx_messages_conv ON messages(conv_id, id)")
+            }
+        }
+
+        /** v19: tambah kolom incognito (mode chat incognito). */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE conversations ADD COLUMN incognito INTEGER NOT NULL DEFAULT 0"
+                )
             }
         }
     }
