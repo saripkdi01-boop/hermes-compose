@@ -420,7 +420,6 @@ class MainActivity : ComponentActivity() {
         if (text.isNotBlank()) ShareInbox.post(text)
         intent.action = null
     }
-}
 // v14.10: penutup class MainActivity — perbaikan Missing '}' (CI #110, kspReleaseKotlin).
 }
 
