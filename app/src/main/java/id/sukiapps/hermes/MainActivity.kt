@@ -13,6 +13,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -406,14 +408,17 @@ private fun BottomBarTab(
     // primaryContainer di belakang ikon yang beranimasi warna memakai
     // token gerak Hermes; warna ikon + label ikut beranimasi supaya
     // perpindahan tab terasa halus, bukan berganti seketika.
+    // Catatan tipe: animateColorAsState butuh AnimationSpec<Color> —
+    // HermesMotion.QuickOut adalah spesifikasi Float, jadi untuk warna
+    // dipakai tween 180ms dengan easing yang sama persis (0,0,0.2,1).
     val pillColor by animateColorAsState(
         targetValue = if (selected) scheme.primaryContainer else Color.Transparent,
-        animationSpec = HermesMotion.QuickOut,
+        animationSpec = tween(180, easing = CubicBezierEasing(0.0f, 0.0f, 0.2f, 1.0f)),
         label = "tabPill"
     )
     val contentColor by animateColorAsState(
         targetValue = if (selected) scheme.primary else scheme.onSurfaceVariant,
-        animationSpec = HermesMotion.QuickOut,
+        animationSpec = tween(180, easing = CubicBezierEasing(0.0f, 0.0f, 0.2f, 1.0f)),
         label = "tabContent"
     )
     Column(
