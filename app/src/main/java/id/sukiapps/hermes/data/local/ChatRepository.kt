@@ -26,16 +26,35 @@ class ChatRepository @Inject constructor(
         dao.lastMessages(convId, n).reversed()
 
     /** Buat percakapan baru; kembalikan id. */
-    suspend fun newConversation(title: String, persona: String?): Long {
+    suspend fun newConversation(
+        title: String,
+        persona: String?,
+        incognito: Boolean = false
+    ): Long {
         val now = System.currentTimeMillis()
         return dao.insertConversation(
             ConversationEntity(
                 title = title.ifBlank { "Percakapan baru" },
                 createdAt = now,
                 updatedAt = now,
-                persona = persona?.ifBlank { null }
+                persona = persona?.ifBlank { null },
+                incognito = incognito
             )
         )
+    }
+
+    /**
+     * v19: hapus permanen semua percakapan incognito + pesannya.
+     * Dipanggil saat aplikasi/ViewModel chat dimulai (membersihkan sisa
+     * sesi incognito yang tertinggal karena aplikasi tertutup mendadak)
+     * dan hasilnya: tidak ada jejak incognito yang bertahan antar-sesi.
+     */
+    suspend fun purgeIncognito() {
+        val ids = dao.incognitoIds()
+        if (ids.isEmpty()) return
+        ids.forEach { dao.deleteMessagesByConv(it) }
+        dao.deleteIncognitoConversations()
+        if (prefs.currentConvId in ids) prefs.currentConvId = -1L
     }
 
     suspend fun addMessage(

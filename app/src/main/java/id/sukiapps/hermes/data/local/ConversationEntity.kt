@@ -10,6 +10,10 @@ import androidx.room.PrimaryKey
  * created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
  * pinned INTEGER NOT NULL DEFAULT 0, archived INTEGER NOT NULL DEFAULT 0,
  * persona TEXT (nullable).
+ *
+ * v19 (skema v6): kolom incognito INTEGER NOT NULL DEFAULT 0 —
+ * percakapan incognito tidak tampil di riwayat/pencarian/backup dan
+ * dihapus permanen saat user pindah chat atau aplikasi dimulai ulang.
  */
 @Entity(tableName = "conversations")
 data class ConversationEntity(
@@ -24,5 +28,7 @@ data class ConversationEntity(
     val pinned: Boolean = false,
     @ColumnInfo(name = "archived", defaultValue = "0")
     val archived: Boolean = false,
-    val persona: String? = null
+    val persona: String? = null,
+    @ColumnInfo(name = "incognito", defaultValue = "0")
+    val incognito: Boolean = false
 )
