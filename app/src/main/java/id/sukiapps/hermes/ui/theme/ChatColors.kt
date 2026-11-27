@@ -94,6 +94,73 @@ fun museLightPalette(): ChatPalette = ChatPalette(
     streamCaret = Color(0xFFB4552D)
 )
 
+/**
+ * v20: gaya "Muse" netral — dark-first near-black, permukaan abu netral,
+ * pesan AI tanpa bubble, aksen coral Hermes. Nilai diambil dari spesifikasi
+ * [MuseChatDark]/[MuseChatLight] (MuseChatTheme.kt) yang sebelumnya
+ * didefinisikan tetapi tidak pernah dipakai. Palet hangat (krem/cokelat)
+ * tetap tersedia sebagai gaya "Hangat".
+ */
+fun museNeutralDarkPalette(): ChatPalette = ChatPalette(
+    background = MuseChatDark.background,
+    surface = MuseChatDark.surface,
+    surfaceVariant = MuseChatDark.surfaceVariant,
+    chatBackground = MuseChatDark.background,
+    appBar = MuseChatDark.background,
+    userBubble = MuseChatDark.userBubble,
+    aiBubble = MuseChatDark.aiBackground,
+    bubbleIn = MuseChatDark.surface,
+    bubbleOut = MuseChatDark.userBubble,
+    textPrimary = MuseChatDark.textPrimary,
+    textSecondary = MuseChatDark.textSecondary,
+    textTertiary = Color(0xFF737373),
+    accent = MuseChatDark.accent,
+    accentDim = MuseChatDark.accentDim,
+    glowAccent = MuseChatDark.accent,
+    inputBackground = MuseChatDark.inputBackground,
+    inputBorder = MuseChatDark.inputBorder,
+    cursorColor = MuseChatDark.cursorColor,
+    codeBackground = MuseChatDark.codeBackground,
+    codeBorder = MuseChatDark.codeBorder,
+    success = Color(0xFF4CAF50),
+    warning = Color(0xFFFFA726),
+    errorColor = Color(0xFFFFB4AB),
+    divider = MuseChatDark.divider,
+    skeletonBase = MuseChatDark.surface,
+    skeletonShimmer = MuseChatDark.surfaceVariant,
+    streamCaret = MuseChatDark.cursorColor
+)
+
+fun museNeutralLightPalette(): ChatPalette = ChatPalette(
+    background = MuseChatLight.background,
+    surface = MuseChatLight.surface,
+    surfaceVariant = MuseChatLight.surfaceVariant,
+    chatBackground = MuseChatLight.background,
+    appBar = MuseChatLight.background,
+    userBubble = MuseChatLight.userBubble,
+    aiBubble = MuseChatLight.aiBackground,
+    bubbleIn = MuseChatLight.surface,
+    bubbleOut = MuseChatLight.userBubble,
+    textPrimary = MuseChatLight.textPrimary,
+    textSecondary = MuseChatLight.textSecondary,
+    textTertiary = Color(0xFF8A8A8A),
+    accent = MuseChatLight.accent,
+    accentDim = MuseChatLight.accentDim,
+    glowAccent = MuseChatLight.accent,
+    inputBackground = MuseChatLight.inputBackground,
+    inputBorder = MuseChatLight.inputBorder,
+    cursorColor = MuseChatLight.cursorColor,
+    codeBackground = MuseChatLight.codeBackground,
+    codeBorder = MuseChatLight.codeBorder,
+    success = Color(0xFF2E7D32),
+    warning = Color(0xFFEF6C00),
+    errorColor = Color(0xFFBA1A1A),
+    divider = MuseChatLight.divider,
+    skeletonBase = MuseChatLight.surfaceVariant,
+    skeletonShimmer = MuseChatLight.surface,
+    streamCaret = MuseChatLight.cursorColor
+)
+
 fun premiumDarkPalette(): ChatPalette = ChatPalette(
     background = Color(0xFF0B141A),
     surface = Color(0xFF1C1B1F),

@@ -28,17 +28,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -177,49 +172,32 @@ fun InputBar(
                 IconButton(onClick = { menuOpen = true }) {
                     Icon(
                         imageVector = Icons.Filled.Add,
-                        contentDescription = "Tambah lampiran"
+                        contentDescription = "Tambah lampiran atau alat"
                     )
                 }
-                DropdownMenu(
-                    expanded = menuOpen,
-                    onDismissRequest = { menuOpen = false }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Foto dari galeri") },
-                        leadingIcon = {
-                            Icon(Icons.Filled.Image, contentDescription = null)
-                        },
-                        onClick = { menuOpen = false; onPickImage() }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Ambil foto (kamera)") },
-                        leadingIcon = {
-                            Icon(Icons.Filled.PhotoCamera, contentDescription = null)
-                        },
-                        onClick = { menuOpen = false; onTakePhoto() }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Dokumen / file") },
-                        leadingIcon = {
-                            Icon(Icons.Filled.Description, contentDescription = null)
-                        },
-                        onClick = { menuOpen = false; onPickDocument() }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Ambil dari web") },
-                        leadingIcon = {
-                            Icon(Icons.Filled.Language, contentDescription = null)
-                        },
-                        onClick = { menuOpen = false; onWebFetch() }
-                    )
-                    // Tanya Upin — sejajar "Ambil dari web".
-                    DropdownMenuItem(
-                        text = { Text("Tanya Upin") },
-                        leadingIcon = {
-                            Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null)
-                        },
-                        enabled = value.isNotBlank(),
-                        onClick = { menuOpen = false; onAskUpin() }
+                // v20 (gaya Muse): "+" membuka bottom sheet berisi grid alat,
+                // bukan dropdown 5 baris. Aksi & urutan sama seperti dulu,
+                // ditambah pintasan Emoji.
+                if (menuOpen) {
+                    ComposerToolsSheet(
+                        canAskUpin = value.isNotBlank(),
+                        showEmoji = onEmojiPick != null,
+                        onDismiss = { menuOpen = false },
+                        onPick = { tool ->
+                            menuOpen = false
+                            when (tool) {
+                                ComposerTool.GALLERY -> onPickImage()
+                                ComposerTool.CAMERA -> onTakePhoto()
+                                ComposerTool.DOCUMENT -> onPickDocument()
+                                ComposerTool.WEB -> onWebFetch()
+                                ComposerTool.UPIN -> onAskUpin()
+                                ComposerTool.EMOJI -> {
+                                    emojiOpen = true
+                                    keyboard?.hide()
+                                    focusManager.clearFocus()
+                                }
+                            }
+                        }
                     )
                 }
                 OutlinedTextField(

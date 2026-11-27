@@ -43,6 +43,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material.icons.outlined.AddComment
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.ArrowDownward
@@ -428,10 +434,11 @@ fun HermesChatScreen(
             topBar = {
                 MuseTopBar(
                     title = state.title,
-                    subtitle = buildString {
-                        if (state.model.isNotBlank()) append(state.model)
-                        append(" · ~${state.tokenEstimate} token")
-                    },
+                    // v20: tanpa " · " yatim saat model belum dipilih.
+                    subtitle = listOfNotNull(
+                        state.model.takeIf { it.isNotBlank() },
+                        "~${state.tokenEstimate} token"
+                    ).joinToString(" · "),
                     modelLabel = state.model,
                     onOpenDrawer = { scope.launch { drawerState.open() } },
                     onNewChat = { chatVm.newConversation() },
@@ -977,7 +984,7 @@ fun HermesChatScreen(
  * pil model di kanan, aksi ikon (chat baru, pengaturan, hub v12).
  */
 @Composable
-private fun MuseTopBar(
+internal fun MuseTopBar(
     title: String,
     subtitle: String,
     modelLabel: String,
@@ -987,82 +994,91 @@ private fun MuseTopBar(
     onOpenV12Hub: () -> Unit,
     onExport: () -> Unit
 ) {
+    // v20 (gaya Muse): top bar minimal — menu di kiri, judul + "model · token"
+    // di TENGAH sejati (tidak bergeser oleh jumlah ikon), lalu chat baru dan
+    // menu ⋮ di kanan. Dulu 6 ikon + pil model berderet sehingga judul
+    // terjepit di layar 360 dp dan nama model tampil dua kali.
     val scheme = MaterialTheme.colorScheme
+    var menuOpen by remember { mutableStateOf(false) }
     Surface(color = scheme.background, tonalElevation = 0.dp) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp)
-                .padding(horizontal = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 4.dp)
         ) {
-            IconButton(onClick = onOpenDrawer) {
+            IconButton(
+                onClick = onOpenDrawer,
+                modifier = Modifier.align(Alignment.CenterStart)
+            ) {
                 Icon(
                     Icons.Filled.Menu,
                     contentDescription = "Riwayat chat",
-                    tint = scheme.onSurfaceVariant
+                    tint = scheme.onSurface
                 )
             }
             Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 4.dp)
+                    .align(Alignment.Center)
+                    .padding(horizontal = 104.dp)
+                    .semantics(mergeDescendants = true) {}
             ) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
                     color = scheme.onBackground,
-                    maxLines = 1
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = subtitle,
+                    text = subtitle.ifBlank { modelLabel },
                     style = MaterialTheme.typography.labelSmall,
                     color = scheme.onSurfaceVariant,
-                    maxLines = 1
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
-            if (modelLabel.isNotBlank()) {
-                Surface(
-                    shape = PillShape,
-                    color = scheme.surfaceVariant,
-                    modifier = Modifier.padding(end = 4.dp)
-                ) {
-                    Text(
-                        text = modelLabel,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = scheme.onSurfaceVariant,
-                        maxLines = 1,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+            Row(
+                modifier = Modifier.align(Alignment.CenterEnd),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onNewChat) {
+                    Icon(
+                        Icons.Outlined.AddComment,
+                        contentDescription = "Chat baru",
+                        tint = scheme.onSurface
                     )
                 }
-            }
-            IconButton(onClick = onNewChat) {
-                Icon(
-                    Icons.Filled.Add,
-                    contentDescription = "Chat baru",
-                    tint = scheme.onSurfaceVariant
-                )
-            }
-            IconButton(onClick = onOpenSettings) {
-                Icon(
-                    Icons.Filled.Settings,
-                    contentDescription = "Pengaturan",
-                    tint = scheme.onSurfaceVariant
-                )
-            }
-            IconButton(onClick = onExport) {
-                Icon(
-                    Icons.Filled.Share,
-                    contentDescription = "Ekspor chat",
-                    tint = scheme.onSurfaceVariant
-                )
-            }
-            IconButton(onClick = onOpenV12Hub) {
-                Icon(
-                    Icons.Filled.Apps,
-                    contentDescription = "Fitur v12",
-                    tint = scheme.onSurfaceVariant
-                )
+                Box {
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(
+                            Icons.Filled.MoreVert,
+                            contentDescription = "Menu lainnya",
+                            tint = scheme.onSurface
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = menuOpen,
+                        onDismissRequest = { menuOpen = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Ekspor chat") },
+                            leadingIcon = { Icon(Icons.Filled.Share, contentDescription = null) },
+                            onClick = { menuOpen = false; onExport() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Fitur agen") },
+                            leadingIcon = { Icon(Icons.Filled.Apps, contentDescription = null) },
+                            onClick = { menuOpen = false; onOpenV12Hub() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Pengaturan") },
+                            leadingIcon = { Icon(Icons.Filled.Settings, contentDescription = null) },
+                            onClick = { menuOpen = false; onOpenSettings() }
+                        )
+                    }
+                }
             }
         }
     }

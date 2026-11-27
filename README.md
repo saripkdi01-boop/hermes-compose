@@ -17,7 +17,9 @@ fitur **Minta Fitur** (upgrade aplikasi via prompt → patch → push → auto-b
 - Lampiran: kamera, galeri multi-pilih, dokumen (PDF vision, DOCX, ZIP/APK info)
 - TTS Bahasa Indonesia (tombol Bacakan di pesan; opsi bacakan jawaban otomatis)
 - Emoji picker di kotak input + reaksi emoji di pesan (tekan lama)
-- Persona, tema terang/gelap, backup ZIP / restore, export MD/JSON/TXT
+- Gaya tampilan **Muse** (gelap pekat netral, default) atau **Hangat**; tema
+  sistem/terang/gelap, aksen coral/teal/pasir/Material You
+- Persona, backup ZIP / restore, export MD/JSON/TXT
 - **Jiwa Hermes**: `soul.md`, `memory.md` (otomatis), `todo.md`, `agents.md`,
   `features.md` → disusun jadi system prompt tiap chat (berprioritas:
   ingatan & todo dipertahankan; konteks waktu; saran proaktif dari todo)

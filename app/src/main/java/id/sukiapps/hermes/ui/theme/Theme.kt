@@ -31,6 +31,17 @@ import androidx.compose.ui.unit.sp
  */
 enum class ContentStyle { MUSE, PREMIUM }
 
+/**
+ * v20: gaya tampilan yang dipilih user (prefs `ui_style`).
+ * - [MUSE] (default): netral dark-first — near-black, abu netral, aksen coral.
+ * - [HANGAT]: palet krem/cokelat hangat v15–v19.
+ */
+object UiStyle {
+    const val MUSE = "muse"
+    const val HANGAT = "hangat"
+    fun clean(v: String?): String = if (v == HANGAT) HANGAT else MUSE
+}
+
 private val V14Typography = Typography(
     displayLarge = TextStyle(
         fontFamily = FontFamily.Serif,
@@ -84,6 +95,7 @@ private fun accentColors(
     darkTheme: Boolean,
     chatPalette: ChatPalette,
     contentStyle: ContentStyle,
+    neutral: Boolean = false,
 ): AccentColors {
     // Non-MUSE styles keep their own accent (PREMIUM is green); the stored
     // accent key only restyles the MUSE style used by MainActivity.
@@ -118,7 +130,21 @@ private fun accentColors(
                 Color(0xFF6F5F45).copy(alpha = 0.16f), Color(0xFF6F5F45),
             )
         }
-        else -> if (darkTheme) {
+        // v20: coral untuk gaya Muse netral — lebih jenuh di atas near-black
+        // (#E07856, kontras ±6:1 dgn latar & dgn teks gelap di atasnya).
+        // Gaya terang tetap #B4552D: teks putih di atas #D0603A dari spek
+        // MuseChatLight hanya ±3.6:1 (di bawah 4.5:1 WCAG untuk label tombol).
+        else -> if (neutral && darkTheme) {
+            AccentColors(
+                Color(0xFFE07856), Color(0xFF2B1208),
+                Color(0xFF3A1E14), Color(0xFFFFD9C7),
+            )
+        } else if (neutral) {
+            AccentColors(
+                MuseCoral, Color.White,
+                Color(0xFFFBE4DA), MuseCoralDark,
+            )
+        } else if (darkTheme) {
             AccentColors(
                 MuseCoralLight, Color(0xFF2B1208),
                 MuseCoralContainerDark, Color(0xFFFFD9C7),
@@ -138,10 +164,17 @@ fun HermesTheme(
     contentStyle: ContentStyle = ContentStyle.MUSE,
     settingsDensity: SettingsDensity = SettingsDensityCompact,
     accent: String = "coral",
+    uiStyle: String = UiStyle.MUSE,
     content: @Composable () -> Unit
 ) {
+    val neutral = contentStyle == ContentStyle.MUSE && UiStyle.clean(uiStyle) == UiStyle.MUSE
     val chatPalette = when (contentStyle) {
-        ContentStyle.MUSE -> if (darkTheme) museDarkPalette() else museLightPalette()
+        ContentStyle.MUSE -> when {
+            neutral && darkTheme -> museNeutralDarkPalette()
+            neutral -> museNeutralLightPalette()
+            darkTheme -> museDarkPalette()
+            else -> museLightPalette()
+        }
         ContentStyle.PREMIUM -> if (darkTheme) premiumDarkPalette() else premiumLightPalette()
     }
     val settingPalette =
@@ -167,8 +200,14 @@ fun HermesTheme(
             dynamicScheme.primaryContainer, dynamicScheme.onPrimaryContainer,
         )
     } else {
-        accentColors(accent, darkTheme, chatPalette, contentStyle)
+        accentColors(accent, darkTheme, chatPalette, contentStyle, neutral)
     }
+
+    // v20: SEMUA peran warna M3 diturunkan dari palet. Dulu surfaceContainer*,
+    // secondary*, tertiary*, inverse* tidak diisi → jatuh ke warna bawaan
+    // Material (keunguan): panel emoji, bottom bar, sheet, dan menu tampak
+    // lavender di tengah palet Hermes.
+    val roles = surfaceRoles(chatPalette)
 
     val colorScheme = if (darkTheme) {
         darkColorScheme(
@@ -176,16 +215,35 @@ fun HermesTheme(
             onPrimary = accentColors.onPrimary,
             primaryContainer = accentColors.container,
             onPrimaryContainer = accentColors.onContainer,
+            inversePrimary = accentColors.container,
+            secondary = chatPalette.textSecondary,
+            onSecondary = chatPalette.background,
+            secondaryContainer = chatPalette.surfaceVariant,
+            onSecondaryContainer = chatPalette.textPrimary,
+            tertiary = accentColors.primary,
+            onTertiary = accentColors.onPrimary,
+            tertiaryContainer = accentColors.container,
+            onTertiaryContainer = accentColors.onContainer,
             background = chatPalette.background,
             onBackground = chatPalette.textPrimary,
             surface = chatPalette.surface,
             onSurface = chatPalette.textPrimary,
             surfaceVariant = chatPalette.surfaceVariant,
             onSurfaceVariant = chatPalette.textSecondary,
+            surfaceTint = if (neutral) chatPalette.textSecondary else accentColors.primary,
+            inverseSurface = chatPalette.textPrimary,
+            inverseOnSurface = chatPalette.background,
             error = chatPalette.errorColor,
             onError = chatPalette.textPrimary,
-            outline = chatPalette.divider,
-            outlineVariant = chatPalette.divider
+            outline = chatPalette.inputBorder,
+            outlineVariant = chatPalette.divider,
+            surfaceBright = roles.bright,
+            surfaceDim = roles.dim,
+            surfaceContainerLowest = roles.lowest,
+            surfaceContainerLow = roles.low,
+            surfaceContainer = roles.container,
+            surfaceContainerHigh = roles.high,
+            surfaceContainerHighest = roles.highest
         )
     } else {
         lightColorScheme(
@@ -193,16 +251,35 @@ fun HermesTheme(
             onPrimary = accentColors.onPrimary,
             primaryContainer = accentColors.container,
             onPrimaryContainer = accentColors.onContainer,
+            inversePrimary = accentColors.container,
+            secondary = chatPalette.textSecondary,
+            onSecondary = chatPalette.background,
+            secondaryContainer = chatPalette.surfaceVariant,
+            onSecondaryContainer = chatPalette.textPrimary,
+            tertiary = accentColors.primary,
+            onTertiary = accentColors.onPrimary,
+            tertiaryContainer = accentColors.container,
+            onTertiaryContainer = accentColors.onContainer,
             background = chatPalette.background,
             onBackground = chatPalette.textPrimary,
             surface = chatPalette.surface,
             onSurface = chatPalette.textPrimary,
             surfaceVariant = chatPalette.surfaceVariant,
             onSurfaceVariant = chatPalette.textSecondary,
+            surfaceTint = if (neutral) chatPalette.textSecondary else accentColors.primary,
+            inverseSurface = chatPalette.textPrimary,
+            inverseOnSurface = chatPalette.background,
             error = chatPalette.errorColor,
             onError = chatPalette.textPrimary,
-            outline = chatPalette.divider,
-            outlineVariant = chatPalette.divider
+            outline = chatPalette.inputBorder,
+            outlineVariant = chatPalette.divider,
+            surfaceBright = roles.bright,
+            surfaceDim = roles.dim,
+            surfaceContainerLowest = roles.lowest,
+            surfaceContainerLow = roles.low,
+            surfaceContainer = roles.container,
+            surfaceContainerHigh = roles.high,
+            surfaceContainerHighest = roles.highest
         )
     }
 
@@ -220,4 +297,28 @@ fun HermesTheme(
             content = content
         )
     }
+}
+
+/** v20: tingkat permukaan M3 — campuran teks utama di atas latar (netral). */
+internal data class SurfaceRoles(
+    val lowest: Color,
+    val low: Color,
+    val container: Color,
+    val high: Color,
+    val highest: Color,
+    val bright: Color,
+    val dim: Color,
+)
+
+internal fun surfaceRoles(p: ChatPalette): SurfaceRoles {
+    fun mix(f: Float) = androidx.compose.ui.graphics.lerp(p.background, p.textPrimary, f)
+    return SurfaceRoles(
+        lowest = p.background,
+        low = mix(0.03f),
+        container = mix(0.05f),
+        high = mix(0.08f),
+        highest = mix(0.11f),
+        bright = mix(0.14f),
+        dim = p.background,
+    )
 }
