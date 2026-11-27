@@ -28,10 +28,13 @@ fitur **Minta Fitur** (upgrade aplikasi via prompt → patch → push → auto-b
 **Tanpa Android Studio:** fork repo → push ke branch → GitHub Actions
 otomatis build → download artifact `hermes-compose-unsigned` di tab Actions.
 
-**Lokal:** butuh JDK 17 + Android SDK (compileSdk 34):
+**Lokal:** butuh JDK 17+ + Android SDK (platform 35):
 ```bash
-gradle :app:assembleRelease --no-daemon
+gradle :app:assembleRelease :app:testReleaseUnitTest --no-daemon
 ```
+
+Riwayat perubahan: [CHANGELOG.md](CHANGELOG.md) · Audit terakhir:
+[docs/AUDIT-v19.md](docs/AUDIT-v19.md).
 
 Mau ikut mengembangkan? Baca [CONTRIBUTING.md](CONTRIBUTING.md) dulu —
 PR kecil dan fokus paling cepat di-review.
@@ -45,8 +48,8 @@ PR kecil dan fokus paling cepat di-review.
 | DI | Hilt 2.51.1 (KSP) |
 | Network | OkHttp 4.12.0 + Retrofit 2.11.0 + kotlinx.serialization 1.7.3 |
 | Async | Kotlin coroutines (chatStream → `Flow<String>`, cancel via scope) |
-| Database | Room 2.6.1 (file `hermes_chat.db`, **version 5** + Migration(4,5) — lihat HermesDatabase.kt) |
-| Build | Gradle 8.11.1, AGP 8.7.3, Kotlin 2.0.21, KSP 2.0.21-1.0.25, compileSdk 34, minSdk 27 |
+| Database | Room 2.6.1 (file `hermes_chat.db`, **version 6** + Migration(4,5) & Migration(5,6) — lihat HermesDatabase.kt) |
+| Build | Gradle 8.11.1, AGP 8.7.3, Kotlin 2.0.21, KSP 2.0.21-1.0.25, compileSdk 35, targetSdk 34, minSdk 27 |
 
 ## Kontrak yang dipertahankan (perilaku tidak berubah)
 
@@ -63,7 +66,9 @@ PR kecil dan fokus paling cepat di-review.
 - SharedPreferences file `hermes_chat` + semua key (`model`, `persona`,
   `temperature`, `top_p`, `max_tokens`, `theme`, `persona_presets`, `base_url`).
 - Format backup ZIP (`hermes_chat.db` + `prefs.json` + `backup_info.json`);
-  `api_key` / `api_key_enc_v1` tidak ikut backup.
+  `api_key` / `api_key_enc_v1` tidak ikut backup. Sejak v19.1 rahasia
+  konektor (`secret_enc_*`) dan percakapan incognito juga tidak ikut, dan
+  restore memulihkan tipe prefs dengan benar (lihat `util/BackupPrefs.kt`).
 - REST: `GET {base}/models`, `POST {base}/chat/completions` (OpenAI-style,
   SSE `data:` + `[DONE]`, Bearer auth).
 

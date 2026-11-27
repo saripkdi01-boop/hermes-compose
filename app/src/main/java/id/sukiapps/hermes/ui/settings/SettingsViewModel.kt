@@ -493,7 +493,9 @@ class SettingsViewModel @Inject constructor(
             _state.update {
                 it.copy(
                     snack = if (ok) "Perintah dikirim ke Termux."
-                    else "Aksi ditolak & dicatat di Riwayat Izin."
+                    // v19.1: false juga berarti Termux belum terpasang /
+                    // izin RUN_COMMAND belum diberikan (bukan hanya ditolak).
+                    else "Tidak terkirim — ditolak, atau Termux/izin RUN_COMMAND belum siap."
                 )
             }
         }

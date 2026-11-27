@@ -6,6 +6,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import id.sukiapps.hermes.domain.Persona
 import id.sukiapps.hermes.domain.PersonaPreset
 import id.sukiapps.hermes.domain.Prefs
+import id.sukiapps.hermes.util.BackupPrefs
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -101,7 +102,15 @@ class AppPrefs @Inject constructor(
         set(v) = prefs.edit().putString(Prefs.KEY_UPIN_URL, v).apply()
 
     var currentConvId: Long
-        get() = prefs.getLong(Prefs.KEY_CURRENT_CONV, -1L)
+        // v19.1 (audit P0): restore backup lama bisa menulis key ini sebagai
+        // Int → getLong melempar ClassCastException di init ChatViewModel
+        // (crash tiap buka aplikasi). Toleran: baca nilai apa pun yang ada.
+        get() = when (val v = prefs.all[Prefs.KEY_CURRENT_CONV]) {
+            is Long -> v
+            is Number -> v.toLong()
+            is String -> v.toLongOrNull() ?: -1L
+            else -> -1L
+        }
         set(v) = prefs.edit().putLong(Prefs.KEY_CURRENT_CONV, v).apply()
 
     fun personaPresets(): List<PersonaPreset> =
@@ -126,29 +135,37 @@ class AppPrefs @Inject constructor(
             .apply()
     }
 
-    /** Semua prefs untuk backup — KECUALI api_key & api_key_enc_v1 (kontrak). */
+    /**
+     * Semua prefs untuk backup — KECUALI api_key & api_key_enc_v1 (kontrak)
+     * dan, sejak v19.1, rahasia konektor `secret_enc_*` (lihat BackupPrefs).
+     */
     fun exportForBackup(): Map<String, Any?> {
         val out = LinkedHashMap<String, Any?>()
         for ((k, v) in prefs.all) {
-            if (k == Prefs.KEY_API_PLAINTEXT || k == Prefs.KEY_API_ENC) continue
+            if (BackupPrefs.isExcluded(k)) continue
             out[k] = v
         }
         return out
     }
 
-    /** Restore prefs dari backup (tidak menyentuh API key). */
+    /** v19.1: tipe nilai yang sekarang tersimpan — petunjuk tipe saat restore. */
+    fun typeHints(): Map<String, Any?> = prefs.all
+
+    /** Restore prefs dari backup (tidak menyentuh API key / rahasia konektor). */
     fun importFromBackup(map: Map<String, Any?>) {
         val e = prefs.edit()
         for ((k, v) in map) {
-            if (k == Prefs.KEY_API_PLAINTEXT || k == Prefs.KEY_API_ENC) continue
+            if (BackupPrefs.isExcluded(k)) continue
             when (v) {
+                null -> e.remove(k)
                 is String -> e.putString(k, v)
                 is Boolean -> e.putBoolean(k, v)
                 is Int -> e.putInt(k, v)
                 is Long -> e.putLong(k, v)
                 is Float -> e.putFloat(k, v)
                 is Double -> e.putFloat(k, v.toFloat())
-                else -> e.putString(k, v?.toString())
+                is Set<*> -> e.putStringSet(k, v.mapNotNull { it?.toString() }.toSet())
+                else -> e.putString(k, v.toString())
             }
         }
         e.apply()

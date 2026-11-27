@@ -152,6 +152,8 @@ class ChatViewModel @Inject constructor(
     val attachmentsFlow: StateFlow<List<AttachmentItem>> = _attachmentsFlow.asStateFlow()
 
     private var streamJob: Job? = null
+    // v19.1: penjaga kirim-ganda (lihat send/regenerate).
+    private var sendInFlight = false
     private var collectJob: Job? = null
     // v9.4: job polling jawaban Upin (dibatalkan saat kirim lain/keluar layar)
     private var upinJob: Job? = null
@@ -218,6 +220,7 @@ class ChatViewModel @Inject constructor(
             return
         }
         prefs.currentConvId = convId
+        userMsgCount = 0
         collectJob = viewModelScope.launch {
             repo.messages(convId).collect { list ->
                 val conv = repo.conversation(convId)
@@ -332,21 +335,46 @@ class ChatViewModel @Inject constructor(
     fun send(text: String) {
         val prompt = text.trim()
         if (prompt.isEmpty() && attachments.isEmpty()) return
-        if (_state.value.isStreaming) return
+        // v19.1 (audit P1): isStreaming baru true setelah pesan user ditulis
+        // ke DB, jadi ketukan ganda cepat dulu bisa mengirim dua kali.
+        if (_state.value.isStreaming || sendInFlight) return
+        sendInFlight = true
         cancelUpin() // kirim pesan lain → hentikan polling Upin
         val atts = attachments.toList()
         clearAttachments()
         viewModelScope.launch {
-            sendInternal(prompt, atts)
+            try {
+                sendInternal(prompt, atts)
+            } finally {
+                sendInFlight = false
+            }
         }
     }
 
-    /** Kirim ulang: jawaban baru untuk pesan user terakhir (tanpa duplikat). */
+    /**
+     * Kirim ulang: jawaban baru untuk pesan user terakhir (tanpa duplikat).
+     *
+     * v19.1 (audit P1): dulu jawaban lama tetap tersimpan dan jawaban baru
+     * ditambahkan di bawahnya (dua jawaban untuk satu pertanyaan), dan
+     * riwayat yang dikirim ke model memuat pertanyaan yang sama dua kali
+     * (sekali di history, sekali sebagai prompt). Sekarang jawaban setelah
+     * pesan user terakhir dihapus dulu — pola yang sama dengan Edit.
+     */
     fun regenerate() {
         val s = _state.value
-        if (s.isStreaming || s.convId <= 0) return
+        if (s.isStreaming || sendInFlight || s.convId <= 0) return
         val lastUser = s.messages.lastOrNull { it.role == "user" } ?: return
-        viewModelScope.launch { streamReply(s.convId, lastUser.content, emptyList()) }
+        sendInFlight = true
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    repo.deleteMessagesAfter(s.convId, lastUser.id)
+                }
+                streamReply(s.convId, lastUser.content, emptyList())
+            } finally {
+                sendInFlight = false
+            }
+        }
     }
 
     /** Coba lagi setelah error: sama seperti regenerate. */

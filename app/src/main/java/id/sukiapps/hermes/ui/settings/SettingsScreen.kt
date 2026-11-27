@@ -1417,7 +1417,9 @@ fun SettingsScreen(
                 }.getOrNull()
                 Text(
                     "Hermes ${pkgInfo?.versionName ?: "—"} " +
-                        "(build ${pkgInfo?.longVersionCode ?: 0})",
+                        // v19.1 (audit P0): longVersionCode = API 28, minSdk 27 →
+                        // NoSuchMethodError di Android 8.1. Versi compat aman.
+                        "(build ${pkgInfo?.let { androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(it) } ?: 0})",
                     style = MaterialTheme.typography.bodyLarge
                 )
                 Spacer(Modifier.height(4.dp))

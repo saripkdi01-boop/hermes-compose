@@ -2,6 +2,10 @@ package id.sukiapps.hermes.data.remote
 
 import id.sukiapps.hermes.domain.AIHttpException
 import id.sukiapps.hermes.domain.ChatRequest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -48,6 +52,15 @@ class SseClient @Inject constructor(
             .post(bodyJson.toRequestBody(mediaType))
             .build()
         val call = client.newCall(request)
+        // v19.1 (audit P0): tombol Stop harus BENAR-BENAR memutus HTTP.
+        // Dulu seluruh baca socket (execute/readUtf8Line, blocking) berjalan
+        // di body producer, sehingga awaitClose { call.cancel() } baru
+        // tercapai SETELAH stream selesai — token terus mengalir (dan
+        // ditagih) sampai server berhenti. Sekarang baca socket dipindah ke
+        // coroutine anak dan producer langsung menunggu di awaitClose:
+        // begitu pengoleksi batal, blok awaitClose jalan seketika →
+        // call.cancel() → readUtf8Line melempar IOException → anak keluar.
+        launch(Dispatchers.IO) {
         try {
             val resp = call.execute()
             if (!resp.isSuccessful) {
@@ -56,13 +69,13 @@ class SseClient @Inject constructor(
                 } catch (e: Exception) { "" }
                 resp.close()
                 close(AIHttpException(mapHttpError(resp.code, errBody)))
-                return@callbackFlow
+                return@launch
             }
             val body = resp.body
             if (body == null) {
                 resp.close()
                 close(AIHttpException("Respon server kosong."))
-                return@callbackFlow
+                return@launch
             }
             val source = body.source()
             while (true) {
@@ -78,15 +91,8 @@ class SseClient @Inject constructor(
                     // "Stream terhenti" agar spinner tidak abadi.
                     if (call.isCanceled()) break
                     resp.close()
-                    val msg = if (e is java.net.SocketTimeoutException) {
-                        "Stream terhenti: tidak ada data selama 120 detik. " +
-                            "Coba lagi atau ganti model."
-                    } else {
-                        "Stream terputus: " +
-                            (e.message?.take(160) ?: "koneksi gagal") + ". Coba lagi."
-                    }
-                    close(AIHttpException(msg, true))
-                    return@callbackFlow
+                    close(AIHttpException(streamBreakMessage(e), true))
+                    return@launch
                 } ?: break // EOF
                 val t = line.trim()
                 if (t.isEmpty() || t.startsWith(":")) continue
@@ -101,7 +107,7 @@ class SseClient @Inject constructor(
                     is SseDecoder.SseEvent.ProviderError -> {
                         resp.close()
                         close(AIHttpException("Server menolak: ${event.message}", event.retryable))
-                        return@callbackFlow
+                        return@launch
                     }
                     // Ignored (role/usage/[DONE]) dan ParseFailed (baris
                     // bukan JSON): lewati. ParseFailed sengaja TIDAK
@@ -120,6 +126,7 @@ class SseClient @Inject constructor(
             } else {
                 close(e)
             }
+        }
         }
         awaitClose { call.cancel() }
     }
@@ -213,16 +220,25 @@ class SseClient @Inject constructor(
             put("content", req.prompt)
         })
         val limit = maxIterations.coerceIn(1, ToolLoop.HARD_MAX_ITERATIONS)
-        var call: okhttp3.Call? = null
+        // v19.1 (audit P0): sama dengan stream() — baca socket di coroutine
+        // anak; awaitClose memutus call HTTP yang SEDANG aktif begitu
+        // pengoleksi batal (tombol Stop), bukan menunggu stream/iterasi
+        // tool selesai. AtomicReference: dibaca dari thread pembatal.
+        val call = AtomicReference<okhttp3.Call?>(null)
         // Fallback non-streaming hanya SEKALI per pengiriman: Tes Koneksi
         // (non-streaming) terbukti lolos pada kasus Jerouter yang stream-nya
         // kosong, jadi satu percobaan ulang tanpa stream lebih berguna
         // daripada error langsung — tapi tidak boleh berulang tanpa henti.
         var fallbackAttempted = false
+        launch(Dispatchers.IO) {
         try {
             var iteration = 0
             var finished = false
             while (iteration < limit && !finished) {
+                // v19.1: dibatalkan saat tool berjalan → jangan buka
+                // request HTTP baru (hook cancel di atas hanya mengenai
+                // call yang sudah ada saat pembatalan terjadi).
+                if (!isActive) break
                 iteration++
                 val body = buildJsonObject {
                     put("model", req.model)
@@ -241,7 +257,13 @@ class SseClient @Inject constructor(
                     .post(body.toString().toRequestBody(mediaType))
                     .build()
                 val c = client.newCall(request)
-                call = c
+                call.set(c)
+                // Pembatalan bisa terjadi tepat sebelum set() di atas —
+                // jangan biarkan call baru lolos dari awaitClose.
+                if (!isActive) {
+                    c.cancel()
+                    break
+                }
                 val resp = c.execute()
                 if (!resp.isSuccessful) {
                     val errBody = try {
@@ -250,13 +272,13 @@ class SseClient @Inject constructor(
                     val code = resp.code
                     resp.close()
                     close(AIHttpException(mapHttpError(code, errBody)))
-                    return@callbackFlow
+                    return@launch
                 }
                 val source = resp.body?.source()
                 if (source == null) {
                     resp.close()
                     close(AIHttpException("Respon server kosong."))
-                    return@callbackFlow
+                    return@launch
                 }
                 val pending = sortedMapOf<Int, ToolCall>()
                 val iterText = StringBuilder()
@@ -264,7 +286,18 @@ class SseClient @Inject constructor(
                     val line = try {
                         source.readUtf8Line()
                     } catch (e: IOException) {
-                        break
+                        // v19.1 (audit P1): putus di tengah stream BUKAN
+                        // selesai normal (sama dengan perbaikan B6 di
+                        // stream()). Dulu di-break diam-diam → balasan
+                        // terpotong tersimpan seolah utuh. Pembatalan user
+                        // tetap ditutup diam.
+                        resp.close()
+                        if (c.isCanceled()) {
+                            close()
+                        } else {
+                            close(AIHttpException(streamBreakMessage(e), true))
+                        }
+                        return@launch
                     } ?: break
                     val t = line.trim()
                     if (t.isEmpty() || t.startsWith(":")) continue
@@ -279,11 +312,17 @@ class SseClient @Inject constructor(
                     // Sekarang error itu diteruskan ke UI sebagai exception.
                     val sseError = chunk.optJSONObject("error")
                     if (sseError != null) {
-                        val msg = sseError.optString("message", "")
-                            .ifBlank { sseError.toString().take(200) }
+                        // v19.1: pakai klasifikasi SseDecoder supaya error
+                        // sementara (rate limit/overload) tetap ditandai
+                        // retryable seperti di jalur stream() biasa.
+                        val ev = SseDecoder.parseEvent(data)
+                        val retryable = (ev as? SseDecoder.SseEvent.ProviderError)?.retryable ?: false
+                        val msg = (ev as? SseDecoder.SseEvent.ProviderError)?.message
+                            ?: sseError.optString("message", "")
+                                .ifBlank { sseError.toString().take(200) }
                         resp.close()
-                        close(AIHttpException("Server menolak: $msg"))
-                        return@callbackFlow
+                        close(AIHttpException("Server menolak: $msg", retryable))
+                        return@launch
                     }
                     val delta = chunk.optJSONArray("choices")
                         ?.optJSONObject(0)
@@ -334,7 +373,7 @@ class SseClient @Inject constructor(
                                     "Coba lagi atau ganti model."
                             )
                         )
-                        return@callbackFlow
+                        return@launch
                     }
                 } else {
                     val assistantMsg = buildJsonObject {
@@ -375,13 +414,14 @@ class SseClient @Inject constructor(
             }
             close()
         } catch (e: Exception) {
-            if (e is IOException && call?.isCanceled() == true) {
+            if (e is IOException && call.get()?.isCanceled() == true) {
                 close()
             } else {
                 close(e)
             }
         }
-        awaitClose { call?.cancel() }
+        }
+        awaitClose { call.get()?.cancel() }
     }
 
     /**
@@ -441,6 +481,19 @@ class SseClient @Inject constructor(
             return content
         }
     }
+
+    /**
+     * v19.1: pesan untuk stream yang putus di tengah jalan (bukan dibatalkan
+     * user). Batas stal transport = readTimeout 120 dtk di NetworkModule.
+     */
+    internal fun streamBreakMessage(e: IOException): String =
+        if (e is java.net.SocketTimeoutException) {
+            "Stream terhenti: tidak ada data selama 120 detik. " +
+                "Coba lagi atau ganti model."
+        } else {
+            "Stream terputus: " +
+                (e.message?.take(160) ?: "koneksi gagal") + ". Coba lagi."
+        }
 
     /** Mapping error HTTP → pesan Indonesia (dipertahankan dari legacy). */
     internal fun mapHttpError(code: Int, errBody: String): String = when (code) {
