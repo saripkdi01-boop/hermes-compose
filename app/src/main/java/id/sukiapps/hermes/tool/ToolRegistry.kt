@@ -42,6 +42,15 @@ object ToolRegistry {
         register(FileReadHermesTool())
         register(WebFetchHermesTool())
         register(TermuxExecTool())
+        // v20.1 — toolkit ala Hermes Agent desktop (lihat AgentTools.kt).
+        register(TodoTool())
+        register(SessionSearchTool())
+        register(SkillsListTool())
+        register(SkillViewTool())
+        register(SkillManageTool())
+        register(ExecuteCodeTool())
+        register(CronJobTool())
+        register(DelegateTaskTool())
     }
 
     /**

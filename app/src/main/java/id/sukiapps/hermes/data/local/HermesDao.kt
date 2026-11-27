@@ -88,6 +88,20 @@ interface HermesDao {
     @Query("DELETE FROM messages WHERE conv_id = :convId AND id > :afterId")
     suspend fun deleteMessagesAfter(convId: Long, afterId: Long)
 
+    /**
+     * v20.1 (tool session_search): cari pesan di riwayat — percakapan
+     * incognito TIDAK pernah ikut. :q sudah di-escape (\, %, _) oleh
+     * pemanggil. Hanya query baru; skema tidak berubah.
+     */
+    @Query(
+        "SELECT m.id AS msgId, m.conv_id AS convId, c.title AS title, m.role AS role, " +
+            "m.content AS content, m.created_at AS createdAt " +
+            "FROM messages m JOIN conversations c ON c.id = m.conv_id " +
+            "WHERE c.incognito = 0 AND m.content LIKE '%' || :q || '%' ESCAPE '\\' " +
+            "ORDER BY m.id DESC LIMIT :limit"
+    )
+    suspend fun searchMessages(q: String, limit: Int): List<MessageHit>
+
     @Query("SELECT COUNT(*) FROM messages WHERE conv_id = :convId")
     suspend fun messageCount(convId: Long): Int
 }

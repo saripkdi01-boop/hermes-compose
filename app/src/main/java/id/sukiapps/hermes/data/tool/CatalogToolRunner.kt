@@ -66,7 +66,28 @@ object CatalogToolRunner {
                 ToolRunLog.append(tool.name, false, "", err)
                 return@withContext RunResult.Failed(err)
             }
-            val result = withTimeoutOrNull(TIMEOUT_MS) {
+            val result = runCode(code, context)
+            when (result) {
+                is RunResult.Success ->
+                    ToolRunLog.append(tool.name, true, result.output, "")
+                is RunResult.Failed ->
+                    ToolRunLog.append(tool.name, false, "", result.error)
+                RunResult.TimedOut -> ToolRunLog.append(
+                    tool.name, false, "",
+                    "Timeout: tidak selesai dalam 30 detik."
+                )
+            }
+            result
+        }
+
+    /**
+     * v20.1: jalankan [code] Python di interpreter Chaquopy (dipakai juga
+     * tool `execute_code`). Gating izin dilakukan PEMANGGIL. Batas sama:
+     * timeout [TIMEOUT_MS] (menghentikan penantian), output ≤ [MAX_OUTPUT_CHARS].
+     */
+    suspend fun runCode(code: String, context: Context): RunResult =
+        withContext(Dispatchers.Default) {
+            withTimeoutOrNull(TIMEOUT_MS) {
                 try {
                     if (!Python.isStarted()) {
                         Python.start(AndroidPlatform(context.applicationContext))
@@ -90,17 +111,6 @@ object CatalogToolRunner {
                     RunResult.Failed("Interpreter gagal: ${e.message}")
                 }
             } ?: RunResult.TimedOut
-            when (result) {
-                is RunResult.Success ->
-                    ToolRunLog.append(tool.name, true, result.output, "")
-                is RunResult.Failed ->
-                    ToolRunLog.append(tool.name, false, "", result.error)
-                RunResult.TimedOut -> ToolRunLog.append(
-                    tool.name, false, "",
-                    "Timeout: tidak selesai dalam 30 detik."
-                )
-            }
-            result
         }
 
     private fun combineOutput(stdout: String, stderr: String): String =

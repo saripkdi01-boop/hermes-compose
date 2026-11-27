@@ -95,6 +95,10 @@ class ChatRepository @Inject constructor(
         dao.touchConversation(convId, System.currentTimeMillis())
     }
 
+    /** v20.1: cari pesan riwayat (tanpa incognito) untuk tool session_search. */
+    suspend fun searchMessages(query: String, limit: Int): List<MessageHit> =
+        dao.searchMessages(id.sukiapps.hermes.tool.SessionSearch.escapeLike(query), limit)
+
     suspend fun setPinned(id: Long, pinned: Boolean) = dao.setPinned(id, pinned)
 
     suspend fun setArchived(id: Long, archived: Boolean) = dao.setArchived(id, archived)

@@ -3,6 +3,34 @@
 Format: versi aplikasi (`versionName` / `versionCode`). Perubahan perilaku
 yang terlihat user ditandai **[perilaku]**.
 
+## 20.1 (65) — toolkit agen ala Hermes Agent desktop
+
+Padanan tool inti [Hermes Agent](https://hermes-agent.nousresearch.com/) (Nous
+Research, MIT) diimplementasikan ulang secara native untuk Android — bukan
+port kode Python-nya. Semua tool ditawarkan ke model di chat, lewat
+`PermissionGate` (tercatat di Riwayat Izin) bila mengubah data/menjalankan
+kode/memakai kuota, dan gagal tertutup.
+
+| Tool | Fungsi | Izin |
+|---|---|---|
+| `todo` | kelola `todo.md` Jiwa Hermes (list/add/done/undo/remove) | LOW untuk perubahan |
+| `session_search` | cari riwayat chat lama (tanpa incognito) | – (baca saja) |
+| `skills_list` / `skill_view` | daftar & isi skill tersimpan | – |
+| `skill_manage` | create/edit/rename/delete skill (`filesDir/agent/skills/*.md`, ≤12 KB, ≤50) | MEDIUM |
+| `execute_code` | Python 3.11 on-device (Chaquopy), timeout 30 dtk, output ≤20 KB | **HIGH** (selalu popup) |
+| `cronjob` | tugas terjadwal (WorkManager) → model → chat "⏰ nama" + notifikasi | **HIGH** saat membuat |
+| `delegate_task` | 1–3 sub-agen paralel tanpa tool, timeout 90 dtk | LOW |
+
+- **[perilaku]** Daftar skill tersimpan ikut dirakit ke system prompt
+  (`[Skill tersimpan …]`) agar Hermes tahu kapan memanggil `skill_view`.
+- Penyimpanan baru: `filesDir/agent/skills/`, `filesDir/agent/cron_jobs.json`
+  (bukan Room — skema kontrak tidak berubah; tidak ikut backup ZIP).
+- `HermesDao.searchMessages` = query baru saja (skema tetap v6).
+- Tidak tersedia di HP: otomasi browser, terminal penuh di luar
+  sandbox/Termux, `web_search` (butuh keputusan penyedia + API key).
+- Test baru: `TodoMdTest`, `SkillStoreTest`, `CronJobsTest`, `AgentToolsTest`.
+- Referensi lengkap: `docs/TOOLS.md`.
+
 ## 20.0 (64) — gaya visual Muse
 
 ### Tampilan

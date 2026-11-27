@@ -39,7 +39,9 @@ object SoulPrompt {
         val agents: String = "",
         val features: String = "",
         val memory: String = "",
-        val todo: String = ""
+        val todo: String = "",
+        /** v20.1: indeks skill tersimpan ("- nama: deskripsi"). */
+        val skills: String = ""
     )
 
     suspend fun build(ctx: Context, userMessage: String): String =
@@ -50,7 +52,8 @@ object SoulPrompt {
                 agents = AgentFiles.read(ctx, AgentFiles.AGENTS),
                 features = AgentFiles.read(ctx, AgentFiles.FEATURES),
                 memory = AgentFiles.read(ctx, AgentFiles.MEMORY),
-                todo = AgentFiles.read(ctx, AgentFiles.TODO)
+                todo = AgentFiles.read(ctx, AgentFiles.TODO),
+                skills = runCatching { SkillStore.forApp(ctx.filesDir).index() }.getOrDefault("")
             )
             assemble(parts, userMessage, ZonedDateTime.now())
         }
@@ -103,6 +106,10 @@ object SoulPrompt {
         addSection(
             "[Fitur aplikasi Hermes — kenali agar bisa memandu user]",
             parts.features, priority = 10, maxLines = 160
+        )
+        addSection(
+            "[Skill tersimpan — buka dengan skill_view bila tugas cocok]",
+            parts.skills, priority = 50
         )
         addSection("[Ingatan tentang user]", relevantMemory(parts.memory, userMessage), priority = 80, footer = MEMORY_GUIDE)
         val todos = activeTodos(parts.todo).take(5).joinToString("\n") { "- [ ] $it" }
