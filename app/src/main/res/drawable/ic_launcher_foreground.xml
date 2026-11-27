@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v19.4: huruf "H" emas Hermes sebagai vector — direproduksi dari
+     ic_launcher.png (H 58×74 px di kotak 126 px) dan diskalakan ke area
+     terlihat 72 dp ikon adaptive; seluruh H berada di dalam safe zone 66 dp. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="@color/ic_launcher_foreground"
+        android:pathData="M37.43,32.86h9.14v16.57h14.86v-16.57h9.14v42.28h-9.14v-16.57h-14.86v16.57h-9.14z" />
+</vector>

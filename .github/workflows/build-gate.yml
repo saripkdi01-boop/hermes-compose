@@ -12,5 +12,21 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      # v19.4: Gradle dikunci sama dengan build.yml (dulu memakai versi
+      # bawaan runner sehingga hasil branch & main bisa berbeda).
       - uses: gradle/actions/setup-gradle@v4
-      - run: gradle assembleDebug --stacktrace
+        with:
+          gradle-version: 8.11.1
+      # v19.4: unit test + lint penuh di SETIAP branch/PR, bukan hanya
+      # assembleDebug. Lint penuh menangkap error NewApi (mis. API 28 di
+      # minSdk 27 → crash Android 8.1) yang lolos dari lintVital release.
+      - run: gradle assembleDebug testDebugUnitTest lintDebug --stacktrace
+      - name: Upload laporan test & lint
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-gate-reports
+          path: |
+            app/build/reports/tests/testDebugUnitTest/
+            app/build/reports/lint-results-debug.html
+          if-no-files-found: warn

@@ -16,8 +16,8 @@ android {
         applicationId = "id.sukiapps.hermes"
         minSdk = 27
         targetSdk = 34
-        versionCode = 62
-        versionName = "19.3" // v19.3: Jiwa ala asisten pribadi — prompt berprioritas (ingatan & todo dipertahankan), konteks waktu, saran proaktif dari todo, sapaan sesuai jam, bacakan jawaban otomatis. v19.2: UI modern — edge-to-edge + insets benar, emoji picker + reaksi di chat utama, Pengaturan ringkas (Selengkapnya), tap target 48dp. v19.1: audit stabilitas & keamanan (Stop memutus HTTP, restore backup tanpa crash, API key terkunci ke host provider, Termux eksplisit, regenerate tanpa duplikat). v19: target share sheet (ACTION_SEND → draf chat baru) + mode chat incognito (skema Room v6, kolom incognito; tidak masuk riwayat/ingatan, terhapus saat pindah chat)
+        versionCode = 63
+        versionName = "19.4" // v19.4: ikon adaptive + themed (monochrome), kebersihan repo (.bak/zip/kode mati dihapus), build-gate menjalankan test + lint. v19.3: Jiwa ala asisten pribadi — prompt berprioritas (ingatan & todo dipertahankan), konteks waktu, saran proaktif dari todo, sapaan sesuai jam, bacakan jawaban otomatis. v19.2: UI modern — edge-to-edge + insets benar, emoji picker + reaksi di chat utama, Pengaturan ringkas (Selengkapnya), tap target 48dp. v19.1: audit stabilitas & keamanan (Stop memutus HTTP, restore backup tanpa crash, API key terkunci ke host provider, Termux eksplisit, regenerate tanpa duplikat). v19: target share sheet (ACTION_SEND → draf chat baru) + mode chat incognito (skema Room v6, kolom incognito; tidak masuk riwayat/ingatan, terhapus saat pindah chat)
 
         // D1 (14.30): Chaquopy butuh ABI native Python. arm64-v8a = semua HP
         // target (A76 dkk); x86_64 = emulator. Tiap ABI menambah MB APK —
