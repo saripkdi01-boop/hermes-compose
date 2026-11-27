@@ -15,6 +15,7 @@ import id.sukiapps.hermes.data.audit.PermissionGate
 import id.sukiapps.hermes.data.connectors.UpinConnector
 import id.sukiapps.hermes.data.local.AppPrefs
 import id.sukiapps.hermes.data.local.ChatRepository
+import id.sukiapps.hermes.data.local.ReactionStore
 import id.sukiapps.hermes.domain.AIProvider
 import id.sukiapps.hermes.domain.AIHttpException
 import id.sukiapps.hermes.domain.ChatMessage
@@ -98,8 +99,19 @@ class ChatViewModel @Inject constructor(
     private val memoryWriter: MemoryWriter,
     private val upin: UpinConnector,
     private val gate: PermissionGate,
-    private val execNotifier: ExecNotifier
+    private val execNotifier: ExecNotifier,
+    private val reactionStore: ReactionStore
 ) : ViewModel() {
+
+    // v19.2: reaksi emoji per pesan + emoji "baru dipakai" (picker composer).
+    val reactions: StateFlow<Map<Long, String>> = reactionStore.reactions
+    val recentEmojis: StateFlow<List<String>> = reactionStore.recent
+
+    /** Pasang/lepas reaksi. Chat incognito: hanya di memori (tanpa jejak). */
+    fun toggleReaction(msgId: Long, emoji: String) =
+        reactionStore.toggle(msgId, emoji, persist = !_state.value.incognito)
+
+    fun noteEmojiUsed(emoji: String) = reactionStore.noteUsed(emoji)
 
     // v14.10: throttle notifikasi eksekusi (timestamp terakhir per kategori).
     private var lastPromptNotifAt = 0L

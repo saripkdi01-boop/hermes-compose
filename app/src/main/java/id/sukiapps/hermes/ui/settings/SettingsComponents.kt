@@ -352,3 +352,64 @@ fun CollapsibleSection(
         }
     }
 }
+
+// ===== v19.2: SettingsHint — teks singkat + "Selengkapnya" =====
+
+/**
+ * Aturan Pengaturan v19.2: layar harus bisa dipindai dalam hitungan detik.
+ * Yang tampil hanya [summary] satu baris pendek; penjelasan panjang
+ * ([details]) disembunyikan di balik tombol "Selengkapnya" yang bisa
+ * dibuka-tutup. Area sentuh tombol ≥ 48 dp, status terbuka/tertutup
+ * diumumkan ke pembaca layar.
+ */
+@Composable
+fun SettingsHint(
+    summary: String,
+    details: String? = null,
+    modifier: Modifier = Modifier,
+    color: androidx.compose.ui.graphics.Color =
+        androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+) {
+    var open by remember { mutableStateOf(false) }
+    val motion = LocalSettingsMotion.current
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = summary,
+            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+            color = color,
+        )
+        if (!details.isNullOrBlank()) {
+            androidx.compose.animation.AnimatedVisibility(
+                visible = open,
+                enter = androidx.compose.animation.expandVertically(tween(motion.expandMs)) +
+                    androidx.compose.animation.fadeIn(tween(motion.expandMs)),
+                exit = androidx.compose.animation.shrinkVertically(tween(motion.collapseMs)) +
+                    androidx.compose.animation.fadeOut(tween(motion.collapseMs)),
+            ) {
+                Text(
+                    text = details,
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = color,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            TextButton(
+                onClick = { open = !open },
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    horizontal = 0.dp, vertical = 0.dp
+                ),
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .semantics {
+                        contentDescription =
+                            if (open) "Sembunyikan penjelasan" else "Tampilkan penjelasan lengkap"
+                    },
+            ) {
+                Text(
+                    text = if (open) "Sembunyikan" else "Selengkapnya",
+                    style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
+                )
+            }
+        }
+    }
+}

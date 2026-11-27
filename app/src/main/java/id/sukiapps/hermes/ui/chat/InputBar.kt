@@ -1,6 +1,16 @@
 package id.sukiapps.hermes.ui.chat
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.outlined.EmojiEmotions
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -18,14 +28,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -70,12 +80,36 @@ fun InputBar(
     onAskUpin: () -> Unit,
     onVoiceInput: (() -> Unit)? = null,
     isListening: Boolean = false,
+    // v19.2: emoji picker di composer. null = tombol emoji disembunyikan.
+    onEmojiPick: ((String) -> Unit)? = null,
+    recentEmojis: List<String> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    var emojiOpen by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    // Panel emoji menggantikan keyboard: mengetuk kolom teks lagi (fokus
+    // kembali) menutup panel, seperti keyboard emoji di aplikasi chat.
+    LaunchedEffect(focused) { if (focused) emojiOpen = false }
+    // Panel ditutup saat mulai streaming / pesan terkirim.
+    LaunchedEffect(isStreaming) { if (isStreaming) emojiOpen = false }
     Column(modifier = modifier) {
+        if (onEmojiPick != null) {
+            AnimatedVisibility(
+                visible = emojiOpen,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                EmojiPickerPanel(
+                    recent = recentEmojis,
+                    onPick = onEmojiPick,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        }
         if (attachments.isNotEmpty()) {
             LazyRow(
                 modifier = Modifier
@@ -102,9 +136,11 @@ fun InputBar(
                             )
                         },
                         trailingIcon = {
+                            // v19.2 (a11y): area sentuh 32 dp di dalam chip
+                            // (dulu 20 dp); ikon tetap kecil.
                             IconButton(
                                 onClick = { onRemoveAttachment(a) },
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(32.dp)
                             ) {
                                 Icon(
                                     Icons.Filled.Close,
@@ -180,7 +216,7 @@ fun InputBar(
                     DropdownMenuItem(
                         text = { Text("Tanya Upin") },
                         leadingIcon = {
-                            Icon(Icons.Filled.Chat, contentDescription = null)
+                            Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null)
                         },
                         enabled = value.isNotBlank(),
                         onClick = { menuOpen = false; onAskUpin() }
@@ -190,6 +226,29 @@ fun InputBar(
                     value = value,
                     onValueChange = onValueChange,
                     placeholder = { Text("Tulis pesan…") },
+                    // v19.2: tombol emoji di dalam kolom teks (hemat lebar
+                    // baris composer di HP kecil).
+                    trailingIcon = if (onEmojiPick == null) null else {
+                        {
+                            IconButton(
+                                onClick = {
+                                    emojiOpen = !emojiOpen
+                                    if (emojiOpen) {
+                                        keyboard?.hide()
+                                        focusManager.clearFocus()
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = if (emojiOpen) Icons.Filled.Keyboard
+                                    else Icons.Outlined.EmojiEmotions,
+                                    contentDescription = if (emojiOpen) "Tutup emoji" else "Pilih emoji",
+                                    tint = if (emojiOpen) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                        }
+                        }
+                    },
                     interactionSource = interactionSource,
                     modifier = Modifier
                         .weight(1f)
@@ -245,7 +304,7 @@ fun InputBar(
                             modifier = Modifier.size(48.dp)
                         ) {
                             Icon(
-                                Icons.Filled.Send,
+                                Icons.AutoMirrored.Filled.Send,
                                 contentDescription = "Kirim"
                             )
                         }

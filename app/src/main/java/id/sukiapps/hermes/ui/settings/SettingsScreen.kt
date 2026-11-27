@@ -654,14 +654,13 @@ fun SettingsScreen(
                         modifier = Modifier.weight(1f)
                     ) { Text("DCompute") }
                 }
-                Text(
-                    "Preset mengisi Base URL (Muse by Meta juga menyetel " +
+                SettingsHint(
+                    summary = "Preset mengisi Base URL. Lalu ganti API key & muat ulang model.",
+                    details = "Preset mengisi Base URL (Muse by Meta juga menyetel " +
                         "model awal muse-spark-1.3). Setelah memilih preset: ketuk " +
                         "\u201cGanti API key\u2026\u201d di bawah untuk menempel API key " +
                         "Meta milikmu, lalu di grup Model AI ketuk \u201cMuat ulang " +
-                        "daftar model\u201d.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                        "daftar model\u201d."
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
@@ -693,12 +692,11 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Text(
-                    "Bila provider terpilih gagal, agen mencoba cadangan " +
+                SettingsHint(
+                    summary = "Dipakai agen bila provider utama gagal.",
+                    details = "Bila provider terpilih gagal, agen mencoba cadangan " +
                         "berurutan (Jerouter → OpenRouter → DCompute). " +
-                        "Kunci disimpan terenkripsi di KeyVault.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                        "Kunci disimpan terenkripsi di KeyVault."
                 )
                 Spacer(Modifier.height(8.dp))
                 val saveFallbackKey: (String, String) -> Unit = { secret, value ->
@@ -765,12 +763,11 @@ fun SettingsScreen(
 
             // ---- Grup: Tool Web (Sprint 1 Gate 2) ----
             settingsSection("Tool Web") {
-                Text(
-                    "Allowlist domain web_fetch — satu domain per baris. " +
+                SettingsHint(
+                    summary = "Satu domain per baris. Kosong = semua domain publik.",
+                    details = "Allowlist domain web_fetch — satu domain per baris. " +
                         "Kosongkan untuk mengizinkan semua domain publik " +
-                            "(akses IP privat tetap diblokir).",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                            "(akses IP privat tetap diblokir)."
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
@@ -791,11 +788,10 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Simpan allowlist") }
                 Spacer(Modifier.height(12.dp))
-                Text(
-                    "Allowlist scan untuk net_scan & conn_health — satu host per baris. " +
-                        "Kosongkan untuk default localhost saja.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                SettingsHint(
+                    summary = "Satu host per baris. Kosong = localhost saja.",
+                    details = "Allowlist scan untuk net_scan & conn_health — satu host per baris. " +
+                        "Kosongkan untuk default localhost saja."
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
@@ -847,25 +843,23 @@ fun SettingsScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                 }
-                Text(
-                    "Tool katalog Python (skrip .py buatan sendiri) dikelola " +
-                        "terpisah di layar Katalog Tools — bukan bagian registry ini.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                SettingsHint(
+                    summary = "Tool Python dikelola di layar Katalog Tools.",
+                    details = "Tool katalog Python (skrip .py buatan sendiri) dikelola " +
+                        "terpisah di layar Katalog Tools — bukan bagian registry ini."
                 )
             }
 
             // ---- Grup: Agen (Sprint 1 Gate 4) ----
             settingsSection("Agen") {
-                Text(
-                    "Batas sesi Mode Agen (chat). Batas ini DITEGAKKAN " +
+                SettingsHint(
+                    summary = "Batas iterasi, waktu, dan token Mode Agen.",
+                    details = "Batas sesi Mode Agen (chat). Batas ini DITEGAKKAN " +
                         "di jalur agen: tugas berhenti dengan alasan " +
                         "batas bila iterasi/timeout/budget terlampaui. " +
                         "Token: bila provider mengirim usage, angka asli " +
                         "itu yang dipakai; bila tidak, estimasi kasar " +
-                        "(panjang ÷ 4).",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                        "(panjang ÷ 4)."
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
@@ -908,12 +902,7 @@ fun SettingsScreen(
                 SettingsItemSwitch(
                     icon = Icons.Filled.SmartToy,
                     title = "Upgrade Diri Otomatis",
-                    subtitle = "Agen boleh branch, tulis, merge, dan buat " +
-                        "rilis draft HANYA lewat Mode Agen (kartu izin " +
-                        "HIGH/CRITICAL tetap berlaku; tidak tersedia di " +
-                        "chat biasa). Matikan untuk menghentikan loop " +
-                        "(kill switch). Signing + lampir APK tetap oleh " +
-                        "maintainer.",
+                    subtitle = "Hanya lewat Mode Agen, dengan kartu izin.",
                     checked = suOn,
                     onCheckedChange = {
                         suOn = it
@@ -925,6 +914,15 @@ fun SettingsScreen(
                             "Upgrade Diri Otomatis nonaktif."
                         }
                     }
+                )
+                SettingsHint(
+                    summary = "Matikan = kill switch loop upgrade.",
+                    details = "Agen boleh branch, tulis, merge, dan buat " +
+                        "rilis draft HANYA lewat Mode Agen (kartu izin " +
+                        "HIGH/CRITICAL tetap berlaku; tidak tersedia di " +
+                        "chat biasa). Matikan untuk menghentikan loop " +
+                        "(kill switch). Signing + lampir APK tetap oleh " +
+                        "maintainer."
                 )
                 Spacer(Modifier.height(8.dp))
                 Row(
@@ -1117,10 +1115,10 @@ fun SettingsScreen(
 
             // ---- Grup: Jiwa Hermes (v9.1) ----
             settingsSection("Jiwa Hermes") {
-                Text(
-                    "Persona tetap, ingatan jangka panjang, dan todo — " +
-                        "disusun otomatis menjadi system prompt.",
-                    style = MaterialTheme.typography.bodyMedium
+                SettingsHint(
+                    summary = "Persona, ingatan, dan todo untuk tiap chat.",
+                    details = "Persona tetap, ingatan jangka panjang, dan todo — " +
+                        "disusun otomatis menjadi system prompt."
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(
@@ -1131,12 +1129,11 @@ fun SettingsScreen(
 
             // ---- Grup: Konektor (v9.1, aksi manual) ----
             settingsSection("Konektor") {
-                Text(
-                    "Aksi manual — setiap tombol di bawah ditekan olehmu, " +
+                SettingsHint(
+                    summary = "Aksi manual — hanya jalan saat kamu menekan.",
+                    details = "Aksi manual — setiap tombol di bawah ditekan olehmu, " +
                         "tidak pernah berjalan otomatis. Token tersimpan " +
-                        "terenkripsi di Keystore.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                        "terenkripsi di Keystore."
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
@@ -1284,11 +1281,10 @@ fun SettingsScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Jalankan di Termux…") }
-                Text(
-                    "Setiap eksekusi selalu minta izin popup (tidak bisa " +
-                        "diingat) & tercatat di Riwayat Izin.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                SettingsHint(
+                    summary = "Selalu minta izin & tercatat di Riwayat.",
+                    details = "Setiap eksekusi selalu minta izin popup (tidak bisa " +
+                        "diingat) & tercatat di Riwayat Izin."
                 )
                 Spacer(Modifier.height(12.dp))
                 Text(
@@ -1296,14 +1292,13 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary
                 )
-                Text(
-                    "Deploy backend bot JS ke infrastruktur Telegram via " +
+                SettingsHint(
+                    summary = "Deploy bot JS via tgcloud di Termux.",
+                    details = "Deploy backend bot JS ke infrastruktur Telegram via " +
                         "CLI tgcloud di Termux.\nJalankan `npx tgcloud login` " +
                         "sekali secara manual di Termux (tempel CLI access " +
                         "token dari BotFather → bot → Serverless → CLI " +
-                        "Access). Token dipegang Termux, tidak disimpan di app.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                        "Access). Token dipegang Termux, tidak disimpan di app."
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
@@ -1354,11 +1349,10 @@ fun SettingsScreen(
 
             // ---- Grup: Konektor Upin (v9.4) ----
             settingsSection("Konektor Upin") {
-                Text(
-                    "Tanya-jawab dengan agent Upin di VM via SSH forward. " +
-                        "Secret tersimpan terenkripsi di Keystore.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                SettingsHint(
+                    summary = "Tanya agent Upin di VM lewat SSH forward.",
+                    details = "Tanya-jawab dengan agent Upin di VM via SSH forward. " +
+                        "Secret tersimpan terenkripsi di Keystore."
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
@@ -1446,10 +1440,10 @@ fun SettingsScreen(
 
             // ---- Grup: Izin & Riwayat (v9.2) ----
             settingsSection("Izin & Riwayat") {
-                Text(
-                    "Semua aksi sensitif (Termux, Telegram, GitHub, tulis " +
-                        "ingatan) tercatat — termasuk yang kamu tolak.",
-                    style = MaterialTheme.typography.bodyMedium
+                SettingsHint(
+                    summary = "Semua aksi sensitif tercatat, termasuk yang ditolak.",
+                    details = "Semua aksi sensitif (Termux, Telegram, GitHub, tulis " +
+                        "ingatan) tercatat — termasuk yang kamu tolak."
                 )
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(
