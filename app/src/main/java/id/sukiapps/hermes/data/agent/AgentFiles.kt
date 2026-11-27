@@ -23,10 +23,18 @@ object AgentFiles {
 
     fun dir(ctx: Context): File = File(ctx.filesDir, "agent").apply { mkdirs() }
 
+    /**
+     * v19.3: features.md cukup disegarkan dari assets SEKALI per proses.
+     * Dulu disalin ulang di setiap read() (±6× per rakitan system prompt).
+     */
+    @Volatile
+    private var featuresRefreshed = false
+
     suspend fun seedIfNeeded(ctx: Context) = withContext(Dispatchers.IO) {
         val d = dir(ctx)
         for (name in ALL) {
             val f = File(d, name)
+            if (name == FEATURES && featuresRefreshed && f.exists()) continue
             // v17: features.md adalah manual aplikasi milik app (read-only,
             // tidak pernah diedit user) — selalu segarkan dari assets agar
             // perbaikan manual benar-benar sampai ke instalasi lama.
@@ -43,6 +51,7 @@ object AgentFiles {
                 }
             }
         }
+        featuresRefreshed = true
     }
 
     suspend fun read(ctx: Context, name: String): String = withContext(Dispatchers.IO) {

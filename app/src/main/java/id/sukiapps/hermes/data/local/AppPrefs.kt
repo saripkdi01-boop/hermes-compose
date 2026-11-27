@@ -74,6 +74,11 @@ class AppPrefs @Inject constructor(
         } catch (e: Exception) { 1.0f }
         set(v) = prefs.edit().putFloat(Prefs.KEY_TTS_SPEED, v).apply()
 
+    // v19.3: bacakan otomatis jawaban yang baru selesai (TtsReader).
+    var ttsAuto: Boolean
+        get() = prefs.getBoolean(Prefs.KEY_TTS_AUTO, false)
+        set(v) = prefs.edit().putBoolean(Prefs.KEY_TTS_AUTO, v).apply()
+
     var onboarded: Boolean
         get() = prefs.getBoolean(Prefs.KEY_ONBOARDED, false)
         set(v) = prefs.edit().putBoolean(Prefs.KEY_ONBOARDED, v).apply()

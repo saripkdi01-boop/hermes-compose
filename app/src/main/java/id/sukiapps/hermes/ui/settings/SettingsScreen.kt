@@ -34,6 +34,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayArrow
@@ -533,6 +534,14 @@ fun SettingsScreen(
                     "Berlaku untuk pembacaan pesan berikutnya.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+                Spacer(Modifier.height(8.dp))
+                SettingsItemSwitch(
+                    icon = Icons.AutoMirrored.Filled.VolumeUp,
+                    title = "Bacakan jawaban otomatis",
+                    subtitle = "Hermes membacakan tiap jawaban baru.",
+                    checked = state.ttsAuto,
+                    onCheckedChange = vm::setTtsAuto
                 )
             }
 

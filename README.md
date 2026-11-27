@@ -15,10 +15,12 @@ fitur **Minta Fitur** (upgrade aplikasi via prompt → patch → push → auto-b
   pin/arsip/cari
 - Ganti model AI dari server (`/models`), atur temperature & top_p
 - Lampiran: kamera, galeri multi-pilih, dokumen (PDF vision, DOCX, ZIP/APK info)
-- TTS Bahasa Indonesia (tekan lama pesan → Bacakan)
+- TTS Bahasa Indonesia (tombol Bacakan di pesan; opsi bacakan jawaban otomatis)
+- Emoji picker di kotak input + reaksi emoji di pesan (tekan lama)
 - Persona, tema terang/gelap, backup ZIP / restore, export MD/JSON/TXT
 - **Jiwa Hermes**: `soul.md`, `memory.md` (otomatis), `todo.md`, `agents.md`,
-  `features.md` → disusun jadi system prompt tiap chat
+  `features.md` → disusun jadi system prompt tiap chat (berprioritas:
+  ingatan & todo dipertahankan; konteks waktu; saran proaktif dari todo)
 - **Aktivitas**: daftar tugas sedang dikerjakan vs selesai
 - **Konektor** (aksi manual): GitHub, Telegram, Termux, web fetch
 - **Izin & Riwayat**: semua aksi sensitif lewat popup izin + tercatat di audit
