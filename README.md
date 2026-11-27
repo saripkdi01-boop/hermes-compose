@@ -25,6 +25,8 @@ fitur **Minta Fitur** (upgrade aplikasi via prompt → patch → push → auto-b
   ingatan & todo dipertahankan; konteks waktu; saran proaktif dari todo)
 - **Aktivitas**: daftar tugas sedang dikerjakan vs selesai
 - **Konektor** (aksi manual): GitHub, Telegram, Termux, web fetch
+- **Toolkit agen** ala Hermes Agent desktop: todo, cari riwayat, skill,
+  Python on-device, tugas terjadwal, sub-agen (lihat `docs/TOOLS.md`)
 - **Izin & Riwayat**: semua aksi sensitif lewat popup izin + tercatat di audit
 
 ## Mulai cepat (kontributor)
