@@ -26,9 +26,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.core.view.WindowCompat
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,7 +50,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
@@ -105,12 +112,15 @@ class MainActivity : ComponentActivity() {
     // agar selalu ada selama app hidup — chokepoint UI semua aksi sensitif.
     @Inject
     lateinit var gate: PermissionGate
+    @OptIn(ExperimentalLayoutApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // v19: tangkap teks dari share sheet aplikasi lain (ACTION_SEND)
         // sebelum komposisi dibuat — HermesChatScreen mengonsumsinya.
         handleShareIntent(intent)
-        WindowCompat.setDecorFitsSystemWindows(window, false)
+        // v19.2: edge-to-edge resmi (status & navigation bar transparan,
+        // ikon bar mengikuti tema app — lihat DisposableEffect(darkTheme)).
+        enableEdgeToEdge()
         val prefs = getSharedPreferences(Prefs.FILE, Context.MODE_PRIVATE)
         val startDestination = when {
             !prefs.getBoolean(Prefs.KEY_ONBOARDED, false) -> Nav.ONBOARDING
@@ -190,6 +200,20 @@ class MainActivity : ComponentActivity() {
                 "system" -> isSystemInDarkTheme()
                 else -> true
             }
+            // v19.2: warna ikon status/navigation bar mengikuti tema APP
+            // (bukan tema sistem) — tema app bisa gelap di HP bertema terang.
+            DisposableEffect(darkTheme) {
+                val style = if (darkTheme) {
+                    SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                } else {
+                    SystemBarStyle.light(
+                        android.graphics.Color.TRANSPARENT,
+                        android.graphics.Color.TRANSPARENT
+                    )
+                }
+                enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+                onDispose { }
+            }
             HermesTheme(darkTheme = darkTheme, accent = accentPref) {
                 // Dialog izin global — di atas NavHost agar selalu bisa muncul
                 // dari layar mana pun.
@@ -229,15 +253,20 @@ class MainActivity : ComponentActivity() {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
+                                        // v19.2 (audit P1-8): bar kustom
+                                        // tidak boleh duduk di bawah tombol/
+                                        // gesture navigation sistem.
+                                        .navigationBarsPadding()
                                         .padding(
-                                            horizontal = 12.dp,
-                                            vertical = 10.dp
+                                            horizontal = 8.dp,
+                                            vertical = 8.dp
                                         ),
                                     horizontalArrangement =
                                         Arrangement.SpaceEvenly,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     BottomBarTab(
+                                        modifier = Modifier.weight(1f),
                                         label = "Aktivitas",
                                         icon = Icons.Filled.History,
                                         selected =
@@ -247,7 +276,8 @@ class MainActivity : ComponentActivity() {
                                         }
                                     )
                                     BottomBarTab(
-                                        label = "Tools",
+                                        modifier = Modifier.weight(1f),
+                                        label = "Alat",
                                         icon = Icons.Filled.Build,
                                         selected = currentRoute == Nav.TOOLS,
                                         onClick = { navigateToTab(Nav.TOOLS) }
@@ -256,14 +286,16 @@ class MainActivity : ComponentActivity() {
                                         onClick = { navigateToTab(Nav.CHAT) }
                                     )
                                     BottomBarTab(
-                                        label = "Agent",
+                                        modifier = Modifier.weight(1f),
+                                        label = "Agen",
                                         icon = Icons.Filled.SmartToy,
                                         selected =
                                             currentRoute == Nav.V12_HUB,
                                         onClick = { navigateToTab(Nav.V12_HUB) }
                                     )
                                     BottomBarTab(
-                                        label = "Settings",
+                                        modifier = Modifier.weight(1f),
+                                        label = "Pengaturan",
                                         icon = Icons.Filled.Settings,
                                         selected =
                                             currentRoute == Nav.SETTINGS,
@@ -279,7 +311,14 @@ class MainActivity : ComponentActivity() {
                 NavHost(
                     navController = nav,
                     startDestination = startDestination,
-                    modifier = Modifier.padding(innerPad),
+                    // v19.2 (audit P1-8): padding Scaffold luar DIKONSUMSI
+                    // supaya TopAppBar layar dalam tidak menambah padding
+                    // status bar lagi dan imePadding() composer tidak
+                    // menumpuk dengan tinggi bottom bar (celah di atas
+                    // keyboard).
+                    modifier = Modifier
+                        .padding(innerPad)
+                        .consumeWindowInsets(innerPad),
                     // v18: transisi antar-layar — fade + geser halus memakai
                     // token gerak Hermes (180ms fade, 220ms geser, ease-out,
                     // tanpa pantulan) menggantikan potongan layar bawaan.
@@ -435,7 +474,8 @@ private fun BottomBarTab(
     label: String,
     icon: ImageVector,
     selected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val scheme = MaterialTheme.colorScheme
     // v18: pil indikator tab aktif gaya Material 3 — latar
@@ -457,21 +497,25 @@ private fun BottomBarTab(
     )
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
+        // v19.2 (a11y): selectable + Role.Tab → pembaca layar mengumumkan
+        // "tab, terpilih"; area sentuh penuh lebar kolom (≥ 48 dp tinggi).
+        modifier = modifier
             .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .selectable(selected = selected, onClick = onClick, role = Role.Tab)
+            .heightIn(min = 56.dp)
+            .padding(horizontal = 4.dp, vertical = 6.dp)
     ) {
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(percent = 50))
                 .background(pillColor)
-                .padding(horizontal = 16.dp, vertical = 4.dp),
+                .padding(horizontal = 14.dp, vertical = 4.dp),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = icon,
-                contentDescription = label,
+                // Label teks di bawah sudah dibacakan — hindari ganda.
+                contentDescription = null,
                 modifier = Modifier.size(24.dp),
                 tint = contentColor
             )
@@ -480,7 +524,9 @@ private fun BottomBarTab(
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = contentColor
+            color = contentColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -501,7 +547,7 @@ private fun BottomBarChatButton(
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
-                imageVector = Icons.Filled.Chat,
+                imageVector = Icons.AutoMirrored.Filled.Chat,
                 contentDescription = "Chat",
                 modifier = Modifier.size(28.dp),
                 tint = scheme.onPrimary

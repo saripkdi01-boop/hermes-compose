@@ -19,6 +19,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -122,6 +123,9 @@ fun HermesChatScreen(
     val ctx = LocalContext.current
     val state by chatVm.state.collectAsStateWithLifecycle()
     val attachments by chatVm.attachmentsFlow.collectAsStateWithLifecycle()
+    // v19.2: reaksi emoji per pesan + emoji terakhir dipakai (picker).
+    val reactions by chatVm.reactions.collectAsStateWithLifecycle()
+    val recentEmojis by chatVm.recentEmojis.collectAsStateWithLifecycle()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val snack = remember { SnackbarHostState() }
@@ -433,6 +437,12 @@ fun HermesChatScreen(
                     },
                     onVoiceInput = { onVoiceInput() },
                     isListening = isListening,
+                    onEmojiPick = { e ->
+                        input += e
+                        chatVm.onInputChanged(input)
+                        chatVm.noteEmojiUsed(e)
+                    },
+                    recentEmojis = recentEmojis,
                     modifier = Modifier.imePadding()
                 )
             }
@@ -441,6 +451,11 @@ fun HermesChatScreen(
             val all = state.messages
             // 14.23: daftar tampil = pesan + pemisah tanggal per hari.
             val displayItems = remember(all) { buildChatListItems(all) }
+            // v19.2 (audit P2-6): id jawaban asisten terakhir dihitung SEKALI
+            // per daftar, bukan lastOrNull{} di tiap item (O(n²)).
+            val lastAssistantId = remember(all) {
+                all.lastOrNull { it.role == "assistant" }?.id
+            }
             // Indeks item terakhir di LazyColumn (termasuk streaming/upin).
             fun lastIndex(): Int {
                 var n = displayItems.size
@@ -555,6 +570,19 @@ fun HermesChatScreen(
                             .padding(vertical = 8.dp)
                     ) {
                         items(displayItems, key = { it.key }) { item ->
+                            // v19.2: animasi item yang halus — geser (placement)
+                            // untuk semua item; fade-in hanya untuk pesan user
+                            // baru. Jawaban asisten TIDAK di-fade karena ia
+                            // menggantikan bubble streaming di posisi yang sama
+                            // (fade akan terlihat seperti kedipan).
+                            val fadeNew = item is ChatListItem.Message &&
+                                item.message.role == "user"
+                            Box(
+                                Modifier.animateItem(
+                                    fadeInSpec = if (fadeNew) tween(220) else null,
+                                    fadeOutSpec = null
+                                )
+                            ) {
                             when (item) {
                                 is ChatListItem.DateSeparator -> {
                                     Box(
@@ -583,11 +611,12 @@ fun HermesChatScreen(
                                     val m = item.message
                                     val isLastAssistant = !state.isStreaming &&
                                         m.role == "assistant" &&
-                                        all.lastOrNull {
-                                            it.role == "assistant"
-                                        }?.id == m.id
+                                        lastAssistantId == m.id
                                     MessageBubble(
-                                        message = m,
+                                        message = reactions[m.id]?.let { r ->
+                                            m.copy(reaction = r)
+                                        } ?: m,
+                                        onReact = { e -> chatVm.toggleReaction(m.id, e) },
                                         isLastAssistant = isLastAssistant,
                                         isSpeaking = speakingId == m.id &&
                                             tts.isSpeaking,
@@ -606,6 +635,7 @@ fun HermesChatScreen(
                                         modifier = Modifier.padding(vertical = 3.dp)
                                     )
                                 }
+                            }
                             }
                         }
                         if (state.isStreaming) {

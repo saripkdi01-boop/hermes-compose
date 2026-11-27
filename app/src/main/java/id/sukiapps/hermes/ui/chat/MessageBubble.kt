@@ -8,6 +8,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.offset
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,8 +30,8 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.VolumeOff
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -84,6 +88,9 @@ fun MessageBubble(
     // kursor berkedip di ujung teks (token streamCaret yang selama ini
     // tidak dipakai).
     isStreaming: Boolean = false,
+    // v19.2: reaksi emoji. null = fitur reaksi tidak ditampilkan
+    // (mis. bubble pratinjau streaming).
+    onReact: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val isUser = message.role == "user"
@@ -161,7 +168,9 @@ fun MessageBubble(
                 if (message.reaction != null) {
                     ReactionBadge(
                         reaction = message.reaction,
-                        modifier = Modifier.align(Alignment.BottomEnd)
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .reactionToggle(message.reaction, onReact)
                     )
                 }
             }
@@ -203,16 +212,18 @@ fun MessageBubble(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
+                // 14.28 (penanda sumber): setiap balasan asisten berlabel
+                // sumber — balasan chat (LLM) vs ringkasan agen (output tool).
+                // v19.2: label sejajar nama (hemat satu baris per pesan).
+                Text(
+                    text = "  ·  ${assistantSourceLabel(message.content)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
-            Spacer(Modifier.height(4.dp))
-            // 14.28 (penanda sumber): setiap balasan asisten berlabel
-            // sumber — balasan chat (LLM) vs ringkasan agen (output tool).
-            Text(
-                text = "Sumber: ${assistantSourceLabel(message.content)}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(6.dp))
             if (message.replyToSnippet != null) {
                 ReplyQuote(
                     snippet = message.replyToSnippet,
@@ -223,15 +234,17 @@ fun MessageBubble(
             AttachmentSummary(message)
             if (isStreaming) {
                 MarkdownText(
-                    text = message.content,
+                    text = Emoji.replaceShortcodes(message.content),
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(4.dp))
                 StreamingCaret()
             } else {
                 ExpandableMessageContent(text = message.content) { shown ->
+                    // v19.2: shortcode :rocket: → 🚀 (blok kode tidak disentuh).
+                    val pretty = remember(shown) { Emoji.replaceShortcodes(shown) }
                     MarkdownText(
-                        text = shown,
+                        text = pretty,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -250,16 +263,20 @@ fun MessageBubble(
             }
             Spacer(Modifier.height(6.dp))
             Row(
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.spacedBy(0.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                // Kompensasi padding sentuh 4 dp tombol pertama supaya ikon
+                // tetap sejajar dengan teks jawaban.
+                modifier = Modifier.offset(x = (-8).dp)
             ) {
+                // v19.2 (a11y): ukuran bawaan IconButton (40 dp, area sentuh
+                // 48 dp) — dulu dipaksa 32 dp, di bawah batas aksesibilitas.
                 IconButton(
-                    onClick = { if (isSpeaking) onStopSpeak() else onSpeak() },
-                    modifier = Modifier.size(32.dp)
+                    onClick = { if (isSpeaking) onStopSpeak() else onSpeak() }
                 ) {
                     Icon(
-                        imageVector = if (isSpeaking) Icons.Filled.VolumeOff
-                        else Icons.Filled.VolumeUp,
+                        imageVector = if (isSpeaking) Icons.AutoMirrored.Filled.VolumeOff
+                        else Icons.AutoMirrored.Filled.VolumeUp,
                         contentDescription = if (isSpeaking) "Hentikan bacaan"
                         else "Bacakan pesan",
                         modifier = Modifier.size(18.dp),
@@ -270,8 +287,7 @@ fun MessageBubble(
                     onClick = {
                         clipboard.setText(AnnotatedString(message.content))
                         onCopy()
-                    },
-                    modifier = Modifier.size(32.dp)
+                    }
                 ) {
                     Icon(
                         imageVector = Icons.Filled.ContentCopy,
@@ -282,8 +298,7 @@ fun MessageBubble(
                 }
                 if (isLastAssistant) {
                     IconButton(
-                        onClick = onRegenerate,
-                        modifier = Modifier.size(32.dp)
+                        onClick = onRegenerate
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
@@ -295,7 +310,10 @@ fun MessageBubble(
                 }
                 if (message.reaction != null) {
                     Spacer(Modifier.weight(1f))
-                    ReactionBadge(reaction = message.reaction)
+                    ReactionBadge(
+                        reaction = message.reaction,
+                        modifier = Modifier.reactionToggle(message.reaction, onReact)
+                    )
                 }
             }
             if (timeLabel != null) {
@@ -312,6 +330,16 @@ fun MessageBubble(
         expanded = menuOpen,
         onDismissRequest = { menuOpen = false }
     ) {
+        if (onReact != null && message.id > 0) {
+            QuickReactionRow(
+                current = message.reaction,
+                onReact = { e ->
+                    menuOpen = false
+                    onReact(e)
+                }
+            )
+            HorizontalDivider()
+        }
         DropdownMenuItem(
             text = { Text("Salin") },
             leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
@@ -382,4 +410,10 @@ private fun AttachmentSummary(message: UiMessage) {
     }
     Spacer(Modifier.height(6.dp))
 }
+/** v19.2: ketuk lencana reaksi = lepas reaksi itu (bila reaksi diaktifkan). */
+private fun Modifier.reactionToggle(reaction: String, onReact: ((String) -> Unit)?): Modifier =
+    if (onReact == null) this
+    else this
+        .clip(CircleShape)
+        .clickable(onClickLabel = "Lepas reaksi") { onReact(reaction) }
 /* akhir MessageBubble */
