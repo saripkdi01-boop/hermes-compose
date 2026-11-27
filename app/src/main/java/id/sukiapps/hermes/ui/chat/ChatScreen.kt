@@ -20,6 +20,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.animation.core.tween
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.first
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -347,6 +350,31 @@ fun HermesChatScreen(
     LaunchedEffect(state.error) {
         state.error?.let { snack.showSnackbar(it) }
     }
+    // v19.3 (Jiwa): "Bacakan jawaban otomatis" — begitu streaming selesai
+    // tanpa error, tunggu jawaban tersimpan muncul di daftar (maks 3 dtk)
+    // lalu bacakan lewat TtsReader yang sama dengan tombol Bacakan.
+    var ttsWasStreaming by remember { mutableStateOf(false) }
+    // Dihentikan user (tombol Stop) → jawaban parsial tidak dibacakan.
+    var stoppedByUser by remember { mutableStateOf(false) }
+    LaunchedEffect(state.isStreaming) {
+        if (state.isStreaming) {
+            ttsWasStreaming = true
+            return@LaunchedEffect
+        }
+        if (!ttsWasStreaming) return@LaunchedEffect
+        ttsWasStreaming = false
+        if (stoppedByUser) {
+            stoppedByUser = false
+            return@LaunchedEffect
+        }
+        if (!chatVm.ttsAutoEnabled() || state.error != null) return@LaunchedEffect
+        val before = state.messages.lastOrNull { it.role == "assistant" }?.id
+        val reply = withTimeoutOrNull(3_000) {
+            snapshotFlow { state.messages.lastOrNull() }
+                .first { it != null && it.role == "assistant" && it.id != before }
+        }
+        if (reply != null) speak(reply)
+    }
     // v19: konsumsi teks dari share sheet aplikasi lain — buka chat
     // baru dan isi kotak input (TIDAK otomatis terkirim; user meninjau
     // dulu, pola yang sama seperti "Ambil dari web").
@@ -422,7 +450,10 @@ fun HermesChatScreen(
                         input = ""
                         chatVm.send(text)
                     },
-                    onStop = { chatVm.stopStream() },
+                    onStop = {
+                        stoppedByUser = true
+                        chatVm.stopStream()
+                    },
                     attachments = attachments,
                     onRemoveAttachment = { chatVm.removeAttachment(it.uri) },
                     onPickImage = { pickImages.launch("image/*") },
@@ -558,6 +589,7 @@ fun HermesChatScreen(
                 if (showEmpty) {
                     ChatEmptyState(
                         onSuggestion = { input = it },
+                        todoSuggestions = state.todoSuggestions,
                         modifier = Modifier.weight(1f),
                         model = state.model,
                         onOpenSettings = onOpenSettings

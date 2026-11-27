@@ -23,6 +23,8 @@ object Prefs {
     // model_name dari prompt sudah ada sebagai KEY_MODEL — tidak diduplikasi.
     const val KEY_ACCENT_COLOR = "accent_color"
     const val KEY_TTS_SPEED = "tts_speed"
+    // v19.3: bacakan jawaban asisten otomatis setelah selesai (default mati).
+    const val KEY_TTS_AUTO = "tts_auto"
     const val KEY_ONBOARDED = "onboarded"         // boolean
     const val KEY_PERSONA_PRESETS = "persona_presets" // JSON [{"n":..,"t":..}]
 

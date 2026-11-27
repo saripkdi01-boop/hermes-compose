@@ -41,7 +41,7 @@ Status: ✅ diperbaiki di PR ini · 🟡 dijadwalkan PR berikutnya · ⏸ butuh 
 | P1-8 | UI / insets | Aplikasi edge-to-edge (`setDecorFitsSystemWindows(false)`) tetapi **tidak ada satu pun penanganan WindowInsets** selain `imePadding()` di composer: Scaffold luar memberi padding status bar dan TopAppBar layar dalam memberi lagi (padding atas ganda), bottom bar kustom tidak memberi padding navigation bar, dan `imePadding` di chat ditambah padding bottom bar → celah di atas keyboard. `[PERLU VERIFIKASI visual di HP]` | ✅ v19.2 (PR UI) |
 | P1-9 | Aksesibilitas | Tombol aksi bubble (bacakan/salin/buat ulang) dipaksa 32 dp → area sentuh < 48 dp. Bottom bar tanpa semantik tab terpilih. | ✅ v19.2 (PR UI) |
 | P1-10 | Emoji/reaksi | `V3_REACTIONS`/`toggleReaction` hanya hidup di rute pratinjau `chatv3preview`; chat utama (`HermesChatScreen`) **belum punya reaksi** sama sekali (`UiMessage.reaction` selalu null). Tidak ada emoji picker di composer. | ✅ v19.2 (PR UI) |
-| P1-11 | Jiwa Hermes | `AgentFiles.read()` memanggil `seedIfNeeded()` tiap baca, dan `features.md` **ditulis ulang dari assets setiap kali** → ±6 tulis disk per rakitan prompt. `capWords` memotong dari ekor (ingatan & todo hilang duluan) dan meratakan semua baris jadi satu paragraf. Kata kunci ingatan tidak menyaring kata umum ("yang", "bagaimana", "tolong"). | 🟡 PR Jiwa. |
+| P1-11 | Jiwa Hermes | `AgentFiles.read()` memanggil `seedIfNeeded()` tiap baca, dan `features.md` **ditulis ulang dari assets setiap kali** → ±6 tulis disk per rakitan prompt. `capWords` memotong dari ekor (ingatan & todo hilang duluan) dan meratakan semua baris jadi satu paragraf. Kata kunci ingatan tidak menyaring kata umum ("yang", "bagaimana", "tolong"). | ✅ v19.3 (PR Jiwa) |
 
 ## 3. Temuan P2
 
@@ -54,6 +54,7 @@ Status: ✅ diperbaiki di PR ini · 🟡 dijadwalkan PR berikutnya · ⏸ butuh 
 | P2-5 | Label bottom bar campur bahasa ("Tools", "Agent", "Settings" vs "Aktivitas"). | ✅ v19.2 (PR UI) |
 | P2-6 | `isLastAssistant` dihitung dengan `all.lastOrNull{}` di dalam `items{}` → O(n²) per recomposition pada chat panjang. | ✅ v19.2 (PR UI) |
 | P2-7 | Tema window `@android:style/Theme.Material.NoActionBar` selalu gelap. Dibiarkan: default tema app juga **gelap** (`theme` = "dark"), jadi tema window DayNight justru akan memunculkan kilatan terang bagi mayoritas user. Ikon launcher hanya PNG (tanpa adaptive/monochrome, tanpa xxxhdpi). | ⏸ Ikon butuh aset dari Kiki. |
+| P2-9 | Baris tengah komentar HTML bawaan `memory.md` ("(maksimal 3 fakta), bisa diedit…") ikut terkirim ke model sebagai "ingatan tentang user"; `features.md` dipotong 40 baris sehingga bagian fitur terbaru (incognito v19, dst.) tidak pernah sampai ke model. | ✅ v19.3 (PR Jiwa) |
 | P2-8 | `userMsgCount` (pemicu write-back ingatan tiap 10 pesan) tidak di-reset saat pindah percakapan. | ✅ Di-reset di `openConversation`. |
 
 ## 4. Yang diperiksa dan dinilai sehat

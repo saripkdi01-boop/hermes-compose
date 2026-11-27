@@ -54,6 +54,7 @@ data class SettingsUiState(
     val themeMode: String = "dark",
     val accentColor: String = "coral",
     val ttsSpeed: Float = 1.0f,
+    val ttsAuto: Boolean = false,
     val baseUrl: String = "",
     val busyMessage: String? = null,
     val snack: String? = null,
@@ -108,6 +109,7 @@ class SettingsViewModel @Inject constructor(
                 themeMode = prefs.themeMode,
                 accentColor = prefs.accentColor,
                 ttsSpeed = prefs.ttsSpeed,
+                ttsAuto = prefs.ttsAuto,
                 baseUrl = prefs.baseUrl,
                 notifEnabled = prefs.notifEnabled,
                 notifExec = prefs.notifExec,
@@ -336,6 +338,11 @@ class SettingsViewModel @Inject constructor(
         val clean = speed.coerceIn(0.5f, 2.0f)
         prefs.ttsSpeed = clean
         _state.update { it.copy(ttsSpeed = clean) }
+    }
+
+    fun setTtsAuto(on: Boolean) {
+        prefs.ttsAuto = on
+        _state.update { it.copy(ttsAuto = on) }
     }
 
     // v14.10: setter toggle notifikasi (persist ke AppPrefs).

@@ -3,6 +3,41 @@
 Format: versi aplikasi (`versionName` / `versionCode`). Perubahan perilaku
 yang terlihat user ditandai **[perilaku]**.
 
+## 19.3 (62) — Jiwa Hermes ala asisten pribadi
+
+### Baru
+- **[perilaku]** Layar chat kosong menyapa sesuai jam ("Selamat pagi ☀️",
+  "Selamat malam 🌙") dan menampilkan hingga 2 **tugas aktif** dari
+  `todo.md` sebagai saran "Bantu aku: …".
+- **[perilaku]** Opsi **Bacakan jawaban otomatis** (Pengaturan → Persona →
+  Suara; default mati): jawaban baru dibacakan TTS Indonesia setelah selesai
+  (tidak dibacakan bila dihentikan dengan Stop atau error). Key prefs baru
+  `tts_auto` (aditif).
+- `soul.md` bawaan lebih hangat dan konsisten — **hanya untuk instalasi
+  baru**; `soul.md` milik user tidak pernah ditimpa.
+
+### System prompt (Jiwa)
+- **[perilaku]** Anggaran ±1500 kata kini berprioritas: yang dipangkas dulu
+  manual fitur → skill → aturan operasi; **ingatan & todo dipertahankan**.
+  Struktur baris tidak lagi diratakan.
+- **[perilaku]** Konteks waktu lokal (hari, tanggal, jam, zona) + panduan
+  memakai ingatan secara alami (tanpa mengarang) + saran proaktif dari tugas
+  aktif (satu kalimat, tanpa memaksa).
+- **[perilaku]** Ingatan relevan dipilih **per pesan** (dulu sekali per
+  percakapan dari pesan pertama), jadi topik baru di tengah chat mendapat
+  ingatan yang cocok dan fakta yang baru ditulis langsung terpakai. Bagian
+  dinamis (ingatan, todo, waktu) diletakkan di akhir prompt agar awalan
+  yang sama tetap bisa di-cache provider.
+- Kata umum ("yang", "bagaimana", "tolong", …) tidak lagi dihitung sebagai
+  kata kunci ingatan; komentar HTML di `memory.md` tidak lagi bocor sebagai
+  "ingatan"; `features.md` tidak lagi dipotong di 40 baris.
+- `features.md` disegarkan dari assets sekali per proses (dulu ±6 tulis
+  disk per rakitan prompt).
+
+### Developer
+- `SoulPromptTest` (urutan, anggaran, komentar, stopword, waktu, todo),
+  `GreetingTest`.
+
 ## 19.2 (61) — UI modern, emoji & Pengaturan ringkas
 
 ### Baru

@@ -9,6 +9,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import id.sukiapps.hermes.data.notif.ExecNotifier
 import id.sukiapps.hermes.data.store.ExecutionLog
 import id.sukiapps.hermes.data.agent.MemoryWriter
+import id.sukiapps.hermes.data.agent.AgentFiles
 import id.sukiapps.hermes.data.agent.SoulPrompt
 import id.sukiapps.hermes.data.audit.DangerLevel
 import id.sukiapps.hermes.data.audit.PermissionGate
@@ -87,7 +88,10 @@ data class ChatUiState(
     val toolEvent: String? = null,
     // v19: percakapan aktif adalah incognito (tidak masuk riwayat &
     // ingatan Jiwa; dihapus permanen saat pindah chat).
-    val incognito: Boolean = false
+    val incognito: Boolean = false,
+    // v19.3 (Jiwa): ≤2 tugas aktif dari todo.md → saran proaktif di layar
+    // chat kosong ("Bantu aku: …").
+    val todoSuggestions: List<String> = emptyList()
 )
 
 @HiltViewModel
@@ -184,6 +188,7 @@ class ChatViewModel @Inject constructor(
             )
         }
         openConversation(prefs.currentConvId)
+        loadTodoSuggestions()
         // v19: bersihkan sisa percakapan incognito dari sesi sebelumnya
         // (mis. aplikasi tertutup saat incognito masih aktif). Bila
         // percakapan yang sedang terbuka ternyata incognito sisa, reset
@@ -226,7 +231,11 @@ class ChatViewModel @Inject constructor(
         collectJob?.cancel()
         if (convId <= 0) {
             _state.update {
-                ChatUiState(model = prefs.model, persona = prefs.persona)
+                ChatUiState(
+                    model = prefs.model,
+                    persona = prefs.persona,
+                    todoSuggestions = it.todoSuggestions
+                )
             }
             prefs.currentConvId = -1L
             return
@@ -273,7 +282,23 @@ class ChatViewModel @Inject constructor(
         soulCache = null
         clearAttachments()
         openConversation(-1L)
+        loadTodoSuggestions()
     }
+
+    /** v19.3: baca ulang tugas aktif (todo.md) untuk saran proaktif. */
+    private fun loadTodoSuggestions() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val todos = runCatching {
+                SoulPrompt.activeTodos(AgentFiles.read(appCtx, AgentFiles.TODO))
+                    .take(2)
+                    .map { if (it.length > 60) it.take(59) + "…" else it }
+            }.getOrDefault(emptyList())
+            _state.update { it.copy(todoSuggestions = todos) }
+        }
+    }
+
+    /** v19.3: preferensi "Bacakan jawaban otomatis" (dibaca layar chat). */
+    fun ttsAutoEnabled(): Boolean = prefs.ttsAuto
 
     /**
      * v19: mulai chat incognito. Baris percakapan dibuat langsung dengan
@@ -572,10 +597,17 @@ class ChatViewModel @Inject constructor(
         streamReply(convId, fullPrompt, imageB64s)
     }
 
-    /** Rakit system prompt jiwa SEKALI per conversation (cache per convId). */
-    private suspend fun getSoulPrompt(convId: Long, firstPrompt: String): String {
-        soulCache?.let { if (it.first == convId) return it.second }
-        val built = SoulPrompt.build(appCtx, firstPrompt)
+    /**
+     * Rakit system prompt jiwa untuk pesan INI.
+     *
+     * v19.3: dulu dirakit sekali per percakapan memakai pesan pertama, jadi
+     * ingatan yang dipilih tidak pernah mengikuti topik berikutnya dan fakta
+     * yang baru ditulis MemoryWriter baru terpakai di percakapan lain.
+     * Merakit ulang kini murah (file kecil; features.md tidak lagi disalin
+     * ulang), dan bagian dinamis diletakkan di akhir prompt.
+     */
+    private suspend fun getSoulPrompt(convId: Long, prompt: String): String {
+        val built = SoulPrompt.build(appCtx, prompt)
         soulCache = convId to built
         return built
     }

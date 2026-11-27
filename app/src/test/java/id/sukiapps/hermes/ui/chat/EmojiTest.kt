@@ -52,3 +52,15 @@ class EmojiTest {
         assertTrue(Emoji.QUICK_REACTIONS.contains("👍"))
     }
 }
+
+/** v19.3: sapaan layar chat kosong mengikuti jam. */
+class GreetingTest {
+    @Test
+    fun greeting_byHour() {
+        assertEquals("Selamat pagi ☀️", greetingForHour(6))
+        assertEquals("Selamat siang", greetingForHour(12))
+        assertEquals("Selamat sore", greetingForHour(16))
+        assertEquals("Selamat malam 🌙", greetingForHour(21))
+        assertEquals("Selamat malam 🌙", greetingForHour(2))
+    }
+}
