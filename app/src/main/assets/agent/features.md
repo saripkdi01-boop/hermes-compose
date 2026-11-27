@@ -105,6 +105,18 @@ bawah sekarang bisa kamu jalankan SENDIRI lewat tool (lihat bagian Konektor).
   dimulai ulang. Selama incognito aktif ada penanda di layar chat.
   Sarankan mode ini bila user membahas hal yang tidak ingin disimpan.
 
+## Tampilan (v20)
+
+- Pengaturan → Tampilan → **Gaya**: "Muse" (gelap pekat, netral — default)
+  atau "Hangat" (krem/cokelat). Mode tema (Sistem/Terang/Gelap) dan warna
+  aksen tetap bisa dipilih; semuanya langsung berlaku.
+- Top bar chat: ikon ☰ (riwayat), ikon chat baru, dan menu ⋮ berisi Ekspor
+  chat, Fitur agen, Pengaturan.
+- Tombol "+" di kotak input membuka sheet alat: Galeri, Kamera, Dokumen,
+  Ambil dari web, Tanya Upin (perlu teks di kotak input), Emoji.
+- Riwayat (☰) dikelompokkan: Disematkan, Hari ini, Kemarin, 7 hari
+  terakhir, 30 hari terakhir, Lebih lama.
+
 ## Emoji & reaksi (v19.2)
 
 - Tombol 😊 di dalam kotak input membuka panel emoji (kategori + "Terakhir");

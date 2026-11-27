@@ -67,6 +67,11 @@ class AppPrefs @Inject constructor(
         get() = prefs.getString(Prefs.KEY_ACCENT_COLOR, "coral") ?: "coral"
         set(v) = prefs.edit().putString(Prefs.KEY_ACCENT_COLOR, v).apply()
 
+    // v20: gaya tampilan (lihat ui.theme.UiStyle). Default "muse".
+    var uiStyle: String
+        get() = prefs.getString(Prefs.KEY_UI_STYLE, "muse") ?: "muse"
+        set(v) = prefs.edit().putString(Prefs.KEY_UI_STYLE, v).apply()
+
     // v14.18: kecepatan baca TTS 0.5x-2.0x; dibaca TtsReader tiap bicara.
     var ttsSpeed: Float
         get() = try {

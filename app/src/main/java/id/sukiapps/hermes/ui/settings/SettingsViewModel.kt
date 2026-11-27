@@ -55,6 +55,8 @@ data class SettingsUiState(
     val accentColor: String = "coral",
     val ttsSpeed: Float = 1.0f,
     val ttsAuto: Boolean = false,
+    // v20: gaya tampilan ("muse" | "hangat").
+    val uiStyle: String = "muse",
     val baseUrl: String = "",
     val busyMessage: String? = null,
     val snack: String? = null,
@@ -110,6 +112,7 @@ class SettingsViewModel @Inject constructor(
                 accentColor = prefs.accentColor,
                 ttsSpeed = prefs.ttsSpeed,
                 ttsAuto = prefs.ttsAuto,
+                uiStyle = prefs.uiStyle,
                 baseUrl = prefs.baseUrl,
                 notifEnabled = prefs.notifEnabled,
                 notifExec = prefs.notifExec,
@@ -338,6 +341,12 @@ class SettingsViewModel @Inject constructor(
         val clean = speed.coerceIn(0.5f, 2.0f)
         prefs.ttsSpeed = clean
         _state.update { it.copy(ttsSpeed = clean) }
+    }
+
+    fun setUiStyle(style: String) {
+        val clean = id.sukiapps.hermes.ui.theme.UiStyle.clean(style)
+        prefs.uiStyle = clean
+        _state.update { it.copy(uiStyle = clean) }
     }
 
     fun setTtsAuto(on: Boolean) {

@@ -3,6 +3,40 @@
 Format: versi aplikasi (`versionName` / `versionCode`). Perubahan perilaku
 yang terlihat user ditandai **[perilaku]**.
 
+## 20.0 (64) — gaya visual Muse
+
+### Tampilan
+- **[perilaku]** **Gaya "Muse" jadi default**: dark-first near-black
+  (`#0A0A0A`), permukaan abu netral, jawaban Hermes tanpa bubble, pesan
+  user dalam bubble abu tipis, aksen coral (`#E07856` gelap / `#B4552D`
+  terang). Diambil dari spesifikasi `MuseChatTheme.kt` yang sudah ada di
+  repo tetapi belum pernah dipakai.
+- **[perilaku]** Pilihan **Pengaturan → Tampilan → Gaya: Muse / Hangat**
+  (key prefs baru `ui_style`, aditif). "Hangat" = palet krem/cokelat
+  v15–v19. Gaya, tema, dan aksen langsung berlaku tanpa restart.
+- **[perilaku]** Semua peran warna Material 3 kini diturunkan dari palet
+  Hermes. Sebelumnya `surfaceContainer*`/`secondary*`/`tertiary*` jatuh ke
+  warna bawaan Material yang keunguan (panel emoji, bottom bar, menu, sheet
+  tampak lavender).
+- **[perilaku]** **Top bar minimal**: menu │ judul + "model · token" di
+  tengah │ chat baru + menu ⋮ (Ekspor chat, Fitur agen, Pengaturan). Dulu 6
+  ikon + pil model berderet dan model tampil dua kali.
+- **[perilaku]** Tombol **"+"** di kotak input membuka **sheet alat** (grid:
+  Galeri, Kamera, Dokumen, Ambil dari web, Tanya Upin, Emoji) menggantikan
+  dropdown.
+- **[perilaku]** **Riwayat chat dikelompokkan per waktu**: Disematkan · Hari
+  ini · Kemarin · 7 hari terakhir · 30 hari terakhir · Lebih lama (header
+  ditandai heading untuk TalkBack).
+
+### Batas yang dijaga
+- Tidak ada logo, nama, ikon kustom, font, atau teks milik produk lain yang
+  disalin — nama "Hermes", ikon H, dan bahasa Indonesia tetap. Yang diikuti
+  adalah gaya: warna, tata letak, spasi, dan pola UX.
+
+### Developer
+- Test baru: `DrawerGroupsTest`, `MuseStyleTest` (kontras palet ≥ 7:1 /
+  4.5:1, peran permukaan bertahap, urutan tile "+").
+
 ## 19.4 (63) — ikon adaptive, kebersihan repo, CI lebih ketat
 
 ### Tampilan

@@ -360,6 +360,37 @@ fun SettingsThemeSegmented(
     }
 }
 
+/** v20: pilihan gaya tampilan — "Muse" (netral) / "Hangat" (krem). */
+@Composable
+fun SettingsStyleSegmented(
+    selected: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val options = listOf(
+        id.sukiapps.hermes.ui.theme.UiStyle.MUSE to "Muse",
+        id.sukiapps.hermes.ui.theme.UiStyle.HANGAT to "Hangat",
+    )
+    SingleChoiceSegmentedButtonRow(modifier = modifier.fillMaxWidth()) {
+        options.forEachIndexed { index, (value, label) ->
+            SegmentedButton(
+                selected = selected == value,
+                onClick = { onSelect(value) },
+                shape = SegmentedButtonDefaults.itemShape(
+                    index = index,
+                    count = options.size,
+                ),
+            ) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+}
+
 /**
  * Accent picker: 48dp icon buttons. Colours are the existing Hermes
  * palette values (coral = primary, teal = HermesTeal, sand = tertiary sand),

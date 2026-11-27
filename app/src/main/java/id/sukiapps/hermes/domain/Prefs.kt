@@ -22,6 +22,8 @@ object Prefs {
     // v14.18: aksen Settings (coral/teal/sand) + kecepatan TTS.
     // model_name dari prompt sudah ada sebagai KEY_MODEL — tidak diduplikasi.
     const val KEY_ACCENT_COLOR = "accent_color"
+    // v20: gaya tampilan "muse" (netral, default) | "hangat" (krem/cokelat).
+    const val KEY_UI_STYLE = "ui_style"
     const val KEY_TTS_SPEED = "tts_speed"
     // v19.3: bacakan jawaban asisten otomatis setelah selesai (default mati).
     const val KEY_TTS_AUTO = "tts_auto"

@@ -50,6 +50,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -174,50 +176,12 @@ fun DrawerContent(
                 .weight(1f)
                 .padding(horizontal = 8.dp)
         ) {
-            // Fase 2: pin dikelompokkan di bawah header seksi.
-            val pinned = conversations.filter { it.pinned }
-            val rest = conversations.filter { !it.pinned }
-            if (pinned.isNotEmpty()) {
-                item(key = "header-pinned") { DrawerSectionHeader("Disematkan") }
-                items(pinned, key = { it.id }) { c ->
-                    ConversationRow(
-                        c = c,
-                        active = c.id == state.activeId,
-                        menuFor = menuFor,
-                        onMenuChange = { menuFor = it },
-                        onSelect = onSelect,
-                        onRename = {
-                            renaming = it
-                            renameText = it.title
-                            menuFor = null
-                        },
-                        onTogglePin = { vm.togglePin(it); menuFor = null },
-                        onToggleArchive = { vm.toggleArchive(it); menuFor = null },
-                        onDelete = { deleting = it; menuFor = null }
-                    )
-                }
-                if (rest.isNotEmpty()) {
-                    item(key = "header-all") { DrawerSectionHeader("Semua percakapan") }
-                }
-                items(rest, key = { it.id }) { c ->
-                    ConversationRow(
-                        c = c,
-                        active = c.id == state.activeId,
-                        menuFor = menuFor,
-                        onMenuChange = { menuFor = it },
-                        onSelect = onSelect,
-                        onRename = {
-                            renaming = it
-                            renameText = it.title
-                            menuFor = null
-                        },
-                        onTogglePin = { vm.togglePin(it); menuFor = null },
-                        onToggleArchive = { vm.toggleArchive(it); menuFor = null },
-                        onDelete = { deleting = it; menuFor = null }
-                    )
-                }
-            } else {
-                items(conversations, key = { it.id }) { c ->
+            // v20 (gaya Muse): dikelompokkan per waktu — Disematkan, Hari ini,
+            // Kemarin, 7 hari, 30 hari, Lebih lama (lihat DrawerGroups).
+            val groups = DrawerGroups.group(conversations, System.currentTimeMillis())
+            for (g in groups) {
+                item(key = "header-${g.label}") { DrawerSectionHeader(g.label) }
+                items(g.items, key = { it.id }) { c ->
                     ConversationRow(
                         c = c,
                         active = c.id == state.activeId,
@@ -335,7 +299,10 @@ private fun DrawerSectionHeader(title: String) {
         text = title,
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp)
+        modifier = Modifier
+            .padding(start = 16.dp, top = 16.dp, bottom = 6.dp)
+            // v20 (a11y): pembaca layar bisa melompat antar-grup waktu.
+            .semantics { heading() }
     )
 }
 

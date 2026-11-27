@@ -170,6 +170,12 @@ class MainActivity : ComponentActivity() {
             var themeMode by remember {
                 mutableStateOf(themePrefs.getString(Prefs.KEY_THEME, "dark") ?: "dark")
             }
+            // v20: gaya tampilan (muse/hangat), reaktif seperti tema & aksen.
+            var uiStylePref by remember {
+                mutableStateOf(
+                    themePrefs.getString(Prefs.KEY_UI_STYLE, "muse") ?: "muse"
+                )
+            }
             var accentPref by remember {
                 mutableStateOf(
                     themePrefs.getString(Prefs.KEY_ACCENT_COLOR, "coral") ?: "coral"
@@ -181,6 +187,11 @@ class MainActivity : ComponentActivity() {
                         if (key == Prefs.KEY_THEME) {
                             themeMode =
                                 themePrefs.getString(Prefs.KEY_THEME, "dark") ?: "dark"
+                        }
+                        if (key == Prefs.KEY_UI_STYLE) {
+                            uiStylePref = themePrefs.getString(
+                                Prefs.KEY_UI_STYLE, "muse"
+                            ) ?: "muse"
                         }
                         if (key == Prefs.KEY_ACCENT_COLOR) {
                             accentPref = themePrefs.getString(
@@ -214,7 +225,11 @@ class MainActivity : ComponentActivity() {
                 enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
                 onDispose { }
             }
-            HermesTheme(darkTheme = darkTheme, accent = accentPref) {
+            HermesTheme(
+                darkTheme = darkTheme,
+                accent = accentPref,
+                uiStyle = uiStylePref
+            ) {
                 // Dialog izin global — di atas NavHost agar selalu bisa muncul
                 // dari layar mana pun.
                 PermissionGateDialog(gate)

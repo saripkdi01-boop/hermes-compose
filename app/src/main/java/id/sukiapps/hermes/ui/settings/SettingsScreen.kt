@@ -547,6 +547,14 @@ fun SettingsScreen(
 
             // ---- Grup: Tampilan ----
             settingsSection("Tampilan") {
+                // v20: gaya tampilan — Muse (netral, near-black) atau Hangat.
+                Text("Gaya", style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.height(8.dp))
+                SettingsStyleSegmented(
+                    selected = state.uiStyle,
+                    onSelect = vm::setUiStyle
+                )
+                Spacer(Modifier.height(12.dp))
                 Text("Mode tema", style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.height(8.dp))
                 SettingsThemeSegmented(
@@ -562,7 +570,7 @@ fun SettingsScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Tema & aksen diterapkan saat kembali dari Pengaturan.",
+                    "Gaya, tema, dan aksen langsung diterapkan.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
