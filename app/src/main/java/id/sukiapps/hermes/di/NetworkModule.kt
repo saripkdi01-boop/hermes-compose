@@ -7,11 +7,14 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import id.sukiapps.hermes.KeyVault
+import id.sukiapps.hermes.data.local.AppPrefs
 import id.sukiapps.hermes.data.remote.ChatRemoteRepository
 import id.sukiapps.hermes.data.remote.JerouterApi
 import id.sukiapps.hermes.domain.AIProvider
 import id.sukiapps.hermes.domain.Prefs
 import kotlinx.serialization.json.Json
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -22,23 +25,48 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Menyuntikkan Authorization: Bearer <key> ke setiap request.
+ * Menyuntikkan Authorization: Bearer <key> ke request menuju base URL
+ * provider AI yang dikonfigurasi user.
  * Key dibaca via KeyVault.getApiKeyCached (disentuh maksimal sekali
  * per proses — aman dipanggil dari thread IO OkHttp).
+ *
+ * v19.1 (audit P1, hardening): OkHttpClient ini singleton bersama. Dulu
+ * key ditempel ke SEMUA host — satu pemakaian client ini untuk host lain
+ * (konektor, web fetch, penguji koneksi) cukup untuk membocorkan API key
+ * ke pihak ketiga. Sekarang key hanya dikirim bila scheme+host+port
+ * request sama dengan base URL di Pengaturan ([AuthScope]), dan header
+ * Authorization yang sudah dipasang pemanggil tidak pernah digandakan.
  */
 class AuthInterceptor @Inject constructor(
-    @ApplicationContext private val ctx: Context
+    @ApplicationContext private val ctx: Context,
+    private val prefs: AppPrefs
 ) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): okhttp3.Response {
+        val original = chain.request()
+        if (original.header("Authorization") != null ||
+            !AuthScope.matches(original.url, prefs.baseUrl)
+        ) {
+            return chain.proceed(original)
+        }
         val key = KeyVault.getApiKeyCached(ctx)
         val req = if (key.isNotBlank()) {
-            chain.request().newBuilder()
+            original.newBuilder()
                 .addHeader("Authorization", "Bearer $key")
                 .build()
         } else {
-            chain.request()
+            original
         }
         return chain.proceed(req)
+    }
+}
+
+/** v19.1: aturan "boleh menerima API key" — murni, bisa di-unit-test. */
+object AuthScope {
+    fun matches(url: HttpUrl, baseUrl: String): Boolean {
+        val base = baseUrl.trim().toHttpUrlOrNull() ?: return false
+        return url.scheme == base.scheme &&
+            url.host.equals(base.host, ignoreCase = true) &&
+            url.port == base.port
     }
 }
 

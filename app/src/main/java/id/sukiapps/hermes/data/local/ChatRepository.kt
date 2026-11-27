@@ -89,6 +89,12 @@ class ChatRepository @Inject constructor(
         dao.touchConversation(convId, System.currentTimeMillis())
     }
 
+    /** v19.1: hapus semua pesan setelah [afterId] (dipakai regenerate). */
+    suspend fun deleteMessagesAfter(convId: Long, afterId: Long) {
+        dao.deleteMessagesAfter(convId, afterId)
+        dao.touchConversation(convId, System.currentTimeMillis())
+    }
+
     suspend fun setPinned(id: Long, pinned: Boolean) = dao.setPinned(id, pinned)
 
     suspend fun setArchived(id: Long, archived: Boolean) = dao.setArchived(id, archived)

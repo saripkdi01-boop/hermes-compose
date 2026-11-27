@@ -1,5 +1,6 @@
 package id.sukiapps.hermes.data.connectors
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import id.sukiapps.hermes.data.audit.DangerLevel
@@ -38,6 +39,7 @@ object TermuxConnector {
      *   stderr TERPISAH; perintah foreground mengembalikan transkrip sesi.
      */
     const val RUN_COMMAND_SERVICE_NAME = "com.termux.app.RunCommandService"
+    const val TERMUX_PACKAGE = "com.termux"
     const val EXTRA_PENDING_INTENT = "com.termux.RUN_COMMAND_PENDING_INTENT"
     const val RESULT_BUNDLE_KEY = "result"
     const val RESULT_STDOUT = "stdout"
@@ -68,6 +70,14 @@ object TermuxConnector {
         workdir: String,
         background: Boolean
     ): Intent = Intent(ACTION_RUN_COMMAND).apply {
+        // v19.1 (audit P0, keamanan): intent EKSPLISIT ke RunCommandService
+        // Termux. Dulu intent implisit dikirim sebagai broadcast tanpa
+        // package: (1) Termux tidak menerima RUN_COMMAND sebagai broadcast
+        // (kontraknya startService) sehingga konektor manual tidak pernah
+        // jalan, dan (2) aplikasi lain yang mendaftarkan receiver untuk
+        // action yang sama bisa menerima perintah shell user (berikut
+        // token/path di dalamnya). Pola sama dengan tool termux_exec.
+        component = ComponentName(TERMUX_PACKAGE, RUN_COMMAND_SERVICE_NAME)
         putExtra(EXTRA_PATH, path)
         putExtra(EXTRA_ARGUMENTS, args.toTypedArray())
         putExtra(EXTRA_WORKDIR, workdir)
@@ -87,9 +97,15 @@ object TermuxConnector {
         append("background: $background")
     }
 
-    /** Kirim broadcast ke Termux:API. Private — hanya via [sendGated]. */
-    private fun send(ctx: Context, intent: Intent) {
-        ctx.sendBroadcast(intent)
+    /**
+     * Kirim ke RunCommandService Termux (intent eksplisit). Private — hanya
+     * via [sendGated]. Gagal (Termux tak terpasang / izin RUN_COMMAND belum
+     * diberikan) = false, bukan crash.
+     */
+    private fun send(ctx: Context, intent: Intent): Boolean = try {
+        ctx.startService(intent) != null
+    } catch (e: Exception) {
+        false
     }
 
     /**
@@ -104,7 +120,9 @@ object TermuxConnector {
         rawDetail: String
     ): Boolean {
         val ok = gate.request("Termux", rawDetail, DangerLevel.HIGH)
-        if (ok) send(ctx, intent)
-        return ok
+        if (!ok) return false
+        // Hanya intent eksplisit ke Termux yang boleh lewat chokepoint ini.
+        if (intent.component?.packageName != TERMUX_PACKAGE) return false
+        return send(ctx, intent)
     }
 }
