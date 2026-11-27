@@ -4,9 +4,10 @@ package id.sukiapps.hermes.domain.manus
  * boleh mengubah ManusUiState — ini yang bikin perilaku agent bisa diprediksi
  * dan bisa dites tanpa Android.
  *
- * BACKUP: versi sebelumnya disimpan sebagai ManusReducer.kt.bak di repo
- * sebelum file ini ditulis (kebijakan upgrade: file lama yang diubah WAJIB
- * punya backup). Perubahan utama pada versi ini:
+ * RIWAYAT: versi sebelumnya ada di riwayat git (`git log -p -- <file ini>`).
+ * Sejak v19.4 salinan `.bak` tidak lagi disimpan di repo — git sudah
+ * menyimpan setiap versi dan bisa dipulihkan kapan saja. Perubahan utama
+ * pada versi ini:
  * - `risk()` kini mengenal tool NYATA Hermes (web_fetch, shell_exec,
  *   github_read_file, ...) selain nama tool lama.
  * - `SubmitGoal.plan` tetap List<String> (kontrak UI), tapi setiap langkah

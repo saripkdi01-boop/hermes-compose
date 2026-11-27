@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v19.4: lapisan monochrome untuk "Themed icons" Android 13+.
+     Warna diabaikan sistem (diganti warna tema wallpaper); bentuk = foreground. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M37.43,32.86h9.14v16.57h14.86v-16.57h9.14v42.28h-9.14v-16.57h-14.86v16.57h-9.14z" />
+</vector>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- v19.4: warna ikon adaptive = warna ic_launcher.png (identitas tidak berubah). -->
+    <color name="ic_launcher_background">#181C24</color>
+    <color name="ic_launcher_foreground">#F5B43C</color>
+</resources>

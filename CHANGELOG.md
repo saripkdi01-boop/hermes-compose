@@ -3,6 +3,30 @@
 Format: versi aplikasi (`versionName` / `versionCode`). Perubahan perilaku
 yang terlihat user ditandai **[perilaku]**.
 
+## 19.4 (63) — ikon adaptive, kebersihan repo, CI lebih ketat
+
+### Tampilan
+- **[perilaku]** Ikon launcher kini **adaptive** (mengikuti bentuk ikon
+  launcher HP: lingkaran/squircle) dan mendukung **themed icons** Android 13+
+  (lapisan monochrome). Desain sama persis: kotak gelap `#181C24` + huruf H
+  emas `#F5B43C`, kini sebagai vector tajam di semua kepadatan layar.
+
+### Kebersihan repo (tanpa perubahan perilaku)
+- Dihapus: 37 file `.bak`, `hermes-source.zip` + `hermes-source-full.zip`,
+  `patch_hermesapp*.py`, 12 file `.kt` di luar source set (`/data`, `/nav`,
+  `/ui`), paket mati `net/` (5 file) dan `nav/SettingsNav.kt` (tidak pernah
+  dipanggil). Semua tetap bisa dipulihkan dari riwayat git.
+- Kebijakan "file lama wajib punya `.bak`" diganti riwayat git (komentar di
+  `ManusReducer.kt` diperbarui).
+
+### CI
+- `build-gate` (setiap branch & PR) kini menjalankan `assembleDebug`
+  `testDebugUnitTest` `lintDebug` dengan Gradle 8.11.1 (sama dengan
+  `build.yml`) dan mengunggah laporan test/lint.
+
+### PR lama
+- #10, #14, #15, #17, #19, #41 ditutup (sudah tergantikan; alasan di tiap PR).
+
 ## 19.3 (62) — Jiwa Hermes ala asisten pribadi
 
 ### Baru
